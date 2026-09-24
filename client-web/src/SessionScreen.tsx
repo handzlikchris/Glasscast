@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { Session } from './connection';
-import { centreOf, moveCursor, ScrollAccumulator, toNormalized } from './controls';
+import { centreOf, moveCursorWithEdgePan, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
 import {
   ASPECTS,
+  clampRegion,
   contentRect,
   moveRegion,
   regionInOverview,
@@ -20,6 +21,12 @@ import { TypePanel } from './TypePanel';
 /** View pixels of cursor travel per pixel of pinch-drag. Tune on the device. */
 const POINTER_GAIN = 1.0;
 const SCROLL_FLUSH_MS = 50;
+/** Depth (view px) of the band along each edge where pushing further pans the view. */
+const EDGE_ZONE = 24;
+/** Region updates while panning are sent at most this often. */
+const PAN_SEND_MS = 100;
+const PAN_GLOW_MS = 250;
+const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
 
 const MODES: { mode: ViewMode; label: string }[] = [
@@ -34,7 +41,7 @@ const LOOKS: Look[] = ['natural', 'lifted', 'contrast'];
 
 const HINTS: Partial<Record<ViewMode, string>> = {
   overview: 'Pinch-drag to move the box',
-  pointer: 'Pinch-drag to move · short pinch to click',
+  pointer: 'Pinch-drag to move · short pinch to click · push past an edge to pan',
   scroll: 'Pinch-drag up or down to scroll',
 };
 
@@ -58,6 +65,10 @@ export function SessionScreen({ onEnded }: Props) {
   const scroll = useRef(new ScrollAccumulator());
   const pendingMove = useRef<Point | null>(null);
   const moveScheduled = useRef(false);
+  const pendingRegion = useRef<Region | null>(null);
+  const regionTimer = useRef<number | null>(null);
+  const unconfirmedRegions = useRef(0);
+  const glowTimer = useRef<number | null>(null);
 
   const [monitor, setMonitor] = useState<Size | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -66,13 +77,14 @@ export function SessionScreen({ onEnded }: Props) {
   const [mode, setModeState] = useState<ViewMode>('view');
   const [cursor, setCursor] = useState<Point | null>(null);
   const [look, setLook] = useState<Look>('natural');
+  const [panEdge, setPanEdge] = useState<Point | null>(null);
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
 
   // Latest values for the pointer handlers, which must not go stale between renders.
-  const live = useRef({ mode, monitor, draft, cursor, content });
-  live.current = { mode, monitor, draft, cursor, content };
+  const live = useRef({ mode, monitor, region, draft, cursor, content });
+  live.current = { mode, monitor, region, draft, cursor, content };
 
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
@@ -101,7 +113,10 @@ export function SessionScreen({ onEnded }: Props) {
           receiver?.handleOffer(message.sdp).catch(() => end('Could not start the video stream.'));
           break;
         case 'region':
-          setRegion(message.region);
+          // Our own pans are applied locally first. Only take the server's copy once every
+          // setRegion we sent has been answered, so late echoes can't drag the view back.
+          unconfirmedRegions.current = Math.max(0, unconfirmedRegions.current - 1);
+          if (unconfirmedRegions.current === 0 && !pendingRegion.current) setRegion(message.region);
           setDraft(null);
           break;
         case 'pong':
@@ -138,6 +153,8 @@ export function SessionScreen({ onEnded }: Props) {
       clearInterval(ping);
       clearInterval(stats);
       clearInterval(scrollFlush);
+      if (regionTimer.current !== null) clearTimeout(regionTimer.current);
+      if (glowTimer.current !== null) clearTimeout(glowTimer.current);
       receiver?.close();
       session.close();
       sessionRef.current = null;
@@ -150,8 +167,9 @@ export function SessionScreen({ onEnded }: Props) {
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) drawOverlay(ctx, { cursor: shownCursor, regionBox, look });
-  }, [shownCursor, regionBox?.x, regionBox?.y, regionBox?.width, regionBox?.height, look]);
+    const edgeGlow = mode === 'pointer' && panEdge && content ? { rect: content, x: panEdge.x, y: panEdge.y } : null;
+    if (ctx) drawOverlay(ctx, { cursor: shownCursor, regionBox, look, edgeGlow });
+  }, [shownCursor, regionBox?.x, regionBox?.y, regionBox?.width, regionBox?.height, look, panEdge, content, mode]);
 
   // ---- modes ----
   const setMode = (next: ViewMode) => {
@@ -161,8 +179,42 @@ export function SessionScreen({ onEnded }: Props) {
     if (next === 'pointer' && !cursor && content) setCursor(centreOf(content));
   };
 
+  const sendRegion = (r: Region) => {
+    unconfirmedRegions.current++;
+    send({ type: 'setRegion', x: r.x, y: r.y, width: r.width, height: r.height });
+  };
+
+  /** Throttled region updates while panning: the latest wins, at most one per PAN_SEND_MS. */
+  const queueRegion = (r: Region) => {
+    pendingRegion.current = r;
+    if (regionTimer.current !== null) return;
+    const flush = () => {
+      const next = pendingRegion.current;
+      pendingRegion.current = null;
+      if (next) {
+        sendRegion(next);
+        regionTimer.current = window.setTimeout(flush, PAN_SEND_MS);
+      } else {
+        regionTimer.current = null;
+      }
+    };
+    flush();
+  };
+
+  const flushRegion = () => {
+    const next = pendingRegion.current;
+    pendingRegion.current = null;
+    if (next) sendRegion(next);
+  };
+
+  const showPanEdge = (x: number, y: number) => {
+    setPanEdge({ x, y });
+    if (glowTimer.current !== null) clearTimeout(glowTimer.current);
+    glowTimer.current = window.setTimeout(() => setPanEdge(null), PAN_GLOW_MS);
+  };
+
   const commitRegion = () => {
-    if (draft) send({ type: 'setRegion', ...draft });
+    if (draft) sendRegion(draft);
     setMode('view');
   };
 
@@ -195,7 +247,7 @@ export function SessionScreen({ onEnded }: Props) {
   };
 
   const handleGesture = (event: GestureEvent) => {
-    const { mode: m, monitor: mon, draft: d, cursor: c, content: box } = live.current;
+    const { mode: m, monitor: mon, region: r, draft: d, cursor: c, content: box } = live.current;
 
     if (m === 'overview' && event.kind === 'drag' && d && mon) {
       const moved = moveRegion(d, event.dx, event.dy, mon);
@@ -203,12 +255,35 @@ export function SessionScreen({ onEnded }: Props) {
       setDraft(moved);
     } else if (m === 'pointer' && box) {
       if (event.kind === 'drag') {
-        const next = moveCursor(c ?? centreOf(box), event.dx, event.dy, POINTER_GAIN, box);
+        const room: PanRoom =
+          r && mon
+            ? { left: r.x > 0, right: r.x + r.width < mon.width, up: r.y > 0, down: r.y + r.height < mon.height }
+            : NO_ROOM;
+        const { cursor: next, panX, panY } = moveCursorWithEdgePan(
+          c ?? centreOf(box), event.dx, event.dy, POINTER_GAIN, box, EDGE_ZONE, room);
+
+        if ((panX !== 0 || panY !== 0) && r && mon) {
+          // View pixels to monitor pixels, then slide the region; clampRegion keeps it on the monitor.
+          const scale = r.width / box.width;
+          const panned = clampRegion({ ...r, x: r.x + panX * scale, y: r.y + panY * scale }, mon);
+          if (panned.x !== r.x || panned.y !== r.y) {
+            live.current.region = panned;
+            setRegion(panned);
+            queueRegion(panned);
+            showPanEdge(Math.sign(panX), Math.sign(panY));
+          }
+        }
+
         live.current.cursor = next;
         setCursor(next);
         queueMove(toNormalized(next, box));
+      } else if (event.kind === 'dragEnd') {
+        // Land the final region before the final cursor position.
+        flushRegion();
+        flushMove();
       } else if (event.kind === 'tap') {
         // Make sure Windows' cursor is where ours is before clicking.
+        flushRegion();
         flushMove();
         if (!c) send({ type: 'move', ...toNormalized(centreOf(box), box) });
         send({ type: 'click', button: 'left' });

@@ -4,16 +4,43 @@ import type { Point, Rect } from './geometry';
 
 export type Look = 'natural' | 'lifted' | 'contrast';
 
+/** Edge the view is panning towards (-1/0/1 per axis), drawn as a glow on that edge. */
+export interface EdgeGlow {
+  rect: Rect;
+  x: number;
+  y: number;
+}
+
 export interface OverlayState {
   cursor: Point | null;
   regionBox: Rect | null;
   look: Look;
+  edgeGlow?: EdgeGlow | null;
 }
 
 export function drawOverlay(ctx: CanvasRenderingContext2D, state: OverlayState): void {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  if (state.edgeGlow) drawEdgeGlow(ctx, state.edgeGlow);
   if (state.regionBox) drawRegionBox(ctx, state.regionBox);
   if (state.cursor) drawCursor(ctx, state.cursor, state.look === 'contrast');
+}
+
+function drawEdgeGlow(ctx: CanvasRenderingContext2D, { rect, x, y }: EdgeGlow): void {
+  const depth = 18;
+  ctx.save();
+  const bar = (x0: number, y0: number, x1: number, y1: number, w: number, h: number, bx: number, by: number) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, 'rgba(92, 214, 230, 0.85)');
+    g.addColorStop(1, 'rgba(92, 214, 230, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(bx, by, w, h);
+  };
+  const { x: rx, y: ry, width: rw, height: rh } = rect;
+  if (x < 0) bar(rx, 0, rx + depth, 0, depth, rh, rx, ry);
+  if (x > 0) bar(rx + rw, 0, rx + rw - depth, 0, depth, rh, rx + rw - depth, ry);
+  if (y < 0) bar(0, ry, 0, ry + depth, rw, depth, rx, ry);
+  if (y > 0) bar(0, ry + rh, 0, ry + rh - depth, rw, depth, rx, ry + rh - depth);
+  ctx.restore();
 }
 
 function drawRegionBox(ctx: CanvasRenderingContext2D, r: Rect): void {

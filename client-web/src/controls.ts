@@ -11,6 +11,67 @@ export function moveCursor(cursor: Point, dx: number, dy: number, gain: number, 
   };
 }
 
+/** Which directions the region can still move on the monitor. */
+export interface PanRoom {
+  left: boolean;
+  right: boolean;
+  up: boolean;
+  down: boolean;
+}
+
+export interface EdgePanResult {
+  cursor: Point;
+  /** How far to move the view, in view pixels (negative = left/up). */
+  panX: number;
+  panY: number;
+}
+
+/**
+ * Pointer movement with edge panning. Inside the content the cursor moves as
+ * usual. Once it is within `edgeZone` of an edge and the drag keeps pushing
+ * outward, the cursor stops at the zone boundary and the rest of the push pans
+ * the view instead, so you can slide the region across the monitor without
+ * leaving Pointer mode. When the region is already at the monitor edge there
+ * is no room to pan, and the cursor carries on to the real edge (so things at
+ * the very edge of the screen stay clickable).
+ */
+export function moveCursorWithEdgePan(
+  cursor: Point,
+  dx: number,
+  dy: number,
+  gain: number,
+  bounds: Rect,
+  edgeZone: number,
+  room: PanRoom,
+): EdgePanResult {
+  const [x, panX] = panAxis(cursor.x, dx * gain, bounds.x, bounds.x + bounds.width - 1, edgeZone, room.left, room.right);
+  const [y, panY] = panAxis(cursor.y, dy * gain, bounds.y, bounds.y + bounds.height - 1, edgeZone, room.up, room.down);
+  return { cursor: { x, y }, panX, panY };
+}
+
+function panAxis(
+  pos: number,
+  delta: number,
+  lo: number,
+  hi: number,
+  zone: number,
+  canPanNegative: boolean,
+  canPanPositive: boolean,
+): [number, number] {
+  const target = pos + delta;
+
+  if (delta < 0 && canPanNegative) {
+    // Never pull a cursor that is already deeper in the zone back out of it.
+    const stop = Math.min(pos, lo + zone);
+    if (target < stop) return [stop, target - stop];
+  }
+  if (delta > 0 && canPanPositive) {
+    const stop = Math.max(pos, hi - zone);
+    if (target > stop) return [stop, target - stop];
+  }
+  return [clamp(target, lo, hi), 0];
+}
+
 /** Cursor position as 0..1 within the content rect (what the server's "move" expects). */
 export function toNormalized(cursor: Point, bounds: Rect): Point {
   return {
