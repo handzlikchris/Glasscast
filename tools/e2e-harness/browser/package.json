@@ -1,0 +1,12 @@
+{
+  "name": "glasses-remote-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Drives the real glasses client against the e2e harness in headless Chrome.",
+  "scripts": {
+    "drive": "node drive.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  }
+}

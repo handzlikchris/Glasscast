@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    DEV-ONLY end-to-end harness. Hosts the real server pipeline with pairing
+    auto-approved and input logged instead of injected, so a headless browser
+    can exercise the whole flow unattended. Never deploy this.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>E2eHarness</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\server\GlassesRemote.Server.csproj" />
+  </ItemGroup>
+
+</Project>

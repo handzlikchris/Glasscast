@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "spikes", "spikes", "{FEB2D3
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebRtcSpike", "spikes\webrtc\WebRtcSpike.csproj", "{34828BBA-E8D0-44D9-BB70-BE9CC2617BD3}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{880A9F68-F12B-402C-A637-CA16354B5369}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "E2eHarness", "tools\e2e-harness\E2eHarness.csproj", "{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,8 +36,13 @@ Global
 		{34828BBA-E8D0-44D9-BB70-BE9CC2617BD3}.Debug|Any CPU.Build.0 = Debug|x64
 		{34828BBA-E8D0-44D9-BB70-BE9CC2617BD3}.Release|Any CPU.ActiveCfg = Release|x64
 		{34828BBA-E8D0-44D9-BB70-BE9CC2617BD3}.Release|Any CPU.Build.0 = Release|x64
+		{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB}.Debug|Any CPU.Build.0 = Debug|x64
+		{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB}.Release|Any CPU.ActiveCfg = Release|x64
+		{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB}.Release|Any CPU.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{34828BBA-E8D0-44D9-BB70-BE9CC2617BD3} = {FEB2D343-FE72-4A6B-B47C-2C22409C0E18}
+		{DC4E9B7A-8B5C-4EEC-8746-D05F99C5FDDB} = {880A9F68-F12B-402C-A637-CA16354B5369}
 	EndGlobalSection
 EndGlobal
