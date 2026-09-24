@@ -47,11 +47,22 @@ glasses / laptop ──HTTPS+WSS :443──► Caddy ──► 127.0.0.1:5080 .N
 
 ## Run locally (no Caddy, no glasses)
 
+Same PC, any browser:
+
 ```powershell
 .\scripts\run.ps1 -Dev
-# open http://127.0.0.1:5080 in Chrome (600×600 is the glasses' size)
+# open http://127.0.0.1:5080 (600×600 is the glasses' size)
 # approve the popup on the PC; the tray icon turns green
 ```
+
+Another device on your home network (e.g. the laptop):
+
+```powershell
+.\deploy\firewall.ps1 -LanTesting   # once, admin PowerShell: TCP 5080 from your local subnet only
+.\scripts\run.ps1 -Lan              # prints the address to open, e.g. http://192.168.1.114:5080
+```
+
+Plain HTTP on the LAN is for testing only; the router doesn't forward 5080.
 
 ## Run for real
 
