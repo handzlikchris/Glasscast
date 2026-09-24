@@ -6,7 +6,7 @@
     can exercise the whole flow unattended. Never deploy this.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>E2eHarness</RootNamespace>
   </PropertyGroup>

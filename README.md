@@ -38,6 +38,13 @@ glasses / laptop ──HTTPS+WSS :443──► Caddy ──► 127.0.0.1:5080 .N
 - **Modes** give pinch-drag one meaning at a time: Overview (move the region box),
   View, Pointer (drag moves the cursor, a short pinch clicks), Scroll, Type.
 
+## Requirements
+
+- Windows 10/11 (capture, SendInput and the tray are Windows-only)
+- .NET 10 SDK (LTS, supported to Nov 2028; pinned by `global.json`)
+- Node 20+ for the client
+- Caddy (stock build) for public HTTPS
+
 ## Run locally (no Caddy, no glasses)
 
 ```powershell

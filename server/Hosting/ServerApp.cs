@@ -48,7 +48,7 @@ public static class ServerApp
         services.Configure<ForwardedHeadersOptions>(o =>
         {
             o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-            o.KnownNetworks.Clear();
+            o.KnownIPNetworks.Clear();
             o.KnownProxies.Clear();
             o.KnownProxies.Add(IPAddress.Loopback);
             o.KnownProxies.Add(IPAddress.IPv6Loopback);
