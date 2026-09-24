@@ -1,0 +1,17 @@
+# Reverse proxy for the M0 WebRTC spike only (test pattern, no desktop, no input).
+# Run from the repo root:  caddy run --config deploy/Caddyfile.spike
+# Stop it before running the real app; both use the same hostname and port.
+{
+	auto_https disable_redirects
+}
+
+glasses.example.com {
+	@allowed path / /index.html /health /ws/spike
+	handle @allowed {
+		reverse_proxy 127.0.0.1:5080
+	}
+
+	handle {
+		respond 404
+	}
+}

@@ -1,0 +1,41 @@
+# Public reverse proxy for the glasses app.
+# Run from the repo root:  caddy run --config deploy/Caddyfile
+#
+# Only TCP 443 is forwarded by the router. Caddy gets its certificate through
+# the TLS-ALPN challenge on 443, so no DNS plugin or API key is needed.
+{
+	# Port 80 is not forwarded, so don't bother with the HTTP->HTTPS redirect listener.
+	auto_https disable_redirects
+}
+
+glasses.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Allowlist: only the web client, health check and the two WebSockets reach the app.
+	# The CSP header is set by the app itself.
+	@allowed path / /index.html /favicon.svg /assets/* /health /ws/pair /ws/session
+	handle @allowed {
+		reverse_proxy 127.0.0.1:5080
+	}
+
+	handle {
+		respond 404
+	}
+
+	# Auth tokens never travel in URLs (they go in the first WebSocket message),
+	# so the access log cannot capture them.
+	log {
+		output file caddy-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+}
