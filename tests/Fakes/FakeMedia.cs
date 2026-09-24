@@ -1,0 +1,98 @@
+using GlassesRemote.Server.Desktop;
+using GlassesRemote.Server.Media;
+
+namespace GlassesRemote.Server.Tests.Fakes;
+
+/// <summary>Pretends to be a WebRTC peer: "connects" as soon as an answer is applied.</summary>
+public sealed class FakePeer : IMediaPeer
+{
+    private int _frames;
+
+    public event Action? Connected;
+
+    public event Action? Closed;
+
+    public bool IsConnected { get; private set; }
+
+    public string? AppliedAnswer { get; private set; }
+
+    public int FramesSent => Volatile.Read(ref _frames);
+
+    public bool Disposed { get; private set; }
+
+    public Task<string> CreateOfferAsync() => Task.FromResult("v=0\r\nfake-offer\r\n");
+
+    public bool ApplyAnswer(string sdp)
+    {
+        AppliedAnswer = sdp;
+        IsConnected = true;
+        Connected?.Invoke();
+        return true;
+    }
+
+    public void AddRemoteCandidate(string candidate, string? sdpMid, int sdpMLineIndex)
+    {
+    }
+
+    public void SendFrame(byte[] encoded, uint durationRtpUnits) => Interlocked.Increment(ref _frames);
+
+    public void Dispose()
+    {
+        Disposed = true;
+        IsConnected = false;
+        Closed?.Invoke();
+    }
+}
+
+public sealed class FakePeerFactory : IMediaPeerFactory
+{
+    public List<FakePeer> Created { get; } = new();
+
+    public IMediaPeer Create(string codec)
+    {
+        var peer = new FakePeer();
+        lock (Created)
+        {
+            Created.Add(peer);
+        }
+        return peer;
+    }
+}
+
+public sealed class FakeEncoder : IFrameEncoder
+{
+    public string Codec => "VP8";
+
+    public byte[]? Encode(byte[] bgra, int width, int height) => [1, 2, 3];
+
+    public void ForceKeyFrame()
+    {
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+public sealed class FakeEncoderFactory : IFrameEncoderFactory
+{
+    public IFrameEncoder Create() => new FakeEncoder();
+}
+
+public sealed class FakeCapture : ICaptureSource
+{
+    public List<PixelRect> Sources { get; } = new();
+
+    public bool TryCapture(PixelRect source, PixelSize frame, byte[] bgra)
+    {
+        lock (Sources)
+        {
+            Sources.Add(source);
+        }
+        return true;
+    }
+
+    public void Dispose()
+    {
+    }
+}
