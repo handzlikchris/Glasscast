@@ -25,22 +25,22 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     public void Dispose() => _coordinator.Dispose();
 
-    private string PairAndApprove()
+    private async Task<string> PairAndApproveAsync()
     {
         var request = _coordinator.TryOpenRequest(Glasses)!;
         Assert.True(_coordinator.Approve(request.Id));
-        return request.Outcome.Result.Token!;
+        return (await request.Outcome).Token!;
     }
 
     [Fact]
-    public void Approved_request_receives_a_token_that_starts_a_session()
+    public async Task Approved_request_receives_a_token_that_starts_a_session()
     {
         var request = _coordinator.TryOpenRequest(Glasses);
         Assert.NotNull(request);
         Assert.Matches("^[A-Z2-9]{3}-[A-Z2-9]{3}$", request.Code);
 
         Assert.True(_coordinator.Approve(request.Id));
-        var outcome = request.Outcome.Result;
+        var outcome = await request.Outcome;
         Assert.Equal(PairingOutcomeKind.Approved, outcome.Kind);
 
         using var lease = _coordinator.TryAuthenticate(outcome.Token!, Glasses);
@@ -58,7 +58,7 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief test 2: pairing expires after 60 seconds.
     [Fact]
-    public void Pending_request_expires_after_the_timeout()
+    public async Task Pending_request_expires_after_the_timeout()
     {
         var request = _coordinator.TryOpenRequest(Glasses)!;
 
@@ -66,7 +66,7 @@ public sealed class PairingCoordinatorTests : IDisposable
         Assert.False(request.Outcome.IsCompleted);
 
         _time.Advance(TimeSpan.FromSeconds(1));
-        Assert.Equal(PairingOutcomeKind.Expired, request.Outcome.Result.Kind);
+        Assert.Equal(PairingOutcomeKind.Expired, (await request.Outcome).Kind);
         Assert.False(_coordinator.Approve(request.Id));
         Assert.Contains(_alerts.Recent(), a => a.Kind == AlertKind.PairingTimedOut);
 
@@ -76,21 +76,21 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief test 3: only the approved request gets the token; nobody else can even open one meanwhile.
     [Fact]
-    public void Only_one_request_can_be_pending_and_others_get_nothing()
+    public async Task Only_one_request_can_be_pending_and_others_get_nothing()
     {
         var mine = _coordinator.TryOpenRequest(Glasses)!;
         Assert.Null(_coordinator.TryOpenRequest(Stranger));
         Assert.Contains(_alerts.Recent(), a => a.Kind == AlertKind.PairingWhileBusy && a.RemoteAddress == Stranger.ToString());
 
         _coordinator.Approve(mine.Id);
-        Assert.NotNull(mine.Outcome.Result.Token);
+        Assert.NotNull((await mine.Outcome).Token);
     }
 
     // Brief test 4: pairing closes immediately after success.
     [Fact]
-    public void No_new_pairing_while_a_token_is_issued_or_a_session_is_active()
+    public async Task No_new_pairing_while_a_token_is_issued_or_a_session_is_active()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         Assert.Null(_coordinator.TryOpenRequest(Stranger));
 
         using var lease = _coordinator.TryAuthenticate(token, Glasses);
@@ -100,9 +100,9 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief test 5: a second client cannot race and obtain a session.
     [Fact]
-    public void Concurrent_authentications_with_the_same_token_yield_exactly_one_session()
+    public async Task Concurrent_authentications_with_the_same_token_yield_exactly_one_session()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
 
         var leases = Enumerable.Range(0, 32)
             .AsParallel()
@@ -129,9 +129,9 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief test 6: unauthenticated clients cannot occupy the slot or burn the real token.
     [Fact]
-    public void Wrong_tokens_do_not_consume_the_issued_token()
+    public async Task Wrong_tokens_do_not_consume_the_issued_token()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
 
         Assert.Null(_coordinator.TryAuthenticate("guess", Stranger));
         Assert.Null(_coordinator.TryAuthenticate(Secrets.NewToken(), Stranger));
@@ -144,9 +144,9 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief test 7: only one authenticated session can be active.
     [Fact]
-    public void Second_authentication_fails_while_a_session_is_active()
+    public async Task Second_authentication_fails_while_a_session_is_active()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         using var first = _coordinator.TryAuthenticate(token, Glasses);
         Assert.NotNull(first);
 
@@ -155,9 +155,9 @@ public sealed class PairingCoordinatorTests : IDisposable
 
     // Brief tests 8 and 9: disconnect invalidates the token, and reusing it fails.
     [Fact]
-    public void Token_is_single_use_and_dies_with_the_session()
+    public async Task Token_is_single_use_and_dies_with_the_session()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         var lease = _coordinator.TryAuthenticate(token, Glasses)!;
         lease.Dispose();
 
@@ -166,9 +166,9 @@ public sealed class PairingCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void Issued_token_expires_if_never_used()
+    public async Task Issued_token_expires_if_never_used()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         _time.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Null(_coordinator.TryAuthenticate(token, Glasses));
@@ -176,32 +176,32 @@ public sealed class PairingCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void Rejected_request_gets_no_token_and_raises_an_alert()
+    public async Task Rejected_request_gets_no_token_and_raises_an_alert()
     {
         var request = _coordinator.TryOpenRequest(Stranger)!;
         Assert.True(_coordinator.Reject(request.Id));
 
-        Assert.Equal(PairingOutcomeKind.Rejected, request.Outcome.Result.Kind);
-        Assert.Null(request.Outcome.Result.Token);
+        Assert.Equal(PairingOutcomeKind.Rejected, (await request.Outcome).Kind);
+        Assert.Null((await request.Outcome).Token);
         Assert.Contains(_alerts.Recent(), a => a.Kind == AlertKind.PairingRejected);
     }
 
     [Fact]
-    public void Cancelled_request_frees_the_slot_without_an_alert()
+    public async Task Cancelled_request_frees_the_slot_without_an_alert()
     {
         var request = _coordinator.TryOpenRequest(Glasses)!;
         _coordinator.Cancel(request.Id);
 
-        Assert.Equal(PairingOutcomeKind.Cancelled, request.Outcome.Result.Kind);
+        Assert.Equal(PairingOutcomeKind.Cancelled, (await request.Outcome).Kind);
         Assert.Empty(_alerts.Recent());
         Assert.NotNull(_coordinator.TryOpenRequest(Glasses));
     }
 
     // Brief test 15: the user can terminate control locally at once.
     [Fact]
-    public void Terminate_signals_the_active_session()
+    public async Task Terminate_signals_the_active_session()
     {
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         using var lease = _coordinator.TryAuthenticate(token, Glasses)!;
 
         Assert.True(_coordinator.TerminateActiveSession());
@@ -226,12 +226,12 @@ public sealed class PairingCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public void Session_events_fire_on_start_and_end()
+    public async Task Session_events_fire_on_start_and_end()
     {
         var changes = new List<ActiveSessionInfo?>();
         _coordinator.SessionChanged += changes.Add;
 
-        var token = PairAndApprove();
+        var token = await PairAndApproveAsync();
         var lease = _coordinator.TryAuthenticate(token, Glasses)!;
         lease.Dispose();
 
