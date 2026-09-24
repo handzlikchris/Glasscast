@@ -1,8 +1,11 @@
 # Adds the inbound Windows Firewall rules the app needs.
 # Run from an elevated PowerShell:
-#   .\deploy\firewall.ps1               # TCP 443 (Caddy) and UDP 50000 (WebRTC media)
+#   .\deploy\firewall.ps1               # TCP 8443 (Caddy) and UDP 50000 (WebRTC media)
 #   .\deploy\firewall.ps1 -LanTesting   # also TCP 5080 from your local subnet only (scripts\run.ps1 -Lan)
 #   .\deploy\firewall.ps1 -Remove       # remove all of them again
+#
+# The router forwards external TCP 443 to this PC's 8443 (IIS keeps 443 locally), so Caddy's
+# rule is for 8443. Re-running the script fixes a rule whose port has changed.
 
 param(
     [switch]$LanTesting,
@@ -12,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $rules = @(
-    @{ Name = 'Glasses - Caddy HTTPS';  Protocol = 'TCP'; Port = 443;   Remote = 'Any' },
+    @{ Name = 'Glasses - Caddy HTTPS';  Protocol = 'TCP'; Port = 8443;  Remote = 'Any' },
     @{ Name = 'Glasses - WebRTC media'; Protocol = 'UDP'; Port = 50000; Remote = 'Any' },
     # Plain-HTTP test server: home network only, never the internet.
     @{ Name = 'Glasses - LAN testing';  Protocol = 'TCP'; Port = 5080;  Remote = 'LocalSubnet'; LanOnly = $true }
@@ -34,7 +37,14 @@ foreach ($rule in $rules) {
     }
 
     if ($existing) {
-        Write-Host "Already present: $($rule.Name)"
+        $port = ($existing | Get-NetFirewallPortFilter).LocalPort
+        if ("$port" -ne "$($rule.Port)") {
+            $existing | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -LocalPort $rule.Port
+            Write-Host "Updated: $($rule.Name) (port $port -> $($rule.Port))"
+        }
+        else {
+            Write-Host "Already present: $($rule.Name)"
+        }
         continue
     }
 

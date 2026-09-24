@@ -24,7 +24,7 @@ This README covers the code.
 ## How it fits together
 
 ```
-glasses / laptop ──HTTPS+WSS :443──► Caddy ──► 127.0.0.1:5080 .NET server ──► SendInput
+glasses / laptop ──HTTPS+WSS :443──► router ──► Caddy :8443 ──► 127.0.0.1:5080 .NET server ──► SendInput
         ▲                                         │   GDI capture → H.264 (Media Foundation)
         └───────────── WebRTC video, UDP 50000 ◄──┘   (VP8 fallback)
 ```
@@ -71,7 +71,7 @@ Plain HTTP on the LAN is for testing only; the router doesn't forward 5080.
 
 ## Run for real
 
-1. Router, DNS and firewall: follow the plan's **Setup** section (TCP 443 and UDP 50000
+1. Router, DNS and firewall: follow the plan's **Setup** section (external TCP 443 → this PC's 8443, UDP 50000
    forwarded to this PC, an A record for `glasses.example.com`).
 2. Copy `server/appsettings.Local.example.json` to `server/appsettings.Local.json` and put
    your static public IP in `Media:PublicIp`.
@@ -93,7 +93,8 @@ npm run drive                                  # full flow in headless Chrome
 
 ## Security model, in short
 
-- Only 443 (Caddy) and UDP 50000 are public; the app listens on loopback. RDP is never exposed.
+- Only 443 (forwarded to Caddy on 8443) and UDP 50000 are public; the app listens on loopback.
+  IIS keeps port 443 on this PC for local use. RDP is never exposed.
 - A session exists only after a human approves the matching code on the PC. The token is
   256-bit, single-use, hashed server-side, never in URLs, storage or logs, and it dies with
   the session. There's no reconnection without a new approval.

@@ -1,14 +1,25 @@
 # Public reverse proxy for the glasses app.
 # Run from the repo root:  caddy run --config deploy/Caddyfile
 #
-# Only TCP 443 is forwarded by the router. Caddy gets its certificate through
-# the TLS-ALPN challenge on 443, so no DNS plugin or API key is needed.
+# The router forwards external TCP 443 to this PC's port 8443 (IIS keeps 443 locally).
+# Caddy listens on 8443 and gets its certificate through the TLS-ALPN challenge, which
+# Let's Encrypt sends to public 443 and the router hands to us. No DNS plugin or API key.
+# Override the port with the HTTPS_PORT environment variable if needed.
 {
-	# Port 80 is not forwarded, so don't bother with the HTTP->HTTPS redirect listener.
+	https_port {$HTTPS_PORT:8443}
+
+	# Port 80 isn't forwarded (and IIS holds it locally), so no HTTP->HTTPS redirect listener.
 	auto_https disable_redirects
 }
 
 glasses.example.com {
+	# Certificate over TLS-ALPN on the HTTPS port only; the HTTP challenge would need port 80.
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
 	encode zstd gzip
 
 	header {

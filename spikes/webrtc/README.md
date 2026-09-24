@@ -29,7 +29,7 @@ dotnet run --launch-profile spike
 
 ## Run through the router (the real test)
 
-1. Router and DNS are set up as described in the plan's Setup section (TCP 443 and UDP 50000 forwarded).
+1. Router and DNS are set up as described in the plan's Setup section (external TCP 443 forwarded to this PC's 8443, UDP 50000 forwarded).
 2. Set your public IP and turn off LAN candidates, so the only route is the port forward:
 
    ```powershell
