@@ -25,6 +25,15 @@ public static class ServerApp
 
         services.Configure<PairingOptions>(config.GetSection(PairingOptions.SectionName));
         services.Configure<WebOptions>(config.GetSection(WebOptions.SectionName));
+        var isDevelopment = builder.Environment.IsDevelopment();
+        services.PostConfigure<WebOptions>(web =>
+        {
+            // Same-origin WebSockets are a LAN-testing convenience; never honour them in production.
+            if (!isDevelopment)
+            {
+                web.AllowSameOrigin = false;
+            }
+        });
         services.Configure<ControlSessionOptions>(config.GetSection(ControlSessionOptions.SectionName));
         services.Configure<MediaOptions>(config.GetSection(MediaOptions.SectionName));
 
@@ -65,6 +74,11 @@ public static class ServerApp
 
         var app = builder.Build();
         SIPSorcery.LogFactory.Set(app.Services.GetRequiredService<ILoggerFactory>());
+
+        if (app.Services.GetRequiredService<IOptions<WebOptions>>().Value.AllowSameOrigin)
+        {
+            app.Logger.LogWarning("Web:AllowSameOrigin is on (LAN testing): any page served by this host may open the sockets");
+        }
 
         app.UseForwardedHeaders();
         app.UseSecurityHeaders();

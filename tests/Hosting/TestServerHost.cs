@@ -25,7 +25,7 @@ public sealed class TestServerHost : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly string _regionFile = Path.Combine(Path.GetTempPath(), $"region-{Guid.NewGuid():N}.json");
 
-    public TestServerHost(Dictionary<string, string?>? settings = null)
+    public TestServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
         var config = new Dictionary<string, string?>
         {
@@ -40,7 +40,7 @@ public sealed class TestServerHost : IAsyncDisposable
             config[key] = value;
         }
 
-        _app = ServerApp.Create([], builder =>
+        _app = ServerApp.Create(args ?? [], builder =>
         {
             builder.WebHost.UseTestServer();
             builder.Configuration.AddInMemoryCollection(config);

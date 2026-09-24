@@ -7,6 +7,13 @@ public sealed class WebOptions
     /// <summary>Exact origins allowed to open the WebSockets (scheme://host[:port]).</summary>
     public string[] AllowedOrigins { get; set; } = ["https://glasses.example.com"];
 
+    /// <summary>
+    /// Development only: also accept a WebSocket whose Origin is the site that served it
+    /// (same scheme, host and port as the request). Used by the "lan" launch profile,
+    /// where the PC's LAN address isn't known in advance. Keep off in production.
+    /// </summary>
+    public bool AllowSameOrigin { get; set; }
+
     /// <summary>Folder with the built glasses client (client-web/dist), relative to the content root.</summary>
     public string ClientRoot { get; set; } = "../client-web/dist";
 }
