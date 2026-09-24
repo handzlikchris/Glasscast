@@ -18,6 +18,9 @@ public static class ServerApp
     {
         var builder = WebApplication.CreateBuilder(args);
         var config = builder.Configuration;
+
+        // Machine-specific values (e.g. Media:PublicIp) live in a git-ignored file.
+        config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
         var services = builder.Services;
 
         services.Configure<PairingOptions>(config.GetSection(PairingOptions.SectionName));
