@@ -6,6 +6,8 @@
     <RootNamespace>GlassesRemote.Server</RootNamespace>
     <!-- Physical-pixel coordinates for capture and SendInput on scaled displays. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- LibraryImport marshalling for SendInput arrays. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
