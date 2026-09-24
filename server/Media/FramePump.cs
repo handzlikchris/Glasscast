@@ -54,13 +54,16 @@ public sealed class FramePump
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var source = currentSource();
 
-            // A new source (mode or region change) or the periodic timer both warrant a keyframe.
-            if (source != lastSource || DateTime.UtcNow - lastKeyframe >= keyframeEvery)
+            // A source of a different size (mode switch, resized region) changes the whole picture,
+            // so start it with a keyframe. A region that merely moves (edge panning) is just motion,
+            // which delta frames handle far more cheaply; the periodic keyframe covers packet loss.
+            var resized = source.Width != lastSource.Width || source.Height != lastSource.Height;
+            if (resized || DateTime.UtcNow - lastKeyframe >= keyframeEvery)
             {
                 encoder.ForceKeyFrame();
-                lastSource = source;
                 lastKeyframe = DateTime.UtcNow;
             }
+            lastSource = source;
 
             if (!_capture.TryCapture(source, frame, bgra))
             {
