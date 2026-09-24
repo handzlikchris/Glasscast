@@ -1,0 +1,12 @@
+{
+  "name": "webrtc-spike-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Headless-Chrome check for the M0 WebRTC spike: connects, waits for latency samples, prints results.",
+  "scripts": {
+    "check": "node check.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  }
+}

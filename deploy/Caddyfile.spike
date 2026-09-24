@@ -6,7 +6,7 @@
 }
 
 glasses.example.com {
-	@allowed path / /index.html /health /ws/spike
+	@allowed path / /index.html /spike.js /health /ws/spike
 	handle @allowed {
 		reverse_proxy 127.0.0.1:5080
 	}
