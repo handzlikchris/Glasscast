@@ -25,7 +25,7 @@ public sealed class SocketIO
 
     /// <summary>
     /// Reads one complete text message. Returns null when the peer closes.
-    /// Oversized or binary messages close the socket and throw <see cref="ProtocolViolationException"/>.
+    /// Oversized or binary messages close the socket and throw <see cref="InvalidClientMessageException"/>.
     /// </summary>
     public async Task<ReadOnlyMemory<byte>?> ReceiveAsync(CancellationToken ct)
     {
@@ -35,7 +35,7 @@ public sealed class SocketIO
             if (length >= _maxMessageBytes)
             {
                 await CloseQuietlyAsync(WebSocketCloseStatus.MessageTooBig, "too big");
-                throw new ProtocolViolationException("message too large");
+                throw new InvalidClientMessageException("message too large");
             }
 
             var result = await _socket.ReceiveAsync(_buffer.AsMemory(length), ct);
@@ -47,7 +47,7 @@ public sealed class SocketIO
             if (result.MessageType != WebSocketMessageType.Text)
             {
                 await CloseQuietlyAsync(WebSocketCloseStatus.InvalidMessageType, "text only");
-                throw new ProtocolViolationException("binary message");
+                throw new InvalidClientMessageException("binary message");
             }
 
             length += result.Count;
@@ -92,4 +92,4 @@ public sealed class SocketIO
     }
 }
 
-public sealed class ProtocolViolationException(string message) : Exception(message);
+public sealed class InvalidClientMessageException(string message) : Exception(message);

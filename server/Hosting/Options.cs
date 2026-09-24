@@ -11,7 +11,7 @@ public sealed class WebOptions
     public string ClientRoot { get; set; } = "../client-web/dist";
 }
 
-public sealed class SessionOptions
+public sealed class ControlSessionOptions
 {
     public const string SectionName = "Session";
 
