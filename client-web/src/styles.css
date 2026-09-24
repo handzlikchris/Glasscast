@@ -1,0 +1,249 @@
+/* The glasses display is additive: black is transparent, bright colours glow.
+   Keep chrome dark, text and outlines bright, and never rely on dark tones. */
+:root {
+  --fg: #f2f6fa;
+  --muted: #9fb2c4;
+  --accent: #5cd6e6;
+  --focus: #ffd166;
+  --active: #1f8f55;
+  --warn: #f0b429;
+  --danger: #ff7a6b;
+  --panel: rgba(10, 14, 20, 0.86);
+  --button: #17222d;
+  --button-line: #4d6376;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 600px;
+  height: 600px;
+  overflow: hidden;
+  background: #000;
+  color: var(--fg);
+  font: 16px/1.35 system-ui, "Segoe UI", Roboto, sans-serif;
+  /* Required on Meta Ray-Ban Display for continuous pinch-drag. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#root {
+  width: 600px;
+  height: 600px;
+}
+
+button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--button);
+  border: 2px solid var(--button-line);
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- pairing ---------- */
+
+.pairing {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 40px;
+}
+
+.pairing h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.pairing p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.pairing .code {
+  font: 700 64px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.pairing .error {
+  color: var(--danger);
+}
+
+/* ---------- session ---------- */
+
+.stage {
+  position: relative;
+  width: 600px;
+  height: 600px;
+  overflow: hidden;
+}
+
+.stage video,
+.stage canvas,
+.gesture-layer {
+  position: absolute;
+  inset: 0;
+  width: 600px;
+  height: 600px;
+}
+
+.stage video {
+  object-fit: fill;
+  background: #000;
+}
+
+.look-lifted video {
+  /* Lift blacks so dark UIs stay visible on the additive display. */
+  filter: contrast(0.8) brightness(1.25);
+}
+
+.stage canvas {
+  pointer-events: none;
+}
+
+.gesture-layer {
+  touch-action: none;
+}
+
+.toolbar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 6px;
+  background: var(--panel);
+  border-radius: 12px;
+}
+
+.toolbar.top {
+  top: 6px;
+}
+
+.toolbar.bottom {
+  bottom: 34px;
+}
+
+.toolbar button {
+  min-height: 38px;
+  padding: 4px 10px;
+  font-size: 15px;
+}
+
+.status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--panel);
+  display: flex;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.status .dot {
+  color: var(--active);
+}
+
+.status .dot.warn {
+  color: var(--warn);
+}
+
+.type-panel {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 34px;
+  padding: 10px;
+  background: var(--panel);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.type-panel textarea {
+  width: 100%;
+  height: 86px;
+  resize: none;
+  font: 17px/1.35 system-ui, sans-serif;
+  color: var(--fg);
+  background: #0b1117;
+  border: 2px solid var(--button-line);
+  border-radius: 10px;
+  padding: 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.type-panel .row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.type-panel .count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.type-panel .keys button {
+  flex: 1 1 auto;
+  min-width: 72px;
+}
+
+.hint {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.ended {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 40px;
+}
