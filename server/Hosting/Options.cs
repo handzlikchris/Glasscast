@@ -41,6 +41,9 @@ public sealed class MediaOptions
     /// <summary>Also advertise LAN addresses (for testing on the home network).</summary>
     public bool IncludeLanCandidates { get; set; }
 
+    /// <summary>"H264" (Windows Media Foundation, falls back to VP8 if unavailable) or "VP8".</summary>
+    public string Codec { get; set; } = "H264";
+
     public int FramesPerSecond { get; set; } = 20;
 
     public int TargetKbps { get; set; } = 2500;

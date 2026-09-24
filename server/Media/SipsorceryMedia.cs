@@ -27,10 +27,24 @@ public sealed class Vp8FrameEncoder : IFrameEncoder
     public void Dispose() => _encoder.Dispose();
 }
 
-public sealed class FrameEncoderFactory(IOptions<MediaOptions> options) : IFrameEncoderFactory
+/// <summary>Picks the configured codec; H.264 falls back to VP8 where Windows has no H.264 encoder.</summary>
+public sealed class FrameEncoderFactory(IOptions<MediaOptions> options, ILogger<FrameEncoderFactory> logger) : IFrameEncoderFactory
 {
-    // H.264 (Media Foundation) will plug in here; VP8 is the working default.
-    public IFrameEncoder Create() => new Vp8FrameEncoder(options.Value.TargetKbps);
+    private readonly Lazy<bool> _h264Available = new(MfH264Encoder.IsAvailable);
+
+    public IFrameEncoder Create()
+    {
+        var media = options.Value;
+        if (string.Equals(media.Codec, "H264", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_h264Available.Value)
+            {
+                return new MfH264Encoder(media.TargetKbps, media.FramesPerSecond);
+            }
+            logger.LogWarning("No H.264 encoder on this PC (Windows N edition?); falling back to VP8");
+        }
+        return new Vp8FrameEncoder(media.TargetKbps);
+    }
 }
 
 /// <summary>
