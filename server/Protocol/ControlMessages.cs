@@ -52,7 +52,10 @@ public sealed record MoveMessage(double X, double Y) : ControlMessage;
 
 public sealed record ClickMessage(MouseButton Button) : ControlMessage;
 
-/// <summary>Wheel movement in Windows wheel units (120 per notch), clamped.</summary>
+/// <summary>
+/// Wheel movement in Windows wheel units (120 per notch), clamped. Positive scrolls
+/// down, like a browser's deltaY.
+/// </summary>
 public sealed record ScrollMessage(int Dy) : ControlMessage;
 
 /// <summary>Text to type. Line breaks are flattened to spaces: text never presses Enter.</summary>
