@@ -31,31 +31,20 @@ if ($Rebuild -or -not (Test-Path (Join-Path $client 'dist\index.html'))) {
     }
 }
 
-$serverArgs = @()
 if ($Lan) {
-    $Dev = $true
     $lanIp = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
         Select-Object -First 1).IPv4Address.IPAddress
-    if (-not $lanIp) { throw 'Could not find this PC''s LAN IPv4 address.' }
-
-    # Listen on the LAN address too, accept it as a host name, and allow the page served from it
-    # to open the WebSockets. Index 10 appends to the origin list instead of replacing it.
-    $serverArgs = @(
-        '--urls', "http://127.0.0.1:5080;http://${lanIp}:5080",
-        "--AllowedHosts=$lanIp;localhost;127.0.0.1",
-        "--Web:AllowedOrigins:10=http://${lanIp}:5080"
-    )
-
     if (-not (Get-NetFirewallRule -DisplayName 'Glasses - LAN testing' -ErrorAction SilentlyContinue)) {
         Write-Warning 'No LAN firewall rule yet: run .\deploy\firewall.ps1 -LanTesting in an admin PowerShell.'
     }
     Write-Host "On the other device open:  http://${lanIp}:5080" -ForegroundColor Green
 }
 
-$profile = if ($Dev) { 'dev' } else { 'server' }
-if (-not $Dev -and -not (Test-Path (Join-Path $root 'server\appsettings.Local.json'))) {
+# The 'lan' launch profile listens on all interfaces and allows same-origin sockets (Development only).
+$profile = if ($Lan) { 'lan' } elseif ($Dev) { 'dev' } else { 'server' }
+if (-not $Dev -and -not $Lan -and -not (Test-Path (Join-Path $root 'server\appsettings.Local.json'))) {
     Write-Warning 'server\appsettings.Local.json not found: Media:PublicIp is unset, so the glasses will have no media address. See server\appsettings.Local.example.json.'
 }
 
 Write-Host "Starting the server ($profile profile)..."
-dotnet run --project (Join-Path $root 'server') --launch-profile $profile -- @serverArgs
+dotnet run --project (Join-Path $root 'server') --launch-profile $profile

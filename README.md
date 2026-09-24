@@ -62,6 +62,11 @@ Another device on your home network (e.g. the laptop):
 .\scripts\run.ps1 -Lan              # prints the address to open, e.g. http://192.168.1.114:5080
 ```
 
+From Rider or `dotnet run`, use the **lan** launch profile. It listens on all interfaces
+(`Urls=http://0.0.0.0:5080`, which overrides `appsettings.json`), accepts any host name, and
+turns on `Web:AllowSameOrigin`. That last setting lets the page open the WebSockets from
+whatever LAN address served it, and it is ignored outside Development.
+
 Plain HTTP on the LAN is for testing only; the router doesn't forward 5080.
 
 ## Run for real
