@@ -63,7 +63,13 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     {
         _options = options;
         _logger = logger;
-        _peer = new RTCPeerConnection(new RTCConfiguration(), bindPort: options.MediaPort);
+        var config = new RTCConfiguration();
+        if (IPAddress.TryParse(options.BindAddress, out var bindAddress))
+        {
+            // Pin the socket to one adapter so replies leave the way requests came in.
+            config.X_BindAddress = bindAddress;
+        }
+        _peer = new RTCPeerConnection(config, bindPort: options.MediaPort);
 
         var format = codec == "H264"
             ? new VideoFormat(VideoCodecsEnum.H264, 102, 90000, "packetization-mode=1;profile-level-id=42e01f")

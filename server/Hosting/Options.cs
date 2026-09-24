@@ -42,7 +42,15 @@ public sealed class MediaOptions
     /// <summary>Router's static public IP, advertised to the glasses as the media address.</summary>
     public string PublicIp { get; set; } = "";
 
-    /// <summary>Fixed UDP port for WebRTC media, forwarded on the router.</summary>
+    /// <summary>
+    /// LAN address of the adapter the router forwards the media port to (e.g. 192.168.1.114).
+    /// Needed when the PC has more than one network adapter: without it, replies can leave
+    /// through a different adapter, the router rewrites them as a new connection, and the
+    /// glasses discard them (video stuck on "connecting"). Empty = all adapters.
+    /// </summary>
+    public string BindAddress { get; set; } = "";
+
+    /// <summary>Fixed UDP port for WebRTC media, forwarded on the router. Must be even (SIPSorcery requires it).</summary>
     public int MediaPort { get; set; } = 50000;
 
     /// <summary>Also advertise LAN addresses (for testing on the home network).</summary>

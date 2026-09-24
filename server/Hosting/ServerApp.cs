@@ -80,6 +80,8 @@ public static class ServerApp
             app.Logger.LogWarning("Web:AllowSameOrigin is on (LAN testing): any page served by this host may open the sockets");
         }
 
+        WarnIfMultiHomed(app);
+
         app.UseForwardedHeaders();
         app.UseSecurityHeaders();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
@@ -87,6 +89,35 @@ public static class ServerApp
         app.MapGlassesEndpoints();
 
         return app;
+    }
+
+    /// <summary>
+    /// With several adapters on the LAN, UDP replies may leave through a different one than
+    /// the router forwards to, and WebRTC never connects. Media:BindAddress fixes that.
+    /// </summary>
+    private static void WarnIfMultiHomed(WebApplication app)
+    {
+        var media = app.Services.GetRequiredService<IOptions<MediaOptions>>().Value;
+        if (!string.IsNullOrWhiteSpace(media.BindAddress))
+        {
+            return;
+        }
+
+        var addresses = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+            .Select(n => n.GetIPProperties())
+            .Where(p => p.GatewayAddresses.Any(g => g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork))
+            .SelectMany(p => p.UnicastAddresses)
+            .Where(a => a.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            .Select(a => a.Address.ToString())
+            .ToList();
+
+        if (addresses.Count > 1)
+        {
+            app.Logger.LogWarning(
+                "Several network adapters have a default gateway ({Addresses}). Set Media:BindAddress to the one the " +
+                "router forwards UDP {Port} to, or video may never connect from outside", string.Join(", ", addresses), media.MediaPort);
+        }
     }
 
     private static void UseClientFiles(WebApplication app)

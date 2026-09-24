@@ -38,7 +38,12 @@ public sealed class SpikeSession
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
         cts.CancelAfter(TimeSpan.FromMinutes(_options.MaxSessionMinutes));
 
-        var peer = new RTCPeerConnection(new RTCConfiguration(), bindPort: _options.MediaPort);
+        var config = new RTCConfiguration();
+        if (IPAddress.TryParse(_options.BindAddress, out var bindAddress))
+        {
+            config.X_BindAddress = bindAddress;
+        }
+        var peer = new RTCPeerConnection(config, bindPort: _options.MediaPort);
         try
         {
             var track = new MediaStreamTrack(new VideoFormat(VideoCodecsEnum.VP8, 96), MediaStreamStatusEnum.SendOnly);
