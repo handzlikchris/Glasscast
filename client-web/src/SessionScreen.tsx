@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Session } from './connection';
 import { centreOf, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
 import {
@@ -448,7 +449,10 @@ export function SessionScreen({ onEnded }: Props) {
   // ---- modes ----
   const setMode = (next: ViewMode) => {
     send({ type: 'setMode', mode: next });
-    setModeState(next);
+    // Type renders its panel at once, so it can click into the text box while this pinch or
+    // swipe is still being handled: the glasses may then count it as yours and open the composer.
+    if (next === 'type') flushSync(() => setModeState(next));
+    else setModeState(next);
     live.current.mode = next;
     setNav(navAfterMode(next));
     if (next === 'overview') setDraft(region);

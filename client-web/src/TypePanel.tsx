@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { MAX_TEXT_LENGTH, type KeyName } from './protocol';
 
 interface Props {
@@ -26,7 +26,7 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
  * so a misheard phrase can't run as a command.
  *
  * Focus is walked along for the glasses, so each step is just another pinch:
- * text box when the panel opens → Send text once the composer hands text back
+ * text box (clicked, to open the composer) when the panel opens → Send text once the composer hands text back
  * (a "change" event) → Enter after sending → Pointer after Enter (SessionScreen).
  */
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
@@ -43,9 +43,13 @@ export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
   const focusPinnedRef = useRef(focusPinned);
   focusPinnedRef.current = focusPinned;
 
-  useEffect(() => {
+  // A layout effect, so it runs inside the pinch or swipe that opened Type (see setMode).
+  useLayoutEffect(() => {
     const box = boxRef.current!;
     focusPinnedRef.current(box);
+    // Click into the box so the composer opens straight away. The glasses only open it for your
+    // own activation; if this doesn't count, one pinch on the box still does it.
+    box.click();
     // When the composer closes the glasses may move focus elsewhere; only a swipe of yours
     // (or Tab) since the box got focus means you chose to go somewhere else.
     let movedByYou = false;
