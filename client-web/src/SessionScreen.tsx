@@ -16,7 +16,7 @@ import {
   ARROW_STEPS,
   enterIsSamePinch,
   menuFocusFor,
-  navAfterBack,
+  backTarget,
   nextAppSlot,
   swipeAction,
   type SwipeAction,
@@ -280,9 +280,10 @@ export function SessionScreen({ onEnded }: Props) {
     const now = performance.now();
     if (now - lastBackAt.current < SAME_BACK_MS) return;
     lastBackAt.current = now;
-    if (navAfterBack(live.current.nav, live.current.mode) === 'view') {
-      setNav('view');
-      setLastInput('back → view');
+    if (backTarget(live.current.nav) === 'pointer') {
+      // Home: from Type, Overview or the mode bar straight back to Pointer (unsent text is dropped).
+      setMode('pointer');
+      setLastInput('back → pointer');
     } else {
       focusControls('back');
     }

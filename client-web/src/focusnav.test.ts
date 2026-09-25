@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   enterIsSamePinch,
   menuFocusFor,
-  navAfterBack,
+  backTarget,
   navAfterMode,
   nextAppSlot,
   routeTap,
@@ -71,16 +71,13 @@ describe('menuFocusFor', () => {
   });
 });
 
-describe('navAfterBack', () => {
-  it('toggles between the view and the controls in View, Pointer and Scroll', () => {
-    expect(navAfterBack('view', 'pointer')).toBe('controls');
-    expect(navAfterBack('controls', 'pointer')).toBe('view');
-    expect(navAfterBack('controls', 'scroll')).toBe('view');
+describe('backTarget', () => {
+  it('goes from the view up to the controls', () => {
+    expect(backTarget('view')).toBe('controls');
   });
 
-  it('stays on the controls in Overview and Type', () => {
-    expect(navAfterBack('controls', 'type')).toBe('controls');
-    expect(navAfterBack('controls', 'overview')).toBe('controls');
+  it('goes from the controls (Type, Overview, the mode bar) home to Pointer', () => {
+    expect(backTarget('controls')).toBe('pointer');
   });
 });
 

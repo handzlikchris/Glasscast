@@ -82,12 +82,11 @@ export function menuFocusFor(mode: ViewMode): ViewMode {
 export const SAME_BACK_MS = 400;
 
 /**
- * Where Back takes you: from the view to the controls; from the controls back to the view in
- * the modes that have one (View, Pointer, Scroll). In Overview and Type it just refocuses the
- * controls.
+ * Where Back takes you: from the view up to the controls; from the controls (and so from Type
+ * and Overview, which live there) home to Pointer mode.
  */
-export function navAfterBack(nav: NavTarget, mode: ViewMode): NavTarget {
-  return nav === 'controls' && VIEW_NAV_MODES.includes(mode) ? 'view' : 'controls';
+export function backTarget(nav: NavTarget): 'controls' | 'pointer' {
+  return nav === 'view' ? 'controls' : 'pointer';
 }
 
 /** Wheel units one swipe scrolls by (three notches). */
