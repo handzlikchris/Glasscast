@@ -160,13 +160,15 @@ textarea:focus-visible {
   bottom: 34px;
 }
 
-/* Focus isn't on the bar (swipes are on the view): see the video through it, background and all. */
+/* Focus isn't on the bar (swipes are on the view): hide it so it doesn't cover the desktop,
+   and let taps through so a pinch can't press a button you can't see. Back brings it up. */
 .toolbar.top {
   transition: opacity 150ms;
 }
 
 .toolbar.dimmed {
-  opacity: 0.5;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .toolbar button {
