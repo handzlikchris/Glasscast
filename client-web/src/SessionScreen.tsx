@@ -634,12 +634,12 @@ export function SessionScreen({ onEnded }: Props) {
 
       {mode === 'type' && (
         <TypePanel
-          onSendText={(text) => {
-            send({ type: 'typeText', text });
-            // Usually straight back to Pointer: focus it so that's one pinch.
-            focusModeButton('pointer');
+          onSendText={(text) => send({ type: 'typeText', text })}
+          onKey={(key: KeyName) => {
+            send({ type: 'key', key });
+            // Enter usually finishes the job: focus Pointer so going back is one pinch.
+            if (key === 'Enter') focusModeButton('pointer');
           }}
-          onKey={(key: KeyName) => send({ type: 'key', key })}
         />
       )}
 

@@ -23,9 +23,9 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
  * Sending text never presses Enter: that's always a separate, deliberate tap,
  * so a misheard phrase can't run as a command.
  *
- * Focus is walked along for the glasses: the text box gets it when the panel opens,
- * and Send text gets it once the composer hands text back (a "change" event), so
- * each step is just another pinch.
+ * Focus is walked along for the glasses, so each step is just another pinch:
+ * text box when the panel opens → Send text once the composer hands text back
+ * (a "change" event) → Enter after sending → Pointer after Enter (SessionScreen).
  */
 export function TypePanel({ onSendText, onKey }: Props) {
   const [text, setText] = useState('');
@@ -34,6 +34,7 @@ export function TypePanel({ onSendText, onKey }: Props) {
   textRef.current = text;
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const sendRef = useRef<HTMLButtonElement>(null);
+  const enterRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const box = boxRef.current!;
@@ -55,6 +56,7 @@ export function TypePanel({ onSendText, onKey }: Props) {
     if (!trimmed) return;
     onSendText(trimmed);
     setText('');
+    enterRef.current?.focus({ preventScroll: true });
   };
 
   return (
@@ -81,7 +83,7 @@ export function TypePanel({ onSendText, onKey }: Props) {
       </div>
       <div className="row keys">
         {SHORTCUTS.map((s) => (
-          <button key={s.key} type="button" onClick={() => onKey(s.key)}>
+          <button key={s.key} ref={s.key === 'Enter' ? enterRef : undefined} type="button" onClick={() => onKey(s.key)}>
             {s.label}
           </button>
         ))}
