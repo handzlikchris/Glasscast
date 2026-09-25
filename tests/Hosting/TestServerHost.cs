@@ -51,6 +51,7 @@ public sealed class TestServerHost : IAsyncDisposable
             builder.Services.AddSingleton<IScreen>(new FakeScreen());
             builder.Services.AddSingleton<ICaptureSource>(Capture);
             builder.Services.AddSingleton<IInputInjector>(Input);
+            builder.Services.AddSingleton<IWindowSwitcher>(Windows);
             builder.Services.AddSingleton<IKeepAwake>(KeepAwake);
             builder.Services.AddSingleton<IMediaPeerFactory>(Peers);
             builder.Services.AddSingleton<IFrameEncoderFactory>(new FakeEncoderFactory());
@@ -62,6 +63,11 @@ public sealed class TestServerHost : IAsyncDisposable
     public ConcurrentQueue<string> Logs { get; } = new();
 
     public FakeInput Input { get; } = new();
+
+    public FakeWindowSwitcher Windows { get; } = new();
+
+    /// <summary>The hello message of the last session started with <see cref="StartSessionAsync"/>.</summary>
+    public JsonElement LastHello { get; private set; }
 
     public FakeCapture Capture { get; } = new();
 
@@ -113,7 +119,8 @@ public sealed class TestServerHost : IAsyncDisposable
         var session = await ConnectAsync("/ws/session");
         await session.SendAsync(new { type = "authenticate", token });
         Assert.Equal("authenticated", (await session.ReceiveAsync()).GetProperty("type").GetString());
-        Assert.Equal("hello", (await session.ReceiveAsync()).GetProperty("type").GetString());
+        LastHello = await session.ReceiveAsync();
+        Assert.Equal("hello", LastHello.GetProperty("type").GetString());
         Assert.Equal("rtcOffer", (await session.ReceiveAsync()).GetProperty("type").GetString());
         return session;
     }

@@ -92,6 +92,22 @@ public sealed class ControlProtocolTests
         Rejected("{\"type\":\"typeText\",\"text\":\"\\n\\n  \"}");
     }
 
+    [Fact]
+    public void Switch_app_takes_a_slot_number_only()
+    {
+        Assert.True(ControlProtocol.TryParse("{\"type\":\"switchApp\",\"slot\":2}", out var message, out _));
+        Assert.Equal(new SwitchAppMessage(2), message);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"switchApp\",\"slot\":0}")]
+    [InlineData("{\"type\":\"switchApp\",\"slot\":10}")]
+    [InlineData("{\"type\":\"switchApp\",\"slot\":\"1\"}")]
+    [InlineData("{\"type\":\"switchApp\",\"slot\":1.5}")]
+    [InlineData("{\"type\":\"switchApp\",\"name\":\"chrome\"}")]
+    [InlineData("{\"type\":\"switchApp\",\"slot\":1,\"process\":\"cmd\"}")]
+    public void Switch_app_rejects_anything_but_a_small_slot(string json) => Rejected(json);
+
     [Theory]
     [InlineData("Enter", KeyCommand.Enter)]
     [InlineData("Ctrl+V", KeyCommand.CtrlV)]

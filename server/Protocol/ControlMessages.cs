@@ -64,3 +64,6 @@ public sealed record TypeTextMessage(string Text) : ControlMessage;
 public sealed record KeyMessage(KeyCommand Key) : ControlMessage;
 
 public sealed record PingMessage(double T) : ControlMessage;
+
+/// <summary>Switch to app shortcut <paramref name="Slot"/> (1-based) from the PC's configured list.</summary>
+public sealed record SwitchAppMessage(int Slot) : ControlMessage;

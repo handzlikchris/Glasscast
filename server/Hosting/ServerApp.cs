@@ -36,6 +36,7 @@ public static class ServerApp
         });
         services.Configure<ControlSessionOptions>(config.GetSection(ControlSessionOptions.SectionName));
         services.Configure<MediaOptions>(config.GetSection(MediaOptions.SectionName));
+        services.Configure<AppShortcutOptions>(config.GetSection(AppShortcutOptions.SectionName));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<AlertLog>();
@@ -48,6 +49,7 @@ public static class ServerApp
         services.AddSingleton<IScreen, WindowsScreen>();
         services.AddSingleton<ICaptureSource, GdiCaptureSource>();
         services.AddSingleton<IInputInjector, Win32InputInjector>();
+        services.AddSingleton<IWindowSwitcher, Win32WindowSwitcher>();
         services.AddSingleton<IKeepAwake, WindowsKeepAwake>();
         services.AddSingleton<IFrameEncoderFactory, FrameEncoderFactory>();
         services.AddSingleton<IMediaPeerFactory, MediaPeerFactory>();

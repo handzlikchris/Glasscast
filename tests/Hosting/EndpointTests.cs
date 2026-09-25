@@ -100,6 +100,41 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task App_shortcuts_come_from_the_pc_config_and_fit_the_window_to_the_cast_area()
+    {
+        await using var host = new TestServerHost(new()
+        {
+            ["Apps:Shortcuts:0:Name"] = "Claude",
+            ["Apps:Shortcuts:0:Title"] = "herdr",
+            ["Apps:Shortcuts:1:Name"] = "Broken",
+            ["Apps:Shortcuts:2:Name"] = "Browser",
+            ["Apps:Shortcuts:2:Process"] = "chrome",
+        });
+        var token = await host.PairAsync();
+        using var session = await host.StartSessionAsync(token);
+
+        // The shortcut without a process or title is skipped, so Browser is slot 2.
+        var names = host.LastHello.GetProperty("apps").EnumerateArray().Select(a => a.GetString()).ToArray();
+        Assert.Equal(["Claude", "Browser"], names);
+
+        await session.SendAsync(new { type = "setRegion", x = 100, y = 50, width = 600, height = 600 });
+        await session.ReceiveAsync();
+        await session.SendAsync(new { type = "switchApp", slot = 2 });
+        var reply = await session.ReceiveAsync();
+        Assert.Equal("appSwitch", reply.GetProperty("type").GetString());
+        Assert.Equal("switched", reply.GetProperty("result").GetString());
+        Assert.Equal(["Browser 100,50 600x600"], host.Windows.Calls);
+
+        host.Windows.Result = AppSwitchResult.NotRunning;
+        await session.SendAsync(new { type = "switchApp", slot = 1 });
+        Assert.Equal("notRunning", (await session.ReceiveAsync()).GetProperty("result").GetString());
+
+        await session.SendAsync(new { type = "switchApp", slot = 3 });
+        Assert.Equal("failed", (await session.ReceiveAsync()).GetProperty("result").GetString());
+        Assert.Equal(2, host.Windows.Calls.Count);
+    }
+
+    [Fact]
     public async Task The_cast_area_follows_the_session_region_and_clears_when_it_ends()
     {
         var token = await _host.PairAsync();

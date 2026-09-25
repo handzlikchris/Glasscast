@@ -47,3 +47,20 @@ public sealed class FakeKeepAwake : IKeepAwake
         public void Dispose() => owner.Active--;
     }
 }
+
+/// <summary>Records app switches instead of moving real windows.</summary>
+public sealed class FakeWindowSwitcher : IWindowSwitcher
+{
+    public List<string> Calls { get; } = new();
+
+    public AppSwitchResult Result { get; set; } = AppSwitchResult.Switched;
+
+    public AppSwitchResult Switch(AppShortcut app, CaptureRegion area)
+    {
+        lock (Calls)
+        {
+            Calls.Add($"{app.Name} {area.X},{area.Y} {area.Width}x{area.Height}");
+        }
+        return Result;
+    }
+}

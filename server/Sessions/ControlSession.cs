@@ -20,6 +20,8 @@ public sealed record SessionServices(
     IFrameEncoderFactory Encoders,
     FramePump Pump,
     CastArea CastArea,
+    IWindowSwitcher Windows,
+    IOptions<AppShortcutOptions> Apps,
     AlertLog Alerts,
     TimeProvider Time,
     ILogger<ControlSession> Logger);
@@ -53,6 +55,7 @@ public sealed class ControlSession
         using var awake = _s.KeepAwake.Acquire();
         var controller = new InputController(_s.Input, _s.RegionStore, _s.Screen.PrimarySize, _s.RegionStore.Load());
         _s.CastArea.Set(controller.Region);
+        var apps = _s.Apps.Value.Usable;
         using var encoder = _s.Encoders.Create();
         using var peer = _s.Peers.Create(encoder.Codec);
         peer.Closed += () => SafeCancel(cts);
@@ -67,13 +70,14 @@ public sealed class ControlSession
                 monitor = new { width = controller.Monitor.Width, height = controller.Monitor.Height },
                 region = controller.Region,
                 mode = ControlProtocol.ModeName(controller.Mode),
+                apps = apps.Select(a => a.Name.Trim()).ToArray(),
                 codec = encoder.Codec,
             }, ct);
 
             await _io.SendAsync(new { type = "rtcOffer", sdp = await peer.CreateOfferAsync() }, ct);
 
             _lastInputTimestamp = _s.Time.GetTimestamp();
-            var receiving = ReceiveLoopAsync(controller, peer, ct);
+            var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
             var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, null, ct);
             var watching = IdleWatchAsync(ct);
 
@@ -108,7 +112,8 @@ public sealed class ControlSession
     }
 
     /// <summary>Returns null when the client goes away, or a reason when it breaks the rules.</summary>
-    private async Task<string?> ReceiveLoopAsync(InputController controller, IMediaPeer peer, CancellationToken ct)
+    private async Task<string?> ReceiveLoopAsync(InputController controller, IMediaPeer peer,
+        IReadOnlyList<AppShortcut> apps, CancellationToken ct)
     {
         var rate = Math.Max(1, _options.MaxMessagesPerSecond);
         var bucket = new TokenBucket(_s.Time, rate, rate * 2);
@@ -160,6 +165,15 @@ public sealed class ControlSession
                     peer.AddRemoteCandidate(candidate.Candidate, candidate.SdpMid, candidate.SdpMLineIndex);
                     break;
 
+                case SwitchAppMessage switchApp:
+                    Interlocked.Exchange(ref _lastInputTimestamp, _s.Time.GetTimestamp());
+                    var result = switchApp.Slot <= apps.Count
+                        ? _s.Windows.Switch(apps[switchApp.Slot - 1], controller.Region)
+                        : AppSwitchResult.Failed;
+                    _s.Logger.LogInformation("Session {Session} switched to app {Slot}: {Result}", _lease.Id, switchApp.Slot, result);
+                    await _io.SendAsync(new { type = "appSwitch", slot = switchApp.Slot, result = ResultName(result) }, ct);
+                    break;
+
                 case PingMessage ping:
                     await _io.SendAsync(new { type = "pong", t = ping.T, serverTime = _s.Time.GetUtcNow().ToUnixTimeMilliseconds() }, ct);
                     break;
@@ -177,6 +191,13 @@ public sealed class ControlSession
 
         return null;
     }
+
+    private static string ResultName(AppSwitchResult result) => result switch
+    {
+        AppSwitchResult.Switched => "switched",
+        AppSwitchResult.NotRunning => "notRunning",
+        _ => "failed",
+    };
 
     private async Task IdleWatchAsync(CancellationToken ct)
     {

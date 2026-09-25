@@ -19,6 +19,7 @@ public static class ControlProtocol
     public const int MaxTokenLength = 128;
     public const int MaxScrollPerMessage = 1200;
     public const int MaxRegionCoordinate = 32_768;
+    public const int MaxAppSlot = 9;
 
     private const char LineSeparator = (char)0x2028;
     private const char ParagraphSeparator = (char)0x2029;
@@ -86,6 +87,7 @@ public static class ControlProtocol
                 "typeText" => ParseTypeText(root),
                 "key" => ParseKey(root),
                 "ping" => ParsePing(root),
+                "switchApp" => ParseSwitchApp(root),
                 _ => null,
             };
         }
@@ -195,6 +197,11 @@ public static class ControlProtocol
     private static ControlMessage? ParseKey(JsonElement e) =>
         Only(e, "key") && Str(e, "key", 32, out var key) && Keys.TryGetValue(key, out var command)
             ? new KeyMessage(command)
+            : null;
+
+    private static ControlMessage? ParseSwitchApp(JsonElement e) =>
+        Only(e, "slot") && Int(e, "slot", out var slot) && slot is >= 1 and <= MaxAppSlot
+            ? new SwitchAppMessage(slot)
             : null;
 
     private static ControlMessage? ParsePing(JsonElement e) =>
