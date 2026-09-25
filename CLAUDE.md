@@ -194,6 +194,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 - Pending: M0 hotspot latency numbers, external port scan, M5 on the glasses (WebRTC support,
   decode cost, pinch-drag gain/threshold, composer behaviour, display looks).
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
+- **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
+  the task". Current: `companion-sensor-bridge.md` (phone companion app relaying the glasses'
+  camera and mic via Meta's Device Access Toolkit, since web apps get no camera or mic).
 - Ideas queued: "video not connecting" hint after ~15 s; phone-friendly layout for testing;
   hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN over TLS for UDP-blocking
   networks; remote approval flow; Claude-specific controls.
