@@ -95,9 +95,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    checks come in through the port forward and SIPSorcery learns it as peer-reflexive.
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
-   (browser deltaY sign), `typeText`, `key` (allowlist), `ping`, `rtcAnswer`, `iceCandidate`.
-   Server → client: `pairCode`, `paired`, `pairFailed`, `authFailed`, `authenticated`, `hello`,
-   `rtcOffer`, `region`, `pong`.
+   (browser deltaY sign), `typeText`, `key` (allowlist), `switchApp` (slot 1-9), `ping`,
+   `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`, `pairFailed`,
+   `authFailed`, `authenticated`, `hello` (incl. app names), `rtcOffer`, `region`, `appSwitch`, `pong`.
 5. Modes give pinch-drag one meaning: Overview (move region box), View, Pointer (cursor; short
    pinch = click; pushing past an edge pans the region), Scroll, Type. `InputController` ignores
    input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
@@ -125,6 +125,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
   coordinates clamped, rate-limited; invalid input closes the session and raises an alert.
 - Typed text never presses Enter (newlines are flattened); Enter is a separate key message.
+- App shortcuts are configured only on the PC (`Apps:Shortcuts` in appsettings.Local.json). The
+  glasses send a slot number, never a process name or path, and the server only activates and
+  resizes windows that are already open (`Win32WindowSwitcher`). Never launch processes.
 - Strict CSP (`script-src 'self'`, no inline/eval). Keep the client free of inline scripts/styles
   in `index.html`; React `style` props are fine.
 - Approve popup: Reject is the focused/Cancel button, no AcceptButton.
