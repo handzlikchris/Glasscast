@@ -39,6 +39,8 @@ const PAN_SEND_MS = 100;
 const PAN_GLOW_MS = 250;
 const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
+/** How long focus put on the controls is held there against resets we didn't cause (ms). */
+const FOCUS_PIN_MS = 600;
 
 // Pointer and Type side by side: most use goes Pointer → Type → Pointer.
 const MODES: { mode: ViewMode; label: string }[] = [
@@ -93,6 +95,12 @@ export function SessionScreen({ onEnded }: Props) {
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
   const backRef = useRef<() => void>(() => {});
+  /**
+   * Focus we just put on the controls. The glasses reset focus to the first button right after
+   * a Back; for a moment, focus taken elsewhere without a swipe or pinch is put back.
+   */
+  const pin = useRef<{ el: HTMLElement; until: number } | null>(null);
+  const restorePinRef = useRef<() => void>(() => {});
   const lastBackAt = useRef(-Infinity);
   /** Focus was last moved by swipes (arrow keys) or Tab, not by clicking a control. */
   const keyFocus = useRef(false);
@@ -213,6 +221,7 @@ export function SessionScreen({ onEnded }: Props) {
     setNavState(next);
     if (next === 'view') {
       keyFocus.current = false;
+      pin.current = null;
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }
   };
@@ -221,6 +230,7 @@ export function SessionScreen({ onEnded }: Props) {
   const pressFocused = () => {
     const el = focused.current;
     if (!el || !el.isConnected) return;
+    pin.current = null;
     el.click();
     // Keep the focus ring if the press lost it, unless it sent swipes back to the view or
     // moved focus on purpose (Type → text box, Send text → Pointer).
@@ -242,7 +252,21 @@ export function SessionScreen({ onEnded }: Props) {
     keyFocus.current = true;
     focusModeButton(menuFocusFor(live.current.mode));
     setLastInput(`${how} → controls`);
+    if (focused.current) {
+      pin.current = { el: focused.current, until: performance.now() + FOCUS_PIN_MS };
+      for (const delay of [50, 150, 300, 500]) window.setTimeout(() => restorePinRef.current(), delay);
+    }
   };
+
+  const restorePin = () => {
+    const p = pin.current;
+    if (!p || performance.now() > p.until || !p.el.isConnected) return;
+    if (document.activeElement !== p.el) {
+      focused.current = p.el;
+      p.el.focus({ preventScroll: true });
+    }
+  };
+  restorePinRef.current = restorePin;
 
   /** Back: to the controls, or from them back to the view. One gesture may arrive twice. */
   const onBack = () => {
@@ -263,12 +287,15 @@ export function SessionScreen({ onEnded }: Props) {
     const onFocusIn = (e: FocusEvent) => {
       const t = e.target;
       if (!(t instanceof HTMLButtonElement || t instanceof HTMLTextAreaElement)) return;
+      if (pin.current && t !== pin.current.el) window.setTimeout(() => restorePinRef.current(), 0);
       focused.current = t;
       // Focus moved by keyboard (Tab on a laptop) means you're on the controls; a mouse click doesn't.
       if (t.matches(':focus-visible')) setNav('controls');
     };
     const onKeyDown = (e: KeyboardEvent) => {
       setLastInput(`key ${e.key}`);
+      // Swiping or tabbing yourself ends the pin on focus.
+      if (e.key in ARROW_STEPS || e.key === 'Tab') pin.current = null;
       if ((e.key === 'Escape' || e.key === 'Backspace') && !(e.target instanceof HTMLTextAreaElement)) {
         // The glasses' Back, as a key.
         e.preventDefault();
@@ -316,6 +343,7 @@ export function SessionScreen({ onEnded }: Props) {
     let swallowClick = false;
     const onPointerDownCapture = (e: globalThis.PointerEvent) => {
       swallowClick = false;
+      pin.current = null;
       const active = document.activeElement;
       const target = e.target;
       if (!(target instanceof Element) || target.classList.contains('gesture-layer')) return; // taps handled there
