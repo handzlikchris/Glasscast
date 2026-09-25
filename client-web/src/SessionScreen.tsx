@@ -14,6 +14,8 @@ import {
 } from './geometry';
 import {
   ARROW_STEPS,
+  BACK_CHORD_MS,
+  backChordMode,
   enterIsSamePinch,
   menuFocusFor,
   navAfterBack,
@@ -95,12 +97,16 @@ export function SessionScreen({ onEnded }: Props) {
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
   const backRef = useRef<() => void>(() => {});
+  const resolveBackRef = useRef<() => void>(() => {});
   /**
    * Focus we just put on the controls. The glasses reset focus to the first button right after
    * a Back; for a moment, focus taken elsewhere without a swipe or pinch is put back.
    */
   const pin = useRef<{ el: HTMLElement; until: number } | null>(null);
   const restorePinRef = useRef<() => void>(() => {});
+  /** A Back waiting BACK_CHORD_MS for a swipe that would make it Back + up/down. */
+  const pendingBack = useRef<number | null>(null);
+  const setModeRef = useRef<(next: ViewMode) => void>(() => {});
   const lastBackAt = useRef(-Infinity);
   /** Focus was last moved by swipes (arrow keys) or Tab, not by clicking a control. */
   const keyFocus = useRef(false);
@@ -269,10 +275,10 @@ export function SessionScreen({ onEnded }: Props) {
   restorePinRef.current = restorePin;
 
   /** Back: to the controls, or from them back to the view. One gesture may arrive twice. */
-  const onBack = () => {
-    const now = performance.now();
-    if (now - lastBackAt.current < SAME_BACK_MS) return;
-    lastBackAt.current = now;
+  /** Back with no swipe after it: to the controls, or from them back to the view. */
+  const resolveBack = () => {
+    if (pendingBack.current !== null) clearTimeout(pendingBack.current);
+    pendingBack.current = null;
     if (navAfterBack(live.current.nav, live.current.mode) === 'view') {
       setNav('view');
       setLastInput('back → view');
@@ -280,7 +286,17 @@ export function SessionScreen({ onEnded }: Props) {
       focusControls('back');
     }
   };
+
+  /** Back: wait briefly for a swipe (Back + up/down); one gesture may also arrive twice. */
+  const onBack = () => {
+    const now = performance.now();
+    if (now - lastBackAt.current < SAME_BACK_MS || pendingBack.current !== null) return;
+    lastBackAt.current = now;
+    setLastInput('back…');
+    pendingBack.current = window.setTimeout(() => resolveBackRef.current(), BACK_CHORD_MS);
+  };
   backRef.current = onBack;
+  resolveBackRef.current = resolveBack;
 
   useEffect(() => {
     const stage = stageRef.current!;
@@ -296,6 +312,21 @@ export function SessionScreen({ onEnded }: Props) {
       setLastInput(`key ${e.key}`);
       // Swiping or tabbing yourself ends the pin on focus.
       if (e.key in ARROW_STEPS || e.key === 'Tab') pin.current = null;
+      if (pendingBack.current !== null && e.key in ARROW_STEPS) {
+        const chord = backChordMode(e.key);
+        if (chord) {
+          // Back + swipe up/down: straight to Scroll or Type.
+          clearTimeout(pendingBack.current);
+          pendingBack.current = null;
+          e.preventDefault();
+          e.stopPropagation();
+          setModeRef.current(chord);
+          setLastInput(`back + ${e.key === 'ArrowUp' ? 'up' : 'down'} → ${chord}`);
+          return;
+        }
+        // Back + left/right: a plain Back, then the swipe as usual.
+        resolveBackRef.current();
+      }
       if ((e.key === 'Escape' || e.key === 'Backspace') && !(e.target instanceof HTMLTextAreaElement)) {
         // The glasses' Back, as a key.
         e.preventDefault();
@@ -393,6 +424,7 @@ export function SessionScreen({ onEnded }: Props) {
       document.removeEventListener('keydown', onKeyDown, true);
       if (holdTimer.current !== null) clearTimeout(holdTimer.current);
       if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
+      if (pendingBack.current !== null) clearTimeout(pendingBack.current);
     };
   }, []);
 
@@ -431,6 +463,7 @@ export function SessionScreen({ onEnded }: Props) {
     if (next === 'overview') setDraft(region);
     if (next === 'pointer' && !cursor && content) setCursor(centreOf(content));
   };
+  setModeRef.current = setMode;
 
   const sendRegion = (r: Region) => {
     unconfirmedRegions.current++;

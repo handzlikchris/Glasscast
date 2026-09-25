@@ -89,3 +89,13 @@ export const SAME_BACK_MS = 400;
 export function navAfterBack(nav: NavTarget, mode: ViewMode): NavTarget {
   return nav === 'controls' && VIEW_NAV_MODES.includes(mode) ? 'view' : 'controls';
 }
+
+/** How long after Back a swipe still counts as part of it (Back + swipe up/down), in ms. */
+export const BACK_CHORD_MS = 500;
+
+/** Back followed by a swipe: up goes straight to Scroll, down to Type. Left/right aren't chords. */
+export function backChordMode(key: string): ViewMode | null {
+  if (key === 'ArrowUp') return 'scroll';
+  if (key === 'ArrowDown') return 'type';
+  return null;
+}
