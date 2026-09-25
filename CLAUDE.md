@@ -56,10 +56,12 @@ client-web/             glasses client (600×600)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
+  src/mediaStats.ts     Stats panel: capture-to-display latency (RTP timestamp matching, clock offset
+                        from ping/pong), receiver counters, PC pump figures (pure, tested)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 27 checks)
+                        browser/drive.mjs (headless Chrome, 28 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -116,7 +118,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`
    (slot 1-9), `ping`, `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`,
    `pairFailed`, `authFailed`, `authenticated`, `hello`, `rtcOffer`, `region`, `appSwitch`
-   (switched/notRunning/failed), `pong`.
+   (switched/notRunning/failed), `pong`, `mediaStats` (about once a second: pump timings and
+   `[rtp, capturedAtUnixMs, bytes]` for every frame sent).
 5. Modes (server-gated in `InputController`): Overview (button labelled **"Region"**; moves the
    region box), **Pointer** (cursor, click, scroll; pushing past an edge pans the region), Type.
    View and Scroll are still in the protocol but have no buttons any more. The region is persisted by
@@ -129,7 +132,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look**. Model in
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look · Stats**. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 
@@ -149,6 +152,10 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
+- **Stats** shows a latency panel. `e2e` = PC capture start → frame shown (avg 2 s, max 10 s,
+  with the slowest frame's size), split into `PC→here` and `buffer+show`; `clock ±n` is the
+  clock-offset error. The status bar's `ms` is only the control socket's ping. It excludes the
+  wait for the next capture tick (0–50 ms at 20 fps) and the glasses' display scan-out.
 
 ## Security invariants — do not break
 
