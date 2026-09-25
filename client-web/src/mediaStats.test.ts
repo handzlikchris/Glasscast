@@ -111,8 +111,8 @@ describe('statsLines', () => {
       },
       { jitterBufferMs: 45, decodeMs: 8, kbps: 2400, lost: 0, lostTotal: 3, nacks: 1, plis: 2, freezes: 0, dropped: 1, keyframes: 9 },
       [
-        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, kbps: 2500, keyframes: 1, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
-        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, kbps: 2400, keyframes: 0, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
+        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, kbps: 2500, keyframes: 1, keyframeRequests: 2, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
+        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, kbps: 2400, keyframes: 0, keyframeRequests: 1, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
       ],
     );
     expect(lines).toEqual([
@@ -121,7 +121,7 @@ describe('statsLines', () => {
       'jitter buf 45 ms · decode 8 ms · 2.4 Mbps in',
       'lost 0 (3) · nack 1 · pli 2 · freezes 0 · dropped 1',
       'PC capture 11 (max 30) · encode 7 (max 25) ms',
-      'PC frame 55 KB (max 100) · 20 fps · 2400 kbps · keyframes 1',
+      'PC frame 55 KB (max 100) · 20 fps · 2400 kbps · keyframes 1 (asked 3)',
     ]);
   });
 

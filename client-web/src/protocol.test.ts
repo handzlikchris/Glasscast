@@ -52,6 +52,7 @@ describe('parseServerMessage', () => {
       type: 'mediaStats',
       fps: 20,
       encodeMaxMs: 12.5,
+      keyframeRequests: 0,
       frames: [{ rtp: 4500, capturedAt: 1790000000000, bytes: 1234 }],
     });
     expect(parseServerMessage(stats('[[4500,1790000000000]]'))).toBeNull();

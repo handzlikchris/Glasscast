@@ -225,11 +225,12 @@ export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | n
     const frameKb = recentFrames.length > 0 ? recentFrames.reduce((sum, f) => sum + f.bytes, 0) / recentFrames.length / 1024 : null;
     const maxKb = Math.max(0, ...pc.flatMap((s) => s.frames.map((f) => f.bytes))) / 1024;
     const keyframes = pc.reduce((sum, s) => sum + s.keyframes, 0);
+    const asked = pc.reduce((sum, s) => sum + s.keyframeRequests, 0);
     lines.push(
       `PC capture ${ms(avg((s) => s.captureMs))} (max ${ms(max((s) => s.captureMaxMs))}) · encode ${ms(avg((s) => s.encodeMs))} (max ${ms(max((s) => s.encodeMaxMs))}) ms`,
     );
     lines.push(
-      `PC frame ${ms(frameKb)} KB (max ${ms(maxKb)}) · ${ms(pc[pc.length - 1].fps)} fps · ${ms(pc[pc.length - 1].kbps)} kbps · keyframes ${keyframes}`,
+      `PC frame ${ms(frameKb)} KB (max ${ms(maxKb)}) · ${ms(pc[pc.length - 1].fps)} fps · ${ms(pc[pc.length - 1].kbps)} kbps · keyframes ${keyframes} (asked ${asked})`,
     );
   }
   return lines;

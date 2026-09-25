@@ -52,6 +52,8 @@ export interface PcMediaStats {
   encodeMaxMs: number;
   kbps: number;
   keyframes: number;
+  /** Keyframe requests (PLI/FIR) the PC received from the glasses. */
+  keyframeRequests: number;
   frames: SentFrame[];
 }
 
@@ -182,6 +184,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         encodeMaxMs: n('encodeMaxMs'),
         kbps: n('kbps'),
         keyframes: n('keyframes'),
+        // Older servers don't send it.
+        keyframeRequests: isNumber(data.keyframeRequests) ? data.keyframeRequests : 0,
         frames,
       };
     }
