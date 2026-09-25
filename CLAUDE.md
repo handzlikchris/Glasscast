@@ -40,7 +40,8 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Desktop/              interfaces (IScreen, ICaptureSource, IInputInjector, IKeepAwake), RegionMath, RegionStore
   Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, MfH264Encoder, Nv12, Vp8 encoder
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, NativeMethods
-  Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, TerminateHotkey
+  Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (cast area
+                        drawn on the PC monitor, fed by Desktop/CastArea), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
 client-web/             glasses client (600×600)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
@@ -99,7 +100,14 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    `rtcOffer`, `region`, `pong`.
 5. Modes give pinch-drag one meaning: Overview (move region box), View, Pointer (cursor; short
    pinch = click; pushing past an edge pans the region), Scroll, Type. `InputController` ignores
-   input outside its mode.
+   input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
+   region is persisted by `RegionStore` across sessions.
+7. Glasses navigation (`client-web/src/focusnav.ts`, `gestures.ts`): in View/Pointer/Scroll,
+   swipes (arrow keys) move the view by half a screen; **pinch, then pinch-and-hold 0.5 s**
+   (movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
+   the controls a pinch presses the focused control wherever it lands. Pointer-mode clicks wait
+   350 ms for a possible second pinch (double-click). Type walks focus: text box → Send text
+   (on the composer's `change`) → Enter → Pointer.
 6. Geometry is mirrored: `RegionMath.cs` ⇄ `geometry.ts` (letterbox fit, clamp to monitor, min 160 px).
    Frames are always 600×600 with the source letterboxed.
 
@@ -167,8 +175,19 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
   to phone apps through Meta's Wearables Device Access Toolkit.
 - Budget guidance: under 300 KB first load and fewer than 15 requests. We're at ~237 KB JS
   (~74 KB gzipped) + 3 KB CSS in 3 requests.
-- WebRTC on the device is **not verified yet**: that's M5. JPEG over WebSocket is the known
-  fallback if it fails.
+- **Verified on the device (2026-09-25):** WebRTC H.264 video plays in the glasses WebView, over
+  home Wi-Fi and via the phone's mobile data. User agent contains `Greatwhite` (Android 14 WebView).
+- **Input as the page sees it:** thumb swipes → `ArrowUp/Down/Left/Right`; an index pinch → a
+  pointer tap **at the glasses' pointer position, not on the focused element** (so the app
+  redirects it to the focused control); pinch-drag → pointer events. Middle-finger pinch opens
+  the system web app menu (Restart/Resume/kill) and double middle pinch toggles the display:
+  both reserved. Back (Escape) is not reachable in practice.
+- The voice/handwriting **composer** is a system feature: the page only gets text via
+  `input`/`change` on a focused `<textarea>`; it opens on user activation, not `.focus()`.
+- **Caching:** Restart in the web app menu reloads from HTTP cache. The server sends
+  `Cache-Control: no-cache` for the page and `immutable` for hashed `/assets` (`ClientCaching`).
+  A page cached before that header existed only clears by removing and re-adding the web app.
+  The pairing screen shows `Build <commit> · <time>` to confirm what's loaded.
 - Docs: https://wearables.developer.meta.com/docs/develop/webapps and
   https://github.com/facebook/meta-wearables-webapp
 
@@ -188,11 +207,12 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Status and next steps (as of 2026-09-25)
 
-- Remote access works end to end over HTTPS (valid Let's Encrypt cert). Video from outside was
-  stuck at "connecting"; fixed by `Media:BindAddress` (commit `9de59b8`). **Awaiting the user's
-  phone re-test**, with the server restarted and Caddy running.
-- Pending: M0 hotspot latency numbers, external port scan, M5 on the glasses (WebRTC support,
-  decode cost, pinch-drag gain/threshold, composer behaviour, display looks).
+- Remote access works end to end over HTTPS, from the glasses and the phone (M5 largely done):
+  video, pairing, Pointer, Type with the composer. Controls were reworked on the device for
+  latency (swipes pan, pinch-hold menu, focus chains); `lifted` is the default look.
+- The PC draws the cast area as an orange frame (tray toggle), excluded from capture.
+- Pending: M0 latency numbers, external port scan, decode cost on the glasses, pinch-drag
+  gain/threshold tuning. The yellow "last input" readout in the status bar is a debugging aid.
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
   the task". Current: `companion-sensor-bridge.md` (phone companion app relaying the glasses'
