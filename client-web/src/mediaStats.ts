@@ -2,7 +2,7 @@
 // RTP timestamp and capture time (mediaStats); the video element reports the RTP timestamp of
 // each frame it shows. Matching the two, with the PC's clock offset from ping/pong, gives
 // capture-to-display latency per frame. Pure logic: times are epoch milliseconds.
-import type { PcMediaStats, SentFrame } from './protocol';
+import type { PcMediaStats, SentFrame, StatsReport } from './protocol';
 
 /** Ping/pong samples kept for the clock offset (one every 2 s: the last 20 s). */
 const CLOCK_SAMPLES = 10;
@@ -69,6 +69,8 @@ export class FrameLatency {
   private readonly sent = new Map<number, { frame: SentFrame; at: number }>();
   private readonly shown = new Map<number, ShownFrame>();
   private matched: Matched[] = [];
+  /** Frames the video element reported with an RTP timestamp (0 means the browser can't). */
+  shownCount = 0;
 
   constructor(private readonly clock: ClockSync) {}
 
@@ -86,6 +88,7 @@ export class FrameLatency {
   }
 
   addShown(frame: ShownFrame): void {
+    this.shownCount++;
     const sent = this.sent.get(frame.rtp);
     if (sent) {
       this.sent.delete(frame.rtp);
@@ -230,4 +233,31 @@ export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | n
     );
   }
   return lines;
+}
+
+/** What the glasses send to the PC's stats log each second: the panel's figures as numbers. */
+export function statsReport(latency: LatencySummary | null, rx: ReceiverStats | null, fps: number | null, framesShown: number): StatsReport {
+  const r = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.round(v * 10) / 10);
+  return {
+    e2eMs: r(latency?.total.avg),
+    e2eMaxMs: r(latency?.total.max),
+    arrivalMs: r(latency?.arrival?.avg),
+    arrivalMaxMs: r(latency?.arrival?.max),
+    playoutMs: r(latency?.playout?.avg),
+    playoutMaxMs: r(latency?.playout?.max),
+    slowestKb: r(latency?.slowestKb),
+    clockErrorMs: r(latency?.clockErrorMs),
+    framesShown,
+    fps: r(fps),
+    jitterBufferMs: r(rx?.jitterBufferMs),
+    decodeMs: r(rx?.decodeMs),
+    kbps: r(rx?.kbps),
+    lost: rx?.lost ?? null,
+    lostTotal: rx?.lostTotal ?? null,
+    nacks: rx?.nacks ?? null,
+    plis: rx?.plis ?? null,
+    freezes: rx?.freezes ?? null,
+    dropped: rx?.dropped ?? null,
+    keyframes: rx?.keyframes ?? null,
+  };
 }

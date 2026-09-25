@@ -83,7 +83,32 @@ export type ClientMessage =
   | { type: 'typeText'; text: string }
   | { type: 'key'; key: KeyName }
   | { type: 'ping'; t: number }
-  | { type: 'switchApp'; slot: number };
+  | { type: 'switchApp'; slot: number }
+  | ({ type: 'stats' } & StatsReport);
+
+/** The glasses' own figures for the PC's stats log (ControlProtocol.ClientStatsFields). null = not measured. */
+export interface StatsReport {
+  e2eMs: number | null;
+  e2eMaxMs: number | null;
+  arrivalMs: number | null;
+  arrivalMaxMs: number | null;
+  playoutMs: number | null;
+  playoutMaxMs: number | null;
+  slowestKb: number | null;
+  clockErrorMs: number | null;
+  framesShown: number;
+  fps: number | null;
+  jitterBufferMs: number | null;
+  decodeMs: number | null;
+  kbps: number | null;
+  lost: number | null;
+  lostTotal: number | null;
+  nacks: number | null;
+  plis: number | null;
+  freezes: number | null;
+  dropped: number | null;
+  keyframes: number | null;
+}
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

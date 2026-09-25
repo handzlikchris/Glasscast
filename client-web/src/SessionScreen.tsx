@@ -29,7 +29,7 @@ import {
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
-import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines } from './mediaStats';
+import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines, statsReport } from './mediaStats';
 import { drawOverlay, type Look } from './overlay';
 import type { ClientMessage, KeyName, PcMediaStats, Region, ServerMessage, Size, ViewMode } from './protocol';
 import { VideoReceiver, watchFrames } from './rtc';
@@ -233,7 +233,11 @@ export function SessionScreen({ onEnded }: Props) {
       const s = await receiver!.stats();
       setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec }));
       const now = performance.timeOrigin + performance.now();
-      setStatsText(statsLines(latency.current.summary(now), s.receiver, pcStats.current));
+      const summary = latency.current.summary(now);
+      setStatsText(statsLines(summary, s.receiver, pcStats.current));
+      // Also to the PC's stats log, so a session can be read back there afterwards. Only once the
+      // PC has sent mediaStats: an older server would reject the message and end the session.
+      if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount) });
     }, 1000);
     const scrollFlush = setInterval(() => {
       const dy = scroll.current.take();

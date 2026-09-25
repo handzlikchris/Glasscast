@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockSync, FrameLatency, receiverStats, statsLines, type InboundSnapshot } from './mediaStats';
+import { ClockSync, FrameLatency, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
 
 describe('ClockSync', () => {
   it('uses the ping with the quickest round trip', () => {
@@ -127,5 +127,23 @@ describe('statsLines', () => {
 
   it('says when there are no frame timings yet', () => {
     expect(statsLines(null, null, [])).toEqual(['e2e – (no frame timings yet)']);
+  });
+});
+
+describe('statsReport', () => {
+  it('sends every field, null where nothing was measured', () => {
+    const report = statsReport(null, null, null, 0);
+    expect(Object.keys(report)).toHaveLength(20);
+    expect(report).toMatchObject({ e2eMs: null, framesShown: 0, plis: null });
+  });
+
+  it('rounds to one decimal', () => {
+    const report = statsReport(
+      { frames: 1, total: { avg: 12.345, max: 20 }, arrival: null, playout: null, slowestKb: 3.21, clockErrorMs: 4 },
+      null,
+      19.96,
+      42,
+    );
+    expect(report).toMatchObject({ e2eMs: 12.3, e2eMaxMs: 20, arrivalMs: null, slowestKb: 3.2, fps: 20, framesShown: 42 });
   });
 });
