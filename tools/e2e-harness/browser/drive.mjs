@@ -156,10 +156,12 @@ try {
     `x ${beforeSwipe.x} -> ${afterSwipe.x}, width ${beforeSwipe.width}`);
 
   // Pinch, then pinch and hold (a tap, then a press held still past the hold time).
+  // The hand wobbles during the hold (40 px here); that must not count as a drag.
   const pinchThenHold = async () => {
     await page.mouse.click(300, 300);
     await sleep(100);
     await page.mouse.down();
+    await page.mouse.move(340, 320, { steps: 5 });
     await sleep(700);
     await page.mouse.up();
     await sleep(200);
@@ -193,12 +195,14 @@ try {
     await sleep(100);
     await page.mouse.click(320, 300);
   });
+  const beforeHold = (await input()).length;
   const held = await clicksIn(pinchThenHold);
+  const heldMoves = (await input()).slice(beforeHold).filter((a) => a.startsWith('move ')).length;
   const heldToType = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
   check('in Pointer mode a pinch clicks once and two quick pinches double-click', single === 1 && double === 2,
     `single ${single}, double ${double}`);
-  check('in Pointer mode pinch-then-hold focuses Type without clicking', held === 0 && heldToType === 'type',
-    `clicks ${held}, focus ${heldToType}`);
+  check('in Pointer mode a wobbly pinch-then-hold focuses Type without clicking or moving',
+    held === 0 && heldMoves === 0 && heldToType === 'type', `clicks ${held}, moves ${heldMoves}, focus ${heldToType}`);
 
   // 13. The whole Type round trip by pinches alone (taps on the video): Type → text box →
   //     (composer) → Send text → Pointer focused → Pointer.
@@ -219,14 +223,16 @@ try {
   const afterComposer = await activeName();
   const typedBefore = (await input()).length;
   await pinch(); // presses Send text
-  const typed = (await input()).slice(typedBefore);
   const afterSend = await activeName();
+  await pinch(); // presses Enter
+  const afterEnter = await activeName();
+  const typed = (await input()).slice(typedBefore);
   await pinch(); // presses Pointer
   const roundTripStatus = await page.$eval('.status', (el) => el.textContent);
-  check('Type round trip by pinches: text box, Send text, then Pointer',
-    afterType === 'TEXTAREA' && afterComposer === 'Send text' && typed.includes('type from the composer') &&
-      afterSend === 'pointer' && roundTripStatus.trim().endsWith('pointer'),
-    `after Type ${afterType}, after composer ${afterComposer}, after Send ${afterSend}, sent ${typed.join('|')}`);
+  check('Type round trip by pinches: text box, Send text, Enter, then Pointer',
+    afterType === 'TEXTAREA' && afterComposer === 'Send text' && afterSend === 'Enter' && afterEnter === 'pointer' &&
+      typed.join('|') === 'type from the composer|key Enter' && roundTripStatus.trim().endsWith('pointer'),
+    `after Type ${afterType}, composer ${afterComposer}, Send ${afterSend}, Enter ${afterEnter}, sent ${typed.join('|')}`);
 
   // 14. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
   //     text box (where the glasses' pointer tends to be after typing). Pointer gets pressed.
