@@ -83,6 +83,8 @@ export function SessionScreen({ onEnded }: Props) {
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
+  /** Focus was last moved by swipes (arrow keys) or Tab, not by clicking a control. */
+  const keyFocus = useRef(false);
 
   const [monitor, setMonitor] = useState<Size | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -187,7 +189,10 @@ export function SessionScreen({ onEnded }: Props) {
   const setNav = (next: NavTarget) => {
     live.current.nav = next;
     setNavState(next);
-    if (next === 'view' && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (next === 'view') {
+      keyFocus.current = false;
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    }
   };
   setNavRef.current = setNav;
 
@@ -230,6 +235,7 @@ export function SessionScreen({ onEnded }: Props) {
         nudgeRef.current(step.dx, step.dy);
         return;
       }
+      if (step || e.key === 'Tab') keyFocus.current = true;
       // Enter in the text box is typing, never a pinch.
       if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
 
@@ -252,10 +258,61 @@ export function SessionScreen({ onEnded }: Props) {
         pressFocused();
       }
     };
+    // On the glasses a pinch lands wherever the pointer is, which after typing is often the
+    // text box or a panel, not the control the swipes focused. While on the controls, a pinch
+    // on anything but the focused control presses the focused control instead. Only when focus
+    // was last moved by swipes/keys, so mouse clicks on a laptop are left alone.
+    let redirectedPointer: number | null = null;
+    let swallowClick = false;
+    const onPointerDownCapture = (e: globalThis.PointerEvent) => {
+      swallowClick = false;
+      const active = document.activeElement;
+      const target = e.target;
+      if (!(target instanceof Element) || target.classList.contains('gesture-layer')) return; // taps handled there
+      const redirect =
+        keyFocus.current &&
+        live.current.nav === 'controls' &&
+        (active instanceof HTMLButtonElement || active instanceof HTMLTextAreaElement) &&
+        stage.contains(active) &&
+        !active.contains(target);
+      if (!redirect) {
+        // Clicking a control directly takes over from the keys.
+        if (target.closest('button, textarea')) keyFocus.current = false;
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      redirectedPointer = e.pointerId;
+      lastPointerAt.current = performance.now();
+      focused.current = active as HTMLElement;
+    };
+    const onPointerUpCapture = (e: globalThis.PointerEvent) => {
+      if (e.pointerId !== redirectedPointer) return;
+      redirectedPointer = null;
+      e.stopPropagation();
+      lastPointerAt.current = performance.now();
+      swallowClick = true;
+      setLastInput(`tap (${e.pointerType}) → focused`);
+      pressFocused();
+    };
+    const onClickCapture = (e: MouseEvent) => {
+      // The browser's own click for a redirected pinch; our press already happened.
+      if (!swallowClick || !e.isTrusted) return;
+      swallowClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
     stage.addEventListener('focusin', onFocusIn);
+    stage.addEventListener('pointerdown', onPointerDownCapture, true);
+    stage.addEventListener('pointerup', onPointerUpCapture, true);
+    stage.addEventListener('click', onClickCapture, true);
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       stage.removeEventListener('focusin', onFocusIn);
+      stage.removeEventListener('pointerdown', onPointerDownCapture, true);
+      stage.removeEventListener('pointerup', onPointerUpCapture, true);
+      stage.removeEventListener('click', onClickCapture, true);
       document.removeEventListener('keydown', onKeyDown, true);
       if (holdTimer.current !== null) clearTimeout(holdTimer.current);
       if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
