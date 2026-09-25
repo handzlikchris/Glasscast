@@ -30,16 +30,23 @@ export interface Region {
 
 export const MAX_TEXT_LENGTH = 500;
 
+/** App shortcuts are configured on the PC; the glasses only see their names and send a slot. */
+export const MAX_APPS = 9;
+export const MAX_APP_NAME_LENGTH = 16;
+
+export type AppSwitchResult = 'switched' | 'notRunning' | 'failed';
+
 export type ServerMessage =
   | { type: 'pairCode'; code: string; expiresInSeconds: number }
   | { type: 'paired'; token: string }
   | { type: 'pairFailed' }
   | { type: 'authFailed' }
   | { type: 'authenticated' }
-  | { type: 'hello'; monitor: Size; region: Region; mode: ViewMode; codec: string }
+  | { type: 'hello'; monitor: Size; region: Region; mode: ViewMode; codec: string; apps: string[] }
   | { type: 'rtcOffer'; sdp: string }
   | { type: 'region'; region: Region }
-  | { type: 'pong'; t: number; serverTime: number };
+  | { type: 'pong'; t: number; serverTime: number }
+  | { type: 'appSwitch'; slot: number; result: AppSwitchResult };
 
 export type ClientMessage =
   | { type: 'authenticate'; token: string }
@@ -52,7 +59,8 @@ export type ClientMessage =
   | { type: 'scroll'; dy: number }
   | { type: 'typeText'; text: string }
   | { type: 'key'; key: KeyName }
-  | { type: 'ping'; t: number };
+  | { type: 'ping'; t: number }
+  | { type: 'switchApp'; slot: number };
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -86,7 +94,14 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return { type: data.type };
     case 'hello':
       return isSize(data.monitor) && isRegion(data.region) && isString(data.codec)
-        ? { type: 'hello', monitor: data.monitor, region: data.region, mode: toViewMode(data.mode), codec: data.codec }
+        ? {
+            type: 'hello',
+            monitor: data.monitor,
+            region: data.region,
+            mode: toViewMode(data.mode),
+            codec: data.codec,
+            apps: toApps(data.apps),
+          }
         : null;
     case 'rtcOffer':
       return isString(data.sdp) ? { type: 'rtcOffer', sdp: data.sdp } : null;
@@ -95,6 +110,10 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case 'pong':
       return isNumber(data.t) && isNumber(data.serverTime)
         ? { type: 'pong', t: data.t, serverTime: data.serverTime }
+        : null;
+    case 'appSwitch':
+      return isNumber(data.slot) && isAppSwitchResult(data.result)
+        ? { type: 'appSwitch', slot: data.slot, result: data.result }
         : null;
     default:
       return null;
@@ -106,4 +125,14 @@ const VIEW_MODES: readonly ViewMode[] = ['overview', 'view', 'pointer', 'scroll'
 /** The server's starting mode; anything unexpected falls back to View, which sends no input. */
 function toViewMode(value: unknown): ViewMode {
   return VIEW_MODES.find((m) => m === value) ?? 'view';
+}
+
+const isAppSwitchResult = (v: unknown): v is AppSwitchResult =>
+  v === 'switched' || v === 'notRunning' || v === 'failed';
+
+/** App names from hello; anything malformed means no shortcuts rather than a broken session. */
+function toApps(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > MAX_APPS) return [];
+  const ok = value.every((n) => isString(n) && n.length > 0 && n.length <= MAX_APP_NAME_LENGTH);
+  return ok ? (value as string[]) : [];
 }

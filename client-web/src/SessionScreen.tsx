@@ -105,6 +105,9 @@ export function SessionScreen({ onEnded }: Props) {
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
   const [lastInput, setLastInput] = useState('');
+  /** App shortcut names configured on the PC; button N switches to app N. */
+  const [apps, setApps] = useState<string[]>([]);
+  const appsRef = useRef<string[]>([]);
   const [nav, setNavState] = useState<NavTarget>('view');
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
@@ -135,6 +138,8 @@ export function SessionScreen({ onEnded }: Props) {
           setMonitor(message.monitor);
           setRegion(message.region);
           setAspect(Math.abs(message.region.width / message.region.height - 1) < 0.05 ? 'square' : 'wide');
+          setApps(message.apps);
+          appsRef.current = message.apps;
           setModeState(message.mode);
           live.current.mode = message.mode;
           setNavRef.current(navAfterMode(message.mode));
@@ -153,6 +158,12 @@ export function SessionScreen({ onEnded }: Props) {
         case 'pong':
           setStatus((s) => ({ ...s, rttMs: Date.now() - message.t }));
           break;
+        case 'appSwitch': {
+          const name = appsRef.current[message.slot - 1] ?? `app ${message.slot}`;
+          const outcome = { switched: 'switched', notRunning: 'not open', failed: 'failed' }[message.result];
+          setLastInput(`${name}: ${outcome}`);
+          break;
+        }
       }
     };
 
@@ -397,6 +408,13 @@ export function SessionScreen({ onEnded }: Props) {
   };
   nudgeRef.current = nudge;
 
+  /** Brings app N's window to the front, fitted to the cast area; then Pointer is one pinch away. */
+  const switchApp = (slot: number) => {
+    send({ type: 'switchApp', slot });
+    setLastInput(`${apps[slot - 1] ?? `app ${slot}`}…`);
+    focusModeButton('pointer');
+  };
+
   const commitRegion = () => {
     if (draft) sendRegion(draft);
     setMode('view');
@@ -604,8 +622,20 @@ export function SessionScreen({ onEnded }: Props) {
             {label}
           </button>
         ))}
-        <button type="button" onClick={() => setLook(nextLook)} title="Display look">
-          Look: {look}
+        {apps.map((name, i) => (
+          <button
+            key={name + i}
+            type="button"
+            data-app={i + 1}
+            title={name}
+            aria-label={`Switch to ${name}`}
+            onClick={() => switchApp(i + 1)}
+          >
+            {i + 1}
+          </button>
+        ))}
+        <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
+          Look
         </button>
       </nav>
 

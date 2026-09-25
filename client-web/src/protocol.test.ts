@@ -11,6 +11,23 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage('{"type":"authFailed"}')).toEqual({ type: 'authFailed' });
   });
 
+  it('takes app shortcut names from hello, dropping a malformed list', () => {
+    const hello = (apps: string) =>
+      `{"type":"hello","monitor":{"width":2560,"height":1440},"region":{"x":0,"y":0,"width":600,"height":600},"mode":"pointer","codec":"H264","apps":${apps}}`;
+    expect(parseServerMessage(hello('["Claude","Browser"]'))).toMatchObject({ apps: ['Claude', 'Browser'] });
+    expect(parseServerMessage(hello('["Claude",5]'))).toMatchObject({ apps: [] });
+    expect(parseServerMessage(hello('"Claude"'))).toMatchObject({ apps: [] });
+  });
+
+  it('accepts app switch results from the allowlist only', () => {
+    expect(parseServerMessage('{"type":"appSwitch","slot":1,"result":"notRunning"}')).toEqual({
+      type: 'appSwitch',
+      slot: 1,
+      result: 'notRunning',
+    });
+    expect(parseServerMessage('{"type":"appSwitch","slot":1,"result":"launched"}')).toBeNull();
+  });
+
   it('takes the starting mode from hello, falling back to view', () => {
     const hello = (mode: string) =>
       `{"type":"hello","monitor":{"width":2560,"height":1440},"region":{"x":0,"y":0,"width":600,"height":600},"mode":"${mode}","codec":"H264"}`;
