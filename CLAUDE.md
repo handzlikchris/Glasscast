@@ -6,14 +6,16 @@ Guide for AI agents (and humans) picking up this repo. Read this first, then `RE
 
 A proof of concept that lets a **Meta Ray-Ban Display** web app control this Windows PC:
 view a region of the primary monitor over WebRTC video, move/click/scroll the mouse with
-Neural Band pinch-drags, and type through the glasses' voice/handwriting composer. Every
-session needs a **single-use pairing approved in a popup on the PC**.
+Neural Band gestures, switch between configured apps, and type through the glasses'
+voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**.
 
 - **Plan / design / decisions / setup / status** live in a shared page:
   https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV (read it with the Artifact tool, action `read`).
-  Update it **in place** when decisions change. Never create a new plan artifact.
+  Update it **in place** when decisions change. Never create a new plan artifact. (Its status
+  section predates the on-device work of 2026-09-25; this file is more current.)
 - Milestones: M0 network spike, M1 pairing, M2 streaming, M3 input, M4 hardening (all built),
-  M5 validation on the glasses (waiting for the device).
+  M5 validation on the glasses (**largely done 2026-09-25**: video, pairing, Pointer, Type and the
+  composer work on the device; the controls were reworked there, see "Glasses controls").
 
 ## Stack
 
@@ -22,7 +24,7 @@ session needs a **single-use pairing approved in a popup on the PC**.
 | Server | .NET 10 (`net10.0-windows`, SDK pinned in `global.json`), ASP.NET Core + WinForms, one process as the logged-in user |
 | WebRTC | SIPSorcery 10.0.16, send-only video, fixed UDP port, no STUN/TURN |
 | Video | H.264 via Windows Media Foundation software encoder (Vortice.MediaFoundation 3.8.3); VP8 (libvpx via SIPSorceryMedia.Encoders) fallback |
-| Capture / input | GDI `CopyFromScreen`; `SendInput` (P/Invoke) |
+| Capture / input | GDI `CopyFromScreen`; `SendInput` (P/Invoke); window switching via EnumWindows/SetWindowPos |
 | Client | React 19, Vite 8 (Rolldown), TypeScript 7 (native `tsc`), Vitest 4 |
 | Proxy | Caddy 2.11 (stock) terminates TLS, Let's Encrypt via TLS-ALPN |
 
@@ -32,36 +34,44 @@ session needs a **single-use pairing approved in a popup on the PC**.
 server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Program.cs            STA Main: DPI init, web host in background, tray on UI thread
   Hosting/              ServerApp.Create (DI + pipeline, shared with tests), GlassesEndpoints
-                        (/health, /ws/pair, /ws/session, OriginPolicy), SecurityHeaders, Options
+                        (/health, /ws/pair, /ws/session, OriginPolicy), SecurityHeaders,
+                        ClientCaching (no-cache page, immutable assets), Options
   Pairing/              PairingCoordinator (state machine), Secrets (tokens/codes), SlidingWindowLimiter
   Sessions/             ControlSession (one authenticated session), InputController (mode gating),
                         SocketIO (capped WS reads/writes), TokenBucket
   Protocol/             ControlMessages + ControlProtocol (strict allowlist parser)
-  Desktop/              interfaces (IScreen, ICaptureSource, IInputInjector, IKeepAwake), RegionMath, RegionStore
+  Desktop/              interfaces (IScreen, ICaptureSource, IInputInjector, IKeepAwake, IWindowSwitcher),
+                        RegionMath, RegionStore, CastArea (region of the active session), AppShortcuts
   Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, MfH264Encoder, Nv12, Vp8 encoder
-  Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, NativeMethods
-  Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (cast area
-                        drawn on the PC monitor, fed by Desktop/CastArea), TerminateHotkey
+  Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
+                        NativeMethods
+  Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
+                        around the cast area on the PC monitor), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
 client-web/             glasses client (600×600)
+  build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
   src/rtc.ts            receive-only RTCPeerConnection + stats
-  src/SessionScreen.tsx modes, gestures, overlay, edge panning, region echo handling
-  src/{protocol,geometry,gestures,controls}.ts  pure logic with *.test.ts
+  src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
+  src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
+  src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
+  src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
-tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input) + browser/drive.mjs
+tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
+                        browser/drive.mjs (headless Chrome, 27 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
+.claude/tasks/          task briefs for new sessions
 ```
 
 ## Commands
 
 ```powershell
 dotnet build GlassesRemote.sln
-dotnet test                                     # ~104 server tests, ~11 s
-cd client-web; npm test; npx tsc --noEmit; npm run build   # client tests, typecheck, dist/
+dotnet test                                     # ~121 server tests, ~11 s
+cd client-web; npm test; npx tsc --noEmit; npm run build   # ~61 client tests, typecheck, dist/
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
 .\tools\bin\caddy.exe run --config deploy\Caddyfile          # public HTTPS
@@ -74,9 +84,15 @@ behind Caddy), **dev** (local), **lan** (Development on 0.0.0.0 with `AllowedHos
 
 **If the user's server is running (usually from Rider):** `server\bin\Debug\...\GlassesRemote.Server.exe`
 is locked and normal builds fail. Build or test into a separate folder instead:
-`dotnet test tests/GlassesRemote.Server.Tests.csproj -p:OutDir=E:/_src-unity/MetaDisplayRDP/tests/bin/isolated/`.
-Don't stop the user's server without asking. Don't run the e2e harness or spike on port 50000
-while it may be in a session (both bind UDP 50000; use `Spike__MediaPort=50002` etc. for side tests).
+`dotnet test tests/GlassesRemote.Server.Tests.csproj -p:OutDir=E:/_src-unity/MetaDisplayRDP/tests/bin/isolated/`
+and `dotnet build tools/e2e-harness -p:OutDir=E:/_src-unity/MetaDisplayRDP/tools/e2e-harness/bin/isolated/`.
+Don't stop the user's server without asking. Run the harness on another media port while a
+real session may be live: `Media__MediaPort=50002 ./tools/e2e-harness/bin/isolated/E2eHarness.exe`.
+
+**Client changes go live without a server restart:** the running server serves `client-web/dist`
+from disk, so `npm run build` is enough; the user presses Restart in the glasses' web app menu.
+Build **after** committing so the label shows a clean commit (a `+` means uncommitted changes).
+Server or `appsettings.Local.json` changes need the user to restart the server in Rider.
 
 ## Architecture in one screen
 
@@ -90,29 +106,48 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    sends a 256-bit token down that pair socket only.
 2. `/ws/session`: first message must be `{type:"authenticate",token}` within 3 s; token is
    single-use, SHA-256 stored, consumed on use, dies with the session.
-3. Server sends `hello` (monitor, region), then `rtcOffer`. The offer's SDP is rewritten
-   (`SdpCandidates`) to advertise `Media:PublicIp`:`MediaPort` as a host candidate; the browser's
-   checks come in through the port forward and SIPSorcery learns it as peer-reflexive.
+3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names),
+   then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
+   `Media:PublicIp`:`MediaPort` as a host candidate; the browser's checks come in through the port
+   forward and SIPSorcery learns it as peer-reflexive.
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
-   (browser deltaY sign), `typeText`, `key` (allowlist), `switchApp` (slot 1-9), `ping`,
-   `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`, `pairFailed`,
-   `authFailed`, `authenticated`, `hello` (incl. app names), `rtcOffer`, `region`, `appSwitch`, `pong`.
-5. Modes give pinch-drag one meaning: Overview (labelled "Region"; move region box), View (still
-   in the protocol, no button any more), Pointer (cursor; short
-   pinch = click; pushing past an edge pans the region), Scroll, Type. `InputController` ignores
-   input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
-   region is persisted by `RegionStore` across sessions.
-7. Glasses navigation (`client-web/src/focusnav.ts`, `gestures.ts`): in Pointer mode swipes
-   (arrow keys) are shortcuts by default: up/down scroll 9 notches, right opens Type, left
-   cycles the app shortcuts; the **Pan** toggle (Pointer mode only) makes them move the view by a
-   quarter screen, as they always do in View/Scroll. **Back** (or pinch, then pinch-and-hold
-   0.5 s, movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
-   the controls a pinch presses the focused control wherever it lands. Pointer-mode clicks wait
-   350 ms for a possible second pinch (double-click). Type walks focus: text box → Send text
-   (on the composer's `change`) → Enter → Pointer.
+   (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`
+   (slot 1-9), `ping`, `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`,
+   `pairFailed`, `authFailed`, `authenticated`, `hello`, `rtcOffer`, `region`, `appSwitch`
+   (switched/notRunning/failed), `pong`.
+5. Modes (server-gated in `InputController`): Overview (button labelled **"Region"**; moves the
+   region box), View (still in the protocol, no button any more), **Pointer** (cursor, click,
+   scroll; pushing past an edge pans the region), Scroll, Type. The region is persisted by
+   `RegionStore` across sessions and mirrored to `CastArea`, which the tray draws on the monitor.
 6. Geometry is mirrored: `RegionMath.cs` ⇄ `geometry.ts` (letterbox fit, clamp to monitor, min 160 px).
    Frames are always 600×600 with the source letterboxed.
+7. App shortcuts: `Apps:Shortcuts` in `appsettings.Local.json` (name + process and/or window-title
+   text). `switchApp` brings that app's most recent window to the front and fits its visible frame
+   to the cast area (`Win32WindowSwitcher`, compensating for invisible resize borders).
+
+## Glasses controls (as tuned on the device)
+
+The mode bar: **Region · Scroll · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look**. Model in
+`focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
+**controls** (swipes move focus, a pinch presses the focused control).
+
+- **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
+  pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
+  **left → next app** (1 → 2 → … → 1). The **Pan** toggle makes swipes move the view by a quarter
+  screen instead (as they always do in Scroll mode).
+- **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
+  otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
+  pinch-and-hold 0.5 s (movement ignored) also opens the controls.
+- **Mode bar is hidden** (opacity 0, click-through) while on the view; shown when focused, in Type
+  and in Region.
+- **Type flow:** entering Type focuses and clicks the text box (tries to open the composer at
+  once) → when the composer hands text back (`change`), **Send text** → **Enter** → Enter itself
+  returns to Pointer mode. Only a swipe of the user's stops the chain.
+- **App buttons:** the current app is highlighted (moves only on a confirmed switch).
+- **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
+  `lifted` is the default look.
+- The status bar's yellow text is a "last input" readout, useful for on-device debugging.
 
 ## Security invariants — do not break
 
@@ -123,17 +158,19 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
   `tools/e2e-harness` (dev-only, 127.0.0.1:5081).
 - Token: single-use, hashed server-side, constant-time compare, never in URLs, storage, React
   state or logs (test `Tokens_never_appear_in_logs`). Failures are generic (`pairFailed`/`authFailed`).
+  The only thing the client stores is the brightness level.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
   outside Development.
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
   coordinates clamped, rate-limited; invalid input closes the session and raises an alert.
 - Typed text never presses Enter (newlines are flattened); Enter is a separate key message.
-- App shortcuts are configured only on the PC (`Apps:Shortcuts` in appsettings.Local.json). The
-  glasses send a slot number, never a process name or path, and the server only activates and
-  resizes windows that are already open (`Win32WindowSwitcher`). Never launch processes.
+- App shortcuts are configured only on the PC. The glasses send a slot number, never a process
+  name or path, and the server only activates and resizes windows that are already open.
+  Never launch processes. The e2e harness records switches and must never move real windows.
 - Strict CSP (`script-src 'self'`, no inline/eval). Keep the client free of inline scripts/styles
-  in `index.html`; React `style` props are fine.
-- Approve popup: Reject is the focused/Cancel button, no AcceptButton.
+  in `index.html`; React `style` props are fine (they go through the CSSOM).
+- Approve popup: Reject is the focused/Cancel button, no AcceptButton. The cast-area frame and the
+  session banner are excluded from capture (`WDA_EXCLUDEFROMCAPTURE`) and never take focus.
 
 ## This machine's deployment (facts, not defaults)
 
@@ -144,10 +181,14 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 - **Two adapters on the LAN:** Ethernet 192.168.1.114 (forward target) and Wi-Fi 192.168.1.200
   (Windows' preferred outbound route). `Media:BindAddress=192.168.1.114` is required, or UDP
   replies leave via Wi-Fi and video hangs at "connecting".
-- `server/appsettings.Local.json` (git-ignored) holds `Media:PublicIp` and `Media:BindAddress`;
-  see `appsettings.Local.example.json`. It's read at startup only; restart after changes.
+- `server/appsettings.Local.json` (git-ignored) holds `Media:PublicIp`, `Media:BindAddress` and the
+  app shortcuts (1 = Claude: Windows Terminal titled `CHRIS-PC:` where Herdr runs; 2 = Browser:
+  `chrome`); see `appsettings.Local.example.json`. It's read at startup only; restart after changes.
 - Firewall rules come from `deploy/firewall.ps1` (admin): TCP 8443, UDP 50000, optional TCP 5080 LAN-only.
-- Caddy certificate is stored in `%APPDATA%\Caddy`; access log `caddy-access.log` in the repo root (git-ignored).
+- Caddy certificate is stored in `%APPDATA%\Caddy`; access log `caddy-access.log` in the repo root
+  (git-ignored). The log's User-Agent tells devices apart: `Greatwhite` = the glasses; the phone
+  is a Galaxy S25 (SM-S931B, Android 16). A mobile-network IP there means the real outside path.
+- Remote is `origin` = github.com/handzlikchris/GlassesRemote; the user asks for pushes ("check in").
 
 ## Gotchas already paid for
 
@@ -166,11 +207,24 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
   `touch-action: none` must be in the initial CSS (pinch-drag); the display is additive, so
   black is transparent and chrome must be bright-on-dark. While panning, the client ignores
   `region` echoes until all its `setRegion`s are answered (`unconfirmedRegions`).
+- **Focus on the glasses:** the glasses reset focus (to the first button) right after a Back
+  navigation and when the composer closes. Focus the app moves on purpose goes through
+  `focusPinned`, which holds it for 600 ms against such resets (a swipe or pinch ends the hold).
+  A pinch lands at the glasses' pointer position, so with focus moved by swipes, a pinch on any
+  other element presses the focused control (see `onPointerDownCapture`).
+- **Console apps in Windows Terminal:** started from the Run box, the terminal window has no
+  process link to the app (default-terminal handoff), so match such shortcuts by the title the
+  app sets plus `Process: "WindowsTerminal"`.
 - **WinForms DPI:** `ApplicationConfiguration.Initialize()` must run first in `Main`
-  (PerMonitorV2), so capture bounds and `SendInput` use physical pixels.
+  (PerMonitorV2), so capture bounds, `SendInput` and `SetWindowPos` use physical pixels.
+- **e2e harness:** it keeps recorded input for its whole life, so restart it between `drive` runs.
+  Press top-bar buttons with `tapBar()` (a plain `el.click()`): the bar is hidden and
+  click-through while on the view, and a mouse press after keyboard focus is treated as a pinch
+  and redirected to the focused control (by design).
 - **Scripts:** keep `.ps1` files ASCII (Windows PowerShell 5.1 misreads UTF-8 without BOM).
 - **Editing:** don't write C# string or char literals containing `\u2028`/`\u2029` escapes through
-  file-writing tools (they became literal characters once); use `(char)0x2028`.
+  file-writing tools (they became literal characters once); use `(char)0x2028`. Python rewrites on
+  Windows default to CRLF; use `newline=''` to keep LF (`.gitattributes` has `eol=lf`).
 
 ## Meta Ray-Ban Display platform facts
 
@@ -179,23 +233,21 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 - Web apps get motion/orientation, phone GPS, Neural Band input and local storage.
   **No camera and no microphone** (`getUserMedia` fails). The glasses camera is only available
   to phone apps through Meta's Wearables Device Access Toolkit.
-- Budget guidance: under 300 KB first load and fewer than 15 requests. We're at ~237 KB JS
-  (~74 KB gzipped) + 3 KB CSS in 3 requests.
+- Budget guidance: under 300 KB first load and fewer than 15 requests. We're at ~247 KB JS
+  (~78 KB gzipped) + 3 KB CSS in 3 requests.
 - **Verified on the device (2026-09-25):** WebRTC H.264 video plays in the glasses WebView, over
   home Wi-Fi and via the phone's mobile data. User agent contains `Greatwhite` (Android 14 WebView).
-- **Input as the page sees it:** thumb swipes → `ArrowUp/Down/Left/Right`; an index pinch → a
-  pointer tap **at the glasses' pointer position, not on the focused element** (so the app
-  redirects it to the focused control); pinch-drag → pointer events. Back (middle-finger pinch)
-  calls `history.back()` when the page has a history entry, else opens the system web app menu
-  (Restart/Resume/kill); the session keeps one entry so Back goes view → controls, and from
-  the controls (or Type/Overview) home to Pointer mode. Double
-  middle pinch toggles the display (reserved).
+- **Input as the page sees it:** thumb swipes → `ArrowUp/Down/Left/Right` keydowns; an index pinch →
+  a pointer tap **at the glasses' pointer position, not on the focused element**; pinch-drag →
+  pointer events. Back (middle-finger pinch) calls `history.back()` when the page has a history
+  entry, else opens the system web app menu (Restart/Resume/kill); a session keeps one entry
+  (re-pushed after each Back). Double middle pinch toggles the display (reserved).
 - The voice/handwriting **composer** is a system feature: the page only gets text via
-  `input`/`change` on a focused `<textarea>`; it opens on user activation, not `.focus()`.
+  `input`/`change` on a focused `<textarea>`; per Meta's docs it opens on user activation, not
+  `.focus()` (the app tries a click inside the user's gesture; unconfirmed whether that counts).
 - **Caching:** Restart in the web app menu reloads from HTTP cache. The server sends
-  `Cache-Control: no-cache` for the page and `immutable` for hashed `/assets` (`ClientCaching`).
-  A page cached before that header existed only clears by removing and re-adding the web app.
-  The pairing screen shows `Build <commit> · <time>` to confirm what's loaded.
+  `Cache-Control: no-cache` for the page and `immutable` for hashed `/assets` (`ClientCaching`);
+  verified: Restart picks up new builds. The pairing screen shows `Build <commit> · <time>`.
 - Docs: https://wearables.developer.meta.com/docs/develop/webapps and
   https://github.com/facebook/meta-wearables-webapp
 
@@ -208,6 +260,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 - **Verify before claiming:** run `dotnet test`, the client tests/typecheck/build, and the e2e
   harness for anything touching the flow. Say plainly what wasn't verified (anything needing the
   glasses, the phone, or the router).
+- **Iterating on the glasses:** the user tests on the device and reports by voice (expect
+  transcription slips: "harder" = Herdr). After each change say the build label to look for and
+  whether a server restart is needed. Ask for the yellow readout when behaviour is unclear.
 - **Plan artifact:** update in place (same URL), styled HTML with sidebar TOC and callouts; check
   the live version before publishing. Don't resolve the user's comment threads; they do.
 - **Ask before system changes** (installs, firewall, IIS/services, stopping their processes).
@@ -215,16 +270,18 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Status and next steps (as of 2026-09-25)
 
-- Remote access works end to end over HTTPS, from the glasses and the phone (M5 largely done):
-  video, pairing, Pointer, Type with the composer. Controls were reworked on the device for
-  latency (swipes pan, pinch-hold menu, focus chains); `lifted` is the default look.
-- The PC draws the cast area as an orange frame (tray toggle), excluded from capture.
+- Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
+  composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.
+- Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
+  toggle (user reported it not working before the always-visible bar; no readout yet).
 - Pending: M0 latency numbers, external port scan, decode cost on the glasses, pinch-drag
-  gain/threshold tuning. The yellow "last input" readout in the status bar is a debugging aid.
+  gain/threshold tuning, maybe removing Scroll mode (swipes scroll in Pointer now) and the
+  pinch-then-hold gesture (Back replaced it; dropping it would remove the 350 ms click delay).
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
-  the task". Current: `companion-sensor-bridge.md` (phone companion app relaying the glasses'
-  camera and mic via Meta's Device Access Toolkit, since web apps get no camera or mic).
-- Ideas queued: "video not connecting" hint after ~15 s; phone-friendly layout for testing;
-  hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN over TLS for UDP-blocking
-  networks; remote approval flow; Claude-specific controls.
+  the task". `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
+  mic via Meta's DAT) is planned but **on hold** at the user's request.
+- Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
+  phone-friendly layout; hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN
+  over TLS for UDP-blocking networks; remote approval flow; Claude-specific controls; a tray
+  dialog for app shortcuts.
