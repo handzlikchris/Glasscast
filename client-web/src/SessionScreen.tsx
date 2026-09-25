@@ -47,8 +47,7 @@ const FOCUS_PIN_MS = 600;
 
 // Pointer and Type side by side: most use goes Pointer → Type → Pointer.
 const MODES: { mode: ViewMode; label: string }[] = [
-  { mode: 'overview', label: 'Overview' },
-  { mode: 'view', label: 'View' },
+  { mode: 'overview', label: 'Region' },
   { mode: 'scroll', label: 'Scroll' },
   { mode: 'pointer', label: 'Pointer' },
   { mode: 'type', label: 'Type' },
@@ -513,8 +512,8 @@ export function SessionScreen({ onEnded }: Props) {
     live.current.panSwipes = next;
     setPanSwipes(next);
     setLastInput(next ? 'swipes pan the view' : 'swipes: scroll, type, next app');
-    // Straight back to swiping, so the new meaning takes effect at once.
-    setNav('view');
+    // In Pointer mode, straight back to swiping so the new meaning takes effect at once.
+    if (live.current.mode === 'pointer') setNav('view');
   };
 
   /**
@@ -530,7 +529,7 @@ export function SessionScreen({ onEnded }: Props) {
 
   const commitRegion = () => {
     if (draft) sendRegion(draft);
-    setMode('view');
+    setMode('pointer');
   };
 
   const changeAspect = (next: AspectName) => {
@@ -747,11 +746,10 @@ export function SessionScreen({ onEnded }: Props) {
             {i + 1}
           </button>
         ))}
-        {mode === 'pointer' && (
-          <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes pan the view">
-            Pan
-          </button>
-        )}
+        {/* Always shown so the bar doesn't shift between modes; it only changes Pointer-mode swipes. */}
+        <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes pan the view">
+          Pan
+        </button>
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
         </button>
@@ -774,7 +772,7 @@ export function SessionScreen({ onEnded }: Props) {
           <button type="button" onClick={commitRegion}>
             Use region
           </button>
-          <button type="button" onClick={() => setMode('view')}>
+          <button type="button" onClick={() => setMode('pointer')}>
             Cancel
           </button>
         </nav>
