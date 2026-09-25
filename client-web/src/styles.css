@@ -122,11 +122,13 @@ textarea:focus-visible {
 .stage video {
   object-fit: fill;
   background: #000;
+  /* --brightness is the user's dimming level (display.ts), set on .stage. */
+  filter: brightness(var(--brightness, 1));
 }
 
 .look-lifted video {
   /* Lift blacks so dark UIs stay visible on the additive display. */
-  filter: contrast(0.8) brightness(1.25);
+  filter: contrast(0.8) brightness(calc(1.25 * var(--brightness, 1)));
 }
 
 .stage canvas {

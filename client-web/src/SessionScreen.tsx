@@ -28,6 +28,7 @@ import {
   type NavTarget,
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
+import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
 import { drawOverlay, type Look } from './overlay';
 import type { ClientMessage, KeyName, Region, ServerMessage, Size, ViewMode } from './protocol';
 import { VideoReceiver } from './rtc';
@@ -121,6 +122,7 @@ export function SessionScreen({ onEnded }: Props) {
   const [mode, setModeState] = useState<ViewMode>('pointer');
   const [cursor, setCursor] = useState<Point | null>(null);
   const [look, setLook] = useState<Look>('lifted');
+  const [brightness, setBrightness] = useState<Brightness>(loadBrightness);
   const [panEdge, setPanEdge] = useState<Point | null>(null);
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
@@ -735,7 +737,11 @@ export function SessionScreen({ onEnded }: Props) {
   const mediaOk = status.media === 'connected';
 
   return (
-    <div ref={stageRef} className={`stage look-${look}`}>
+    <div
+      ref={stageRef}
+      className={`stage look-${look}`}
+      style={{ '--brightness': brightness } as React.CSSProperties}
+    >
       <video ref={videoRef} autoPlay playsInline muted />
       <canvas ref={canvasRef} width={600} height={600} />
       <div
@@ -769,6 +775,19 @@ export function SessionScreen({ onEnded }: Props) {
         {/* Always shown so the bar doesn't shift between modes; it only changes Pointer-mode swipes. */}
         <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes pan the view">
           Pan
+        </button>
+        <button
+          type="button"
+          data-brightness={brightness}
+          onClick={() => {
+            const next = nextBrightness(brightness);
+            setBrightness(next);
+            saveBrightness(next);
+            setLastInput(`brightness ${Math.round(next * 100)}%`);
+          }}
+          title="Video brightness"
+        >
+          ☀ {Math.round(brightness * 100)}%
         </button>
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
