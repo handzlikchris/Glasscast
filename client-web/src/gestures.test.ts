@@ -52,18 +52,6 @@ describe('GestureTracker', () => {
   });
 });
 
-describe('isStillPress', () => {
-  it('is true only while the press is down and within the tap threshold', () => {
-    const g = new GestureTracker({ tapThreshold: 10, tapMaxMs: 500 });
-    expect(g.isStillPress(1)).toBe(false);
-    g.down(1, 100, 100, 0);
-    expect(g.isStillPress(1)).toBe(true);
-    expect(g.isStillPress(2)).toBe(false);
-    g.move(1, 130, 100);
-    expect(g.isStillPress(1)).toBe(false);
-  });
-});
-
 describe('TapThenHold', () => {
   it('arms a press that starts soon after a tap', () => {
     const t = new TapThenHold();

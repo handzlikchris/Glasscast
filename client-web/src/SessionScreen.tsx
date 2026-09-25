@@ -81,6 +81,11 @@ export function SessionScreen({ onEnded }: Props) {
   const pointerType = useRef('');
   const tapThenHold = useRef(new TapThenHold());
   const holdTimer = useRef<number | null>(null);
+  /**
+   * A press that started right after a pinch. Movement is ignored for it: it ends either as a
+   * quick second tap (released before HOLD_MS) or, held that long, as "go to the controls".
+   */
+  const secondPress = useRef<{ id: number; x: number; y: number; held: boolean } | null>(null);
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
@@ -525,26 +530,29 @@ export function SessionScreen({ onEnded }: Props) {
     pointerType.current = e.pointerType;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = toLocal(e);
-    gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
 
-    // A pinch right after a pinch: wait to see whether it's held (controls), a tap or a drag.
+    // A pinch right after a pinch: hold back the first one's click until this one is decided.
     if (typeof pendingClick.current === 'number') {
       clearTimeout(pendingClick.current);
       pendingClick.current = 'waiting';
     }
     if (tapThenHold.current.pressStarted(performance.now())) {
-      const id = e.pointerId;
-      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+      const press = { id: e.pointerId, x: p.x, y: p.y, held: false };
+      secondPress.current = press;
+      clearHold();
       holdTimer.current = window.setTimeout(() => {
         holdTimer.current = null;
-        if (!gestures.current.isStillPress(id)) return;
-        gestures.current.cancel(id);
+        if (secondPress.current !== press) return;
+        press.held = true;
         clearPendingClick();
         focusControls();
       }, HOLD_MS);
+      return;
     }
+    gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (secondPress.current?.id === e.pointerId) return; // wobble during pinch-then-hold
     const p = toLocal(e);
     gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
   };
@@ -556,11 +564,19 @@ export function SessionScreen({ onEnded }: Props) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     lastPointerAt.current = performance.now();
     clearHold();
+    const press = secondPress.current;
+    if (press?.id === e.pointerId) {
+      secondPress.current = null;
+      // Released before the hold time: a quick second tap (a double-click in Pointer mode).
+      if (!press.held) handleGesture({ kind: 'tap', x: press.x, y: press.y });
+      return;
+    }
     const p = toLocal(e);
     gestures.current.up(e.pointerId, p.x, p.y, e.timeStamp).forEach(handleGesture);
   };
   const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
     clearHold();
+    if (secondPress.current?.id === e.pointerId) secondPress.current = null;
     releasePendingClick();
     gestures.current.cancel(e.pointerId).forEach(handleGesture);
   };
