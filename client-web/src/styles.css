@@ -182,6 +182,14 @@ textarea:focus-visible {
   color: var(--warn);
 }
 
+.status .input-trace {
+  color: var(--focus);
+  max-width: 190px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .type-panel {
   position: absolute;
   left: 6px;

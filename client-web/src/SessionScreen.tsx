@@ -13,6 +13,7 @@ import {
   type Rect,
 } from './geometry';
 import { DEFAULT_GESTURES, GestureTracker, type GestureEvent } from './gestures';
+import { armedAfterDrag, armedAfterPress, enterIsSamePinch, NAV_KEYS, routeTap } from './focusnav';
 import { drawOverlay, type Look } from './overlay';
 import type { ClientMessage, KeyName, Region, ServerMessage, Size, ViewMode } from './protocol';
 import { VideoReceiver } from './rtc';
@@ -69,6 +70,12 @@ export function SessionScreen({ onEnded }: Props) {
   const regionTimer = useRef<number | null>(null);
   const unconfirmedRegions = useRef(0);
   const glowTimer = useRef<number | null>(null);
+  // Pinch-to-press on the glasses (see focusnav.ts).
+  const focused = useRef<HTMLElement | null>(null);
+  const armed = useRef(false);
+  const lastPointerAt = useRef(-Infinity);
+  const lastEnterAt = useRef(-Infinity);
+  const pointerType = useRef('');
 
   const [monitor, setMonitor] = useState<Size | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -79,6 +86,8 @@ export function SessionScreen({ onEnded }: Props) {
   const [look, setLook] = useState<Look>('natural');
   const [panEdge, setPanEdge] = useState<Point | null>(null);
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
+  /** Last input seen, shown in the status bar while we learn what the glasses send. */
+  const [lastInput, setLastInput] = useState('');
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
 
@@ -158,6 +167,57 @@ export function SessionScreen({ onEnded }: Props) {
       receiver?.close();
       session.close();
       sessionRef.current = null;
+    };
+  }, []);
+
+  // ---- focus and pinch-to-press ----
+  const pressFocused = () => {
+    const el = focused.current;
+    if (!el || !el.isConnected) return;
+    if (el instanceof HTMLButtonElement) {
+      armed.current = armedAfterPress((el.dataset.mode as ViewMode | undefined) ?? null);
+    }
+    el.click();
+    if (el.isConnected) el.focus({ preventScroll: true });
+  };
+
+  useEffect(() => {
+    const stage = stageRef.current!;
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement || t instanceof HTMLTextAreaElement)) return;
+      focused.current = t;
+      // Focus moved by a swipe (keyboard-style) shows the focus ring; a mouse click doesn't.
+      if (t.matches(':focus-visible')) armed.current = true;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      setLastInput(`key ${e.key}`);
+      if (NAV_KEYS.has(e.key)) armed.current = true;
+      // Enter in the text box is typing, never a pinch.
+      if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
+
+      const now = performance.now();
+      if (enterIsSamePinch(now - lastPointerAt.current)) {
+        // The pointer path already handled this pinch.
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastEnterAt.current = now;
+      const active = document.activeElement;
+      if (active instanceof HTMLButtonElement) {
+        armed.current = armedAfterPress((active.dataset.mode as ViewMode | undefined) ?? null);
+      } else if (!(active instanceof HTMLTextAreaElement) && armed.current && focused.current?.isConnected) {
+        // Focus slipped to the page; press the button the swipe last landed on.
+        e.preventDefault();
+        pressFocused();
+      }
+    };
+    stage.addEventListener('focusin', onFocusIn);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      stage.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('keydown', onKeyDown, true);
     };
   }, []);
 
@@ -249,6 +309,23 @@ export function SessionScreen({ onEnded }: Props) {
   const handleGesture = (event: GestureEvent) => {
     const { mode: m, monitor: mon, region: r, draft: d, cursor: c, content: box } = live.current;
 
+    if (event.kind === 'tap') {
+      const route = routeTap({
+        armed: armed.current,
+        hasFocused: !!focused.current?.isConnected,
+        msSinceEnter: performance.now() - lastEnterAt.current,
+      });
+      setLastInput(`tap (${pointerType.current}) → ${route === 'pressFocused' ? 'button' : route}`);
+      if (route === 'ignore') return;
+      if (route === 'pressFocused') {
+        pressFocused();
+        return;
+      }
+    } else if (event.kind === 'dragStart') {
+      armed.current = armedAfterDrag(m, armed.current);
+      setLastInput(`drag (${pointerType.current})`);
+    }
+
     if (m === 'overview' && event.kind === 'drag' && d && mon) {
       const moved = moveRegion(d, event.dx, event.dy, mon);
       live.current.draft = moved;
@@ -299,6 +376,10 @@ export function SessionScreen({ onEnded }: Props) {
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    // Keep focus (and its ring) on the button the swipe landed on.
+    e.preventDefault();
+    lastPointerAt.current = performance.now();
+    pointerType.current = e.pointerType;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = toLocal(e);
     gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
@@ -308,6 +389,7 @@ export function SessionScreen({ onEnded }: Props) {
     gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
   };
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    lastPointerAt.current = performance.now();
     const p = toLocal(e);
     gestures.current.up(e.pointerId, p.x, p.y, e.timeStamp).forEach(handleGesture);
   };
@@ -329,11 +411,12 @@ export function SessionScreen({ onEnded }: Props) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
+        onMouseDown={(e) => e.preventDefault()}
       />
 
       <nav className="toolbar top" aria-label="Modes">
         {MODES.map(({ mode: m, label }) => (
-          <button key={m} type="button" aria-pressed={mode === m} onClick={() => setMode(m)}>
+          <button key={m} type="button" data-mode={m} aria-pressed={mode === m} onClick={() => setMode(m)}>
             {label}
           </button>
         ))}
@@ -380,6 +463,7 @@ export function SessionScreen({ onEnded }: Props) {
         <span>{status.fps !== null ? `${status.fps.toFixed(0)} fps` : '– fps'}</span>
         <span>{status.rttMs !== null ? `${status.rttMs} ms` : '– ms'}</span>
         <span>{status.codec ?? ''}</span>
+        <span className="input-trace">{lastInput}</span>
         <span style={{ marginLeft: 'auto' }}>{mode}</span>
       </footer>
     </div>
