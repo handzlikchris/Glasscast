@@ -290,6 +290,41 @@ try {
   check('Back toggles view ↔ controls (focus held on Type through a reset), a doubled Back counts once',
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
+  // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, left cycles the apps
+  //     (1 → 2 → 1, starting after app 1 from step 15), right opens Type. With Pan on they move the view.
+  // A plain click(): focus was left on Type by the keyboard, so a mouse press here would be
+  // treated like a pinch and press Type instead (the redirect working as intended).
+  const press = (selector) => page.$eval(selector, (el) => el.click());
+  await press('button[data-mode="pointer"]');
+  await sleep(200);
+  const actionsBefore = (await input()).length;
+  for (const key of ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowLeft']) {
+    await page.keyboard.press(key);
+    await sleep(300);
+  }
+  // Switches carry the cast area; keep just "switch <app>".
+  const swipeActions = (await input()).slice(actionsBefore).map((a) => (a.startsWith('switch ') ? a.split(' ').slice(0, 2).join(' ') : a));
+  await page.keyboard.press('ArrowRight');
+  await sleep(300);
+  const modeAfterRight = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
+    swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
+    `${swipeActions.join('|')} | right → ${modeAfterRight}`);
+
+  await press('button[data-mode="pointer"]');
+  await sleep(100);
+  await press('button[data-toggle="pan"]');
+  await sleep(200);
+  const panOn = await page.$eval('button[data-toggle="pan"]', (el) => el.getAttribute('aria-pressed'));
+  const beforePan = await regionAt();
+  const panInputBefore = (await input()).length;
+  await page.keyboard.press('ArrowRight');
+  await sleep(400);
+  const afterPan = await regionAt();
+  const panInputs = (await input()).slice(panInputBefore).filter((a) => !a.startsWith('move '));
+  check('with Pan on, Pointer swipes move the view instead',
+    panOn === 'true' && afterPan.x !== beforePan.x && panInputs.length === 0,
+    `pan ${panOn}, x ${beforePan.x} -> ${afterPan.x}, other input ${panInputs.join('|')}`);
 } finally {
   await browser.close();
 }
