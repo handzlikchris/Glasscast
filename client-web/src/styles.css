@@ -208,20 +208,26 @@ textarea:focus-visible {
   text-overflow: ellipsis;
 }
 
-/* Latency figures (Stats button). Readable over video, never in the way of a pinch. */
+/* Latency figures (Stats button), top left in the corner of the eye. Readable over video, never in
+   the way of a pinch; moved below the mode bar while that's showing. */
 .stats-panel {
   position: absolute;
   left: 6px;
-  bottom: 34px;
-  padding: 4px 8px;
-  font-size: 12px;
-  line-height: 1.4;
+  top: 6px;
+  padding: 6px 10px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
   color: var(--fg);
   background: var(--panel);
-  border-radius: 8px;
+  border-radius: 10px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+}
+
+.stats-panel.below-bar {
+  top: 62px;
 }
 
 .type-panel {

@@ -755,6 +755,7 @@ export function SessionScreen({ onEnded }: Props) {
   // ---- render ----
   const nextLook = LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length];
   const mediaOk = status.media === 'connected';
+  const barHidden = nav === 'view' && VIEW_NAV_MODES.includes(mode);
 
   return (
     <div
@@ -773,7 +774,7 @@ export function SessionScreen({ onEnded }: Props) {
         onMouseDown={(e) => e.preventDefault()}
       />
 
-      <nav className={nav === 'view' && VIEW_NAV_MODES.includes(mode) ? 'toolbar top dimmed' : 'toolbar top'} aria-label="Modes">
+      <nav className={barHidden ? 'toolbar top dimmed' : 'toolbar top'} aria-label="Modes">
         {MODES.map(({ mode: m, label }) => (
           <button key={m} type="button" data-mode={m} aria-pressed={mode === m} onClick={() => setMode(m)}>
             {label}
@@ -818,7 +819,7 @@ export function SessionScreen({ onEnded }: Props) {
       </nav>
 
       {showStats && mode !== 'overview' && mode !== 'type' && (
-        <div className="stats-panel" aria-label="Latency stats">
+        <div className={barHidden ? 'stats-panel' : 'stats-panel below-bar'} aria-label="Latency stats">
           {statsText.map((line, i) => (
             <div key={i}>{line}</div>
           ))}
