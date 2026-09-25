@@ -74,6 +74,28 @@ function panAxis(
 }
 
 /** Cursor position as 0..1 within the content rect (what the server's "move" expects). */
+/**
+ * Pointer movement with the view locked (Pan off): the cursor goes right up to the edges, so
+ * things at the very edge stay clickable, and the part of a push that would take it past the top
+ * or bottom edge comes back as `overflowY` (view pixels, positive = down) for edge scrolling.
+ */
+export function moveCursorLocked(
+  cursor: Point,
+  dx: number,
+  dy: number,
+  gain: number,
+  bounds: Rect,
+): { cursor: Point; overflowY: number } {
+  const top = bounds.y;
+  const bottom = bounds.y + bounds.height - 1;
+  const targetY = cursor.y + dy * gain;
+  const overflowY = dy > 0 && targetY > bottom ? targetY - bottom : dy < 0 && targetY < top ? targetY - top : 0;
+  return {
+    cursor: { x: clamp(cursor.x + dx * gain, bounds.x, bounds.x + bounds.width - 1), y: clamp(targetY, top, bottom) },
+    overflowY,
+  };
+}
+
 export function toNormalized(cursor: Point, bounds: Rect): Point {
   return {
     x: clamp((cursor.x - bounds.x) / Math.max(1, bounds.width - 1), 0, 1),
@@ -100,6 +122,11 @@ export class ScrollAccumulator {
 
   add(dragDy: number): void {
     this.pending += -dragDy * this.unitsPerPixel;
+  }
+
+  /** Wheel units straight in (positive scrolls down), e.g. from edge scrolling. */
+  addUnits(units: number): void {
+    this.pending += units;
   }
 
   /** Whole wheel units ready to send (0 if nothing worth sending). */

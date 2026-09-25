@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Session } from './connection';
-import { centreOf, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
+import { centreOf, moveCursorLocked, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
 import {
   ASPECTS,
   clampRegion,
@@ -43,6 +43,8 @@ const EDGE_ZONE = 24;
 /** Region updates while panning are sent at most this often. */
 const PAN_SEND_MS = 100;
 const PAN_GLOW_MS = 250;
+/** Edge scrolling (Pan off): wheel units per view pixel pushed past the top or bottom; 60 px ≈ one notch. */
+const EDGE_SCROLL_UNITS_PER_PX = 2;
 const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
 /** How long focus put on the controls is held there against resets we didn't cause (ms). */
@@ -644,10 +646,30 @@ export function SessionScreen({ onEnded }: Props) {
       setDraft(moved);
     } else if (m === 'pointer' && box) {
       if (event.kind === 'drag') {
-        // Pushing past an edge pans the view only with Pan on; otherwise the view stays locked
-        // where it is and the cursor stops at the edge.
+        // With Pan on, pushing past an edge pans the view. With Pan off the view stays locked, the
+        // cursor goes up to the edge, and pushing on past the top or bottom scrolls instead.
+        if (!live.current.panSwipes) {
+          const { cursor: next, overflowY } = moveCursorLocked(c ?? centreOf(box), event.dx, event.dy, POINTER_GAIN, box);
+          if (overflowY !== 0) {
+            // Get Windows' cursor to the edge first (once), so the wheel goes to what's under it.
+            if (!c || c.x !== next.x || c.y !== next.y) {
+              live.current.cursor = next;
+              setCursor(next);
+              queueMove(toNormalized(next, box));
+              flushMove();
+            }
+            scroll.current.addUnits(overflowY * EDGE_SCROLL_UNITS_PER_PX);
+            showPanEdge(0, Math.sign(overflowY));
+            return;
+          }
+          live.current.cursor = next;
+          setCursor(next);
+          queueMove(toNormalized(next, box));
+          return;
+        }
+
         const room: PanRoom =
-          r && mon && live.current.panSwipes
+          r && mon
             ? { left: r.x > 0, right: r.x + r.width < mon.width, up: r.y > 0, down: r.y + r.height < mon.height }
             : NO_ROOM;
         const { cursor: next, panX, panY } = moveCursorWithEdgePan(

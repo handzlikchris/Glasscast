@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centreOf, moveCursor, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized } from './controls';
+import { centreOf, moveCursor, moveCursorLocked, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized } from './controls';
 
 const bounds = { x: 0, y: 131, width: 600, height: 338 };
 
@@ -42,6 +42,24 @@ describe('ScrollAccumulator', () => {
     expect(acc.take()).toBe(-1200);
     expect(acc.take()).toBe(-1200);
     expect(acc.take()).toBe(-400);
+  });
+});
+
+describe('moveCursorLocked', () => {
+  const box = { x: 0, y: 0, width: 600, height: 600 };
+
+  it('moves right up to the edges with nothing left over inside the view', () => {
+    expect(moveCursorLocked({ x: 300, y: 590 }, 5, 9, 1, box)).toEqual({ cursor: { x: 305, y: 599 }, overflowY: 0 });
+  });
+
+  it('turns a push past the bottom or top into overflow for scrolling', () => {
+    expect(moveCursorLocked({ x: 300, y: 590 }, 0, 30, 1, box)).toEqual({ cursor: { x: 300, y: 599 }, overflowY: 21 });
+    expect(moveCursorLocked({ x: 300, y: 0 }, 0, -12, 1, box)).toEqual({ cursor: { x: 300, y: 0 }, overflowY: -12 });
+  });
+
+  it('never scrolls sideways or when moving back in', () => {
+    expect(moveCursorLocked({ x: 599, y: 300 }, 40, 0, 1, box).overflowY).toBe(0);
+    expect(moveCursorLocked({ x: 300, y: 599 }, 0, -10, 1, box)).toEqual({ cursor: { x: 300, y: 589 }, overflowY: 0 });
   });
 });
 
