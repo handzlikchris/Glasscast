@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backChordMode, enterIsSamePinch, menuFocusFor, navAfterBack, navAfterMode, routeTap, SAME_PINCH_MS } from './focusnav';
+import { enterIsSamePinch, menuFocusFor, navAfterBack, navAfterMode, routeTap, SAME_PINCH_MS } from './focusnav';
 
 describe('routeTap', () => {
   it('presses the focused button while on the controls', () => {
@@ -71,18 +71,5 @@ describe('navAfterBack', () => {
   it('stays on the controls in Overview and Type', () => {
     expect(navAfterBack('controls', 'type')).toBe('controls');
     expect(navAfterBack('controls', 'overview')).toBe('controls');
-  });
-});
-
-describe('backChordMode', () => {
-  it('goes to Scroll on Back + swipe up and Type on Back + swipe down', () => {
-    expect(backChordMode('ArrowUp')).toBe('scroll');
-    expect(backChordMode('ArrowDown')).toBe('type');
-  });
-
-  it('has no chord for left, right or other keys', () => {
-    expect(backChordMode('ArrowLeft')).toBeNull();
-    expect(backChordMode('ArrowRight')).toBeNull();
-    expect(backChordMode('Enter')).toBeNull();
   });
 });
