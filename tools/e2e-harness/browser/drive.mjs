@@ -64,7 +64,7 @@ try {
   await page.mouse.up();
   await sleep(200);
   await page.mouse.click(360, 330);
-  await sleep(400);
+  await sleep(800); // clicks wait briefly in case a second pinch follows
   let actions = await input();
   check('pointer drag moves the cursor', actions.some((a) => a.startsWith('move ')));
   check('short tap clicks', actions.includes('click Left'));
@@ -127,8 +127,8 @@ try {
   await sleep(300);
   check('View mode ignores taps', (await input()).length === inputsBefore);
 
-  // 9. Glasses-style pinch: a swipe moves focus (Tab stands in for it), then the pinch
-  //    arrives as a tap on the video. It presses the focused button and focus stays put.
+  // 9. On the controls, a pinch (a tap on the video) presses the focused button. Tab
+  //    stands in for the glasses' swipes. Picking Scroll sends swipes back to the view.
   await page.focus('button[data-mode="view"]');
   let focusedMode = null;
   for (let i = 0; i < 8 && focusedMode !== 'scroll'; i++) {
@@ -138,23 +138,65 @@ try {
   await page.mouse.click(300, 300);
   await sleep(300);
   const pinchStatus = await page.$eval('.status', (el) => el.textContent);
-  const keptFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
-  check('a pinch presses the button a swipe focused', pinchStatus.includes('scroll') && keptFocus === 'scroll',
-    `focus ${keptFocus}`);
+  const focusAfterPick = await page.evaluate(() => document.activeElement?.tagName ?? null);
+  check('a pinch presses the focused button, then swipes go back to the view',
+    pinchStatus.includes('scroll') && focusAfterPick === 'BODY', `focus ${focusAfterPick}`);
 
-  // 10. After pressing Pointer that way, the next pinch clicks in Windows instead.
+  // 10. Swipes move the view by half its size (left here: earlier steps panned right).
+  const regionAt = async () => (await fetch(`${BASE}/__harness/region`)).json();
+  const beforeSwipe = await regionAt();
+  await page.keyboard.press('ArrowLeft');
+  await sleep(400);
+  const afterSwipe = await regionAt();
+  check('a left swipe moves the view left by half its width',
+    afterSwipe.x === Math.max(0, beforeSwipe.x - Math.round(beforeSwipe.width / 2)) && afterSwipe.y === beforeSwipe.y,
+    `x ${beforeSwipe.x} -> ${afterSwipe.x}, width ${beforeSwipe.width}`);
+
+  // Pinch, then pinch and hold (a tap, then a press held still past the hold time).
+  const pinchThenHold = async () => {
+    await page.mouse.click(300, 300);
+    await sleep(100);
+    await page.mouse.down();
+    await sleep(700);
+    await page.mouse.up();
+    await sleep(200);
+  };
+
+  // 11. Pinch, then pinch-hold puts focus on the current mode's button; swipes then stay on the controls.
+  await pinchThenHold();
+  const heldFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  const beforeControlsSwipe = await regionAt();
+  await page.keyboard.press('ArrowRight');
+  await sleep(300);
+  const afterControlsSwipe = await regionAt();
+  check('pinch, then pinch-hold moves focus to the controls', heldFocus === 'scroll' &&
+    afterControlsSwipe.x === beforeControlsSwipe.x, `focus ${heldFocus}`);
+
+  // 12. Pointer mode: a pinch clicks after a short wait, two quick pinches double-click,
+  //     and pinch-then-hold clicks nothing.
   await page.keyboard.down('Shift');
   await page.keyboard.press('Tab');
   await page.keyboard.up('Shift');
   await page.mouse.click(300, 300);
   await sleep(300);
-  const clicksBefore = (await input()).length;
-  await page.mouse.click(320, 300);
-  await sleep(300);
-  const pointerStatus = await page.$eval('.status', (el) => el.textContent);
-  const newActions = (await input()).slice(clicksBefore);
-  check('after a pinch on Pointer, the next pinch clicks in Windows',
-    pointerStatus.includes('pointer') && newActions.includes('click Left'), newActions.join(', '));
+  const clicksIn = async (fn) => {
+    const before = (await input()).length;
+    await fn();
+    await sleep(700);
+    return (await input()).slice(before).filter((a) => a === 'click Left').length;
+  };
+  const single = await clicksIn(() => page.mouse.click(320, 300));
+  const double = await clicksIn(async () => {
+    await page.mouse.click(320, 300);
+    await sleep(100);
+    await page.mouse.click(320, 300);
+  });
+  const held = await clicksIn(pinchThenHold);
+  const heldToPointer = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  check('in Pointer mode a pinch clicks once and two quick pinches double-click', single === 1 && double === 2,
+    `single ${single}, double ${double}`);
+  check('in Pointer mode pinch-then-hold opens the controls without clicking', held === 0 && heldToPointer === 'pointer',
+    `clicks ${held}, focus ${heldToPointer}`);
 } finally {
   await browser.close();
 }
