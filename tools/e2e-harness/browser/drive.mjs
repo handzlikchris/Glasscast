@@ -96,8 +96,8 @@ try {
   check('Enter is its own deliberate key press', actions.includes('key Enter'));
   await shot('4-type');
 
-  // 6. Overview: drag the region box and commit it.
-  await page.locator('button::-p-text(Overview)').click();
+  // 6. Region (overview): drag the region box and commit it.
+  await page.locator('button::-p-text(Region)').click();
   await sleep(500);
   await page.mouse.move(300, 300);
   await page.mouse.down();
@@ -106,8 +106,8 @@ try {
   await shot('5-overview');
   await page.locator('button::-p-text(Use region)').click();
   await sleep(500);
-  const mode = await page.$eval('.status', (el) => el.textContent);
-  check('Use region returns to View mode', mode.includes('view'));
+  const mode = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  check('Use region returns to Pointer mode', mode === 'pointer', mode);
 
   // 7. Edge panning: in Pointer mode, pushing past the right edge slides the region right.
   const before = await (await fetch(`${BASE}/__harness/region`)).json();
@@ -121,18 +121,18 @@ try {
   await shot('6-edge-pan');
   check('pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
     `x ${before?.x} -> ${after?.x}`);
-  await page.locator('button::-p-text(View)').click();
+  await page.locator('button::-p-text(Scroll)').click();
   await sleep(200);
 
-  // 8. Input is rejected in View mode (nothing new recorded).
+  // 8. Taps don't click in Scroll mode (nothing new recorded).
   const inputsBefore = (await input()).length;
   await page.mouse.click(300, 300);
   await sleep(300);
-  check('View mode ignores taps', (await input()).length === inputsBefore);
+  check('Scroll mode ignores taps', (await input()).length === inputsBefore);
 
   // 9. On the controls, a pinch (a tap on the video) presses the focused button. Tab
   //    stands in for the glasses' swipes. Picking Scroll sends swipes back to the view.
-  await page.focus('button[data-mode="view"]');
+  await page.focus('button[data-mode="overview"]');
   let focusedMode = null;
   for (let i = 0; i < 8 && focusedMode !== 'scroll'; i++) {
     await page.keyboard.press('Tab');

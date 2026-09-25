@@ -98,7 +98,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    (browser deltaY sign), `typeText`, `key` (allowlist), `switchApp` (slot 1-9), `ping`,
    `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`, `pairFailed`,
    `authFailed`, `authenticated`, `hello` (incl. app names), `rtcOffer`, `region`, `appSwitch`, `pong`.
-5. Modes give pinch-drag one meaning: Overview (move region box), View, Pointer (cursor; short
+5. Modes give pinch-drag one meaning: Overview (labelled "Region"; move region box), View (still
+   in the protocol, no button any more), Pointer (cursor; short
    pinch = click; pushing past an edge pans the region), Scroll, Type. `InputController` ignores
    input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
    region is persisted by `RegionStore` across sessions.
