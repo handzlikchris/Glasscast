@@ -89,8 +89,8 @@ export function backTarget(nav: NavTarget): 'controls' | 'pointer' {
   return nav === 'view' ? 'controls' : 'pointer';
 }
 
-/** Wheel units one swipe scrolls by (three notches). */
-export const SWIPE_SCROLL = 360;
+/** Wheel units one swipe scrolls by (nine notches; the server caps a message at 1200). */
+export const SWIPE_SCROLL = 1080;
 
 export type SwipeAction =
   | { kind: 'pan'; dx: number; dy: number }

@@ -104,7 +104,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
    region is persisted by `RegionStore` across sessions.
 7. Glasses navigation (`client-web/src/focusnav.ts`, `gestures.ts`): in Pointer mode swipes
-   (arrow keys) are shortcuts by default: up/down scroll 3 notches, right opens Type, left
+   (arrow keys) are shortcuts by default: up/down scroll 9 notches, right opens Type, left
    cycles the app shortcuts; the **Pan** toggle (Pointer mode only) makes them move the view by a
    quarter screen, as they always do in View/Scroll. **Back** (or pinch, then pinch-and-hold
    0.5 s, movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
