@@ -312,6 +312,8 @@ try {
   await page.keyboard.press('ArrowRight');
   await sleep(300);
   const modeAfterRight = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  const pressedApp = await page.$eval('button[data-app][aria-pressed="true"]', (el) => el.dataset.app);
+  check('the current app button is highlighted', pressedApp === '1', `app ${pressedApp}`);
   check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
     swipeActions.join('|') === 'wheel -1080|wheel 1080|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
