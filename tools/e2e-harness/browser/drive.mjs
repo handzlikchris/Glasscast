@@ -160,6 +160,28 @@ try {
   const locked = await pushRight();
   check('without Pan, pushing past the edge leaves the view where it is', locked && before && locked.x === before.x,
     `x ${before?.x} -> ${locked?.x}`);
+  // Edge scrolling: without Pan, pushing on past the bottom scrolls down, past the top scrolls up.
+  const wheelSince = async (from) => (await input()).slice(from).filter((a) => a.startsWith('wheel ')).map((a) => Number(a.split(' ')[1]));
+  // Pointer moves are relative, so each push covers the whole view height to be sure to hit the edge.
+  const pushVertical = async (fromY, toY) => {
+    const from = (await input()).length;
+    await page.mouse.move(300, fromY);
+    await page.mouse.down();
+    await page.mouse.move(300, toY, { steps: 40 });
+    await page.mouse.up();
+    await sleep(400);
+    return wheelSince(from);
+  };
+  const downWheel = await pushVertical(10, 590);
+  // Up pushes start above the status bar (the bottom 28 px aren't the gesture layer).
+  await pushVertical(560, 10); // back up to near the top edge
+  const upWheel = await pushVertical(560, 10);
+  const scrolledRegion = await (await fetch(`${BASE}/__harness/region`)).json();
+  // Recorded as Windows wheel deltas: negative scrolls down, positive up.
+  check('without Pan, pushing past the bottom or top edge scrolls down or up',
+    downWheel.length > 0 && downWheel.every((w) => w < 0) && upWheel.length > 0 && upWheel.every((w) => w > 0) &&
+      scrolledRegion.y === before.y,
+    `down ${downWheel.join(',')} | up ${upWheel.join(',')}`);
   await tapBar('button[data-toggle="pan"]'); // Pan on
   const after = await pushRight();
   await tapBar('button[data-toggle="pan"]'); // Pan off again
