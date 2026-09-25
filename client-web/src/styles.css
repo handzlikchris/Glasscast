@@ -154,6 +154,13 @@ textarea:focus-visible {
 
 .toolbar.top {
   top: 6px;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+/* Ten buttons share the top bar; keep them on one row. */
+.toolbar.top button {
+  padding: 4px 7px;
 }
 
 .toolbar.bottom {
