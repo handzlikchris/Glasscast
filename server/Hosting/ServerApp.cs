@@ -132,6 +132,10 @@ public static class ServerApp
 
         var files = new PhysicalFileProvider(root);
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-        app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = files,
+            OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = ClientCaching.For(ctx.Context.Request.Path),
+        });
     }
 }
