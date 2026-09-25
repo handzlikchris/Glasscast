@@ -99,6 +99,21 @@ public sealed class EndpointTests : IAsyncLifetime
         Assert.Equal(1960, reply.GetProperty("region").GetProperty("x").GetInt32());
     }
 
+    [Fact]
+    public async Task The_cast_area_follows_the_session_region_and_clears_when_it_ends()
+    {
+        var token = await _host.PairAsync();
+        using var session = await _host.StartSessionAsync(token);
+        Assert.NotNull(_host.CastArea.Current);
+
+        await session.SendAsync(new { type = "setRegion", x = 100, y = 50, width = 600, height = 600 });
+        await session.ReceiveAsync();
+        Assert.Equal(new CaptureRegion(100, 50, 600, 600), _host.CastArea.Current);
+
+        _host.Coordinator.TerminateActiveSession();
+        await WaitUntil(() => _host.CastArea.Current is null);
+    }
+
     // Brief tests 1 and 4: no pairing while a session is active, and the answer is generic.
     [Fact]
     public async Task Pairing_is_refused_generically_while_a_session_is_active()

@@ -44,6 +44,7 @@ public static class ServerApp
             config["Desktop:RegionFile"] is { Length: > 0 } path ? path : RegionStore.DefaultPath,
             sp.GetRequiredService<ILogger<RegionStore>>()));
 
+        services.AddSingleton<CastArea>();
         services.AddSingleton<IScreen, WindowsScreen>();
         services.AddSingleton<ICaptureSource, GdiCaptureSource>();
         services.AddSingleton<IInputInjector, Win32InputInjector>();

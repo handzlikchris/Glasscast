@@ -19,6 +19,7 @@ public sealed record SessionServices(
     IMediaPeerFactory Peers,
     IFrameEncoderFactory Encoders,
     FramePump Pump,
+    CastArea CastArea,
     AlertLog Alerts,
     TimeProvider Time,
     ILogger<ControlSession> Logger);
@@ -51,6 +52,7 @@ public sealed class ControlSession
 
         using var awake = _s.KeepAwake.Acquire();
         var controller = new InputController(_s.Input, _s.RegionStore, _s.Screen.PrimarySize, _s.RegionStore.Load());
+        _s.CastArea.Set(controller.Region);
         using var encoder = _s.Encoders.Create();
         using var peer = _s.Peers.Create(encoder.Codec);
         peer.Closed += () => SafeCancel(cts);
@@ -99,6 +101,7 @@ public sealed class ControlSession
             {
                 closeReason = "terminated";
             }
+            _s.CastArea.Set(null);
             await _io.CloseQuietlyAsync(closeStatus, closeReason);
             _s.Logger.LogInformation("Session {Session} closed: {Reason}", _lease.Id, closeReason);
         }
@@ -165,6 +168,7 @@ public sealed class ControlSession
                     Interlocked.Exchange(ref _lastInputTimestamp, _s.Time.GetTimestamp());
                     if (controller.Handle(message!) == HandleResult.RegionChanged)
                     {
+                        _s.CastArea.Set(controller.Region);
                         await _io.SendAsync(new { type = "region", region = controller.Region }, ct);
                     }
                     break;

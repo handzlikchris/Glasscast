@@ -73,6 +73,8 @@ public sealed class TestServerHost : IAsyncDisposable
 
     public AlertLog Alerts => _app.Services.GetRequiredService<AlertLog>();
 
+    public CastArea CastArea => _app.Services.GetRequiredService<CastArea>();
+
     public HttpClient CreateHttpClient() => _app.GetTestServer().CreateClient();
 
     public async Task<TestSocket> ConnectAsync(string path, string? origin = Origin)
