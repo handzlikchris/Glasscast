@@ -74,6 +74,17 @@ try {
     statusText.trim().endsWith('pointer') && lookLabel === 'lifted', `${lookLabel}`);
   await shot('2-view');
 
+  // 2b. Stats: the PC's per-frame timings match the frames the video element shows (RTP timestamps).
+  await tapBar('button[data-toggle="stats"]');
+  const statsShown = await page
+    .waitForFunction(() => /e2e \d+ ms/.test(document.querySelector('.stats-panel')?.textContent ?? ''), { timeout: 10_000 })
+    .then(() => true, () => false);
+  const statsText = await page.$$eval('.stats-panel div', (lines) => lines.map((l) => l.textContent).join(' | '));
+  await shot('2b-stats');
+  await tapBar('button[data-toggle="stats"]');
+  check('the Stats panel shows capture-to-display latency and PC timings',
+    statsShown && /PC→here \d+/.test(statsText) && /PC capture \d+/.test(statsText), statsText);
+
   // 3. Pointer mode: drag moves, short tap clicks.
   await tapBar('button[data-mode="pointer"]');
   await page.mouse.move(300, 300);
