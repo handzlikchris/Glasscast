@@ -242,14 +242,13 @@ try {
   const typedBefore = (await input()).length;
   await pinch(); // presses Send text
   const afterSend = await activeName();
-  await pinch(); // presses Enter
-  const afterEnter = await activeName();
+  await pinch(); // presses Enter, which returns to Pointer mode
   const typed = (await input()).slice(typedBefore);
-  await pinch(); // presses Pointer
-  const roundTripStatus = await page.$eval('.status', (el) => el.textContent);
-  check('Type round trip by pinches: text box, Send text, Enter, then Pointer',
-    afterType === 'TEXTAREA' && afterComposer === 'Send text' && afterSend === 'Enter' && afterEnter === 'pointer' &&
-      typed.join('|') === 'type from the composer|key Enter' && roundTripStatus.trim().endsWith('pointer'),
+  const roundTripMode = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  const afterEnter = roundTripMode;
+  check('Type round trip by pinches: text box, Send text, Enter, then Pointer mode',
+    afterType === 'TEXTAREA' && afterComposer === 'Send text' && afterSend === 'Enter' &&
+      typed.join('|') === 'type from the composer|key Enter' && roundTripMode === 'pointer',
     `after Type ${afterType}, composer ${afterComposer}, Send ${afterSend}, Enter ${afterEnter}, sent ${typed.join('|')}`);
 
   // 14. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
