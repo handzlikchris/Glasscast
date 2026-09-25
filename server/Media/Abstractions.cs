@@ -30,8 +30,11 @@ public interface IMediaPeer : IDisposable
 
     void AddRemoteCandidate(string candidate, string? sdpMid, int sdpMLineIndex);
 
-    /// <summary>Sends one encoded frame. <paramref name="durationRtpUnits"/> is at the 90 kHz video clock.</summary>
-    void SendFrame(byte[] encoded, uint durationRtpUnits);
+    /// <summary>
+    /// Sends one encoded frame. <paramref name="durationRtpUnits"/> is at the 90 kHz video clock.
+    /// Returns the RTP timestamp the frame went out with, so the glasses can match it to its capture time.
+    /// </summary>
+    uint SendFrame(byte[] encoded, uint durationRtpUnits);
 }
 
 public interface IMediaPeerFactory

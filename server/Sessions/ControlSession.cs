@@ -78,7 +78,7 @@ public sealed class ControlSession
 
             _lastInputTimestamp = _s.Time.GetTimestamp();
             var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
-            var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, null, ct);
+            var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
             var watching = IdleWatchAsync(ct);
 
             var finished = await Task.WhenAny(receiving, streaming, watching);
@@ -190,6 +190,28 @@ public sealed class ControlSession
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Media stats for the glasses' stats panel. Fire and forget: the frame pump must never wait
+    /// on the control socket, and a stats message that fails to send is simply lost.
+    /// </summary>
+    private void SendStats(MediaStats stats, CancellationToken ct)
+    {
+        var message = new
+        {
+            type = "mediaStats",
+            fps = Math.Round(stats.Fps, 1),
+            captureMs = Math.Round(stats.CaptureMs, 1),
+            captureMaxMs = Math.Round(stats.CaptureMaxMs, 1),
+            encodeMs = Math.Round(stats.EncodeMs, 1),
+            encodeMaxMs = Math.Round(stats.EncodeMaxMs, 1),
+            kbps = Math.Round(stats.Kbps),
+            keyframes = stats.Keyframes,
+            // [RTP timestamp, capture start in Unix ms (server clock), bytes] per frame sent.
+            frames = stats.Frames.Select(f => new long[] { f.Rtp, f.CapturedAtUnixMs, f.Bytes }).ToArray(),
+        };
+        _ = Swallow(_io.SendAsync(message, ct));
     }
 
     private static string ResultName(AppSwitchResult result) => result switch

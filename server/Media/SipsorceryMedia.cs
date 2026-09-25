@@ -137,7 +137,13 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         }
     }
 
-    public void SendFrame(byte[] encoded, uint durationRtpUnits) => _peer.SendVideo(durationRtpUnits, encoded);
+    public uint SendFrame(byte[] encoded, uint durationRtpUnits)
+    {
+        // SendVideo stamps the frame with the track's current timestamp, then advances it.
+        var rtpTimestamp = _peer.VideoLocalTrack?.Timestamp ?? 0;
+        _peer.SendVideo(durationRtpUnits, encoded);
+        return rtpTimestamp;
+    }
 
     private void RaiseClosed()
     {

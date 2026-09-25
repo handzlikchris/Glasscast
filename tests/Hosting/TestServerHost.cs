@@ -148,18 +148,36 @@ public sealed class TestSocket(WebSocket socket) : IDisposable
         await socket.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, CancellationToken.None);
     }
 
-    /// <summary>Next JSON message, skipping pongs.</summary>
+    /// <summary>Next JSON message, skipping pongs and media stats.</summary>
     public async Task<JsonElement> ReceiveAsync(int timeoutMs = 5000)
     {
         while (true)
         {
-            var text = await ReceiveTextAsync(timeoutMs) ?? throw new InvalidOperationException("socket closed");
-            var element = JsonDocument.Parse(text).RootElement;
-            if (element.GetProperty("type").GetString() != "pong")
+            var element = await ReceiveAnyAsync(timeoutMs);
+            if (element.GetProperty("type").GetString() is not ("pong" or "mediaStats"))
             {
                 return element;
             }
         }
+    }
+
+    /// <summary>Next message of the given type, skipping everything else.</summary>
+    public async Task<JsonElement> ReceiveAsync(string type, int timeoutMs = 5000)
+    {
+        while (true)
+        {
+            var element = await ReceiveAnyAsync(timeoutMs);
+            if (element.GetProperty("type").GetString() == type)
+            {
+                return element;
+            }
+        }
+    }
+
+    private async Task<JsonElement> ReceiveAnyAsync(int timeoutMs)
+    {
+        var text = await ReceiveTextAsync(timeoutMs) ?? throw new InvalidOperationException("socket closed");
+        return JsonDocument.Parse(text).RootElement;
     }
 
     public async Task<string?> ReceiveTextAsync(int timeoutMs = 5000)

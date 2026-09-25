@@ -87,6 +87,27 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Media_stats_list_each_sent_frame_with_its_rtp_timestamp_and_capture_time()
+    {
+        var token = await _host.PairAsync();
+        using var session = await _host.StartSessionAsync(token);
+        var before = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        await session.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+
+        var stats = await session.ReceiveAsync("mediaStats", timeoutMs: 5000);
+
+        Assert.True(stats.GetProperty("fps").GetDouble() > 0);
+        Assert.True(stats.GetProperty("keyframes").GetInt32() >= 1);
+        var frames = stats.GetProperty("frames").EnumerateArray().ToArray();
+        Assert.NotEmpty(frames);
+        // FakePeer numbers frames 0, 1, 2... at the test host's 30 fps: 3000 ticks of the 90 kHz clock apart.
+        Assert.Equal(0u, frames[0][0].GetUInt32());
+        Assert.Equal(3000u, frames[1][0].GetUInt32());
+        Assert.InRange(frames[0][1].GetInt64(), before - 1000, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        Assert.Equal(3, frames[0][2].GetInt32()); // FakeEncoder's frame
+    }
+
+    [Fact]
     public async Task Region_changes_are_clamped_and_echoed()
     {
         var token = await _host.PairAsync();

@@ -4,6 +4,23 @@ using Microsoft.Extensions.Options;
 
 namespace GlassesRemote.Server.Media;
 
+/// <summary>One sent frame: its RTP timestamp, when its capture started (Unix ms, server clock) and its size.</summary>
+public readonly record struct FrameTiming(uint Rtp, long CapturedAtUnixMs, int Bytes);
+
+/// <summary>
+/// What the pump sent over about a second. Capture and encode times are per frame; the frame
+/// list lets the glasses work out capture-to-display latency for each frame they show.
+/// </summary>
+public sealed record MediaStats(
+    double Fps,
+    double CaptureMs,
+    double CaptureMaxMs,
+    double EncodeMs,
+    double EncodeMaxMs,
+    double Kbps,
+    int Keyframes,
+    IReadOnlyList<FrameTiming> Frames);
+
 /// <summary>
 /// Capture → encode → send at a fixed frame rate once the peer is connected.
 ///
@@ -18,19 +35,21 @@ public sealed class FramePump
 
     private readonly ICaptureSource _capture;
     private readonly MediaOptions _options;
+    private readonly TimeProvider _time;
     private readonly ILogger<FramePump> _logger;
 
-    public FramePump(ICaptureSource capture, IOptions<MediaOptions> options, ILogger<FramePump> logger)
+    public FramePump(ICaptureSource capture, IOptions<MediaOptions> options, TimeProvider time, ILogger<FramePump> logger)
     {
         _capture = capture;
         _options = options.Value;
+        _time = time;
         _logger = logger;
     }
 
     /// <param name="currentSource">Returns the monitor rectangle to show right now (overview or region).</param>
-    /// <param name="onStats">Called about once a second with frames sent and mean capture+encode time.</param>
+    /// <param name="onStats">Called about once a second with what was sent since the last call.</param>
     public async Task RunAsync(IMediaPeer peer, IFrameEncoder encoder, Func<PixelRect> currentSource,
-        Action<double, double>? onStats, CancellationToken ct)
+        Action<MediaStats>? onStats, CancellationToken ct)
     {
         await WaitForConnectionAsync(peer, ct);
 
@@ -43,15 +62,14 @@ public sealed class FramePump
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / fps));
         var lastSource = default(PixelRect);
         var lastKeyframe = DateTime.UtcNow;
-        var statsStart = DateTime.UtcNow;
-        var framesSent = 0;
-        var busyMs = 0.0;
+        var window = new StatsWindow(_time.GetTimestamp());
 
         encoder.ForceKeyFrame();
 
         while (await timer.WaitForNextTickAsync(ct))
         {
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var started = _time.GetTimestamp();
+            var capturedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
             var source = currentSource();
 
             // A source of a different size (mode switch, resized region) changes the whole picture,
@@ -62,31 +80,69 @@ public sealed class FramePump
             {
                 encoder.ForceKeyFrame();
                 lastKeyframe = DateTime.UtcNow;
+                window.Keyframes++;
             }
             lastSource = source;
 
-            if (!_capture.TryCapture(source, frame, bgra))
+            if (_capture.TryCapture(source, frame, bgra))
             {
-                continue;
+                var captured = _time.GetTimestamp();
+                var encoded = encoder.Encode(bgra, frame.Width, frame.Height);
+                var encodedAt = _time.GetTimestamp();
+
+                if (encoded is { Length: > 0 } && peer.IsConnected)
+                {
+                    var rtp = peer.SendFrame(encoded, rtpDuration);
+                    window.Add(new FrameTiming(rtp, capturedAt, encoded.Length),
+                        _time.GetElapsedTime(started, captured).TotalMilliseconds,
+                        _time.GetElapsedTime(captured, encodedAt).TotalMilliseconds);
+                }
             }
 
-            var encoded = encoder.Encode(bgra, frame.Width, frame.Height);
-            if (encoded is { Length: > 0 } && peer.IsConnected)
+            var now = _time.GetTimestamp();
+            if (_time.GetElapsedTime(window.Started, now) >= TimeSpan.FromSeconds(1))
             {
-                peer.SendFrame(encoded, rtpDuration);
-                framesSent++;
+                onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
+                window = new StatsWindow(now);
             }
+        }
+    }
 
-            busyMs += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+    /// <summary>Frames sent during one stats interval.</summary>
+    private sealed class StatsWindow(long started)
+    {
+        private readonly List<FrameTiming> _frames = [];
+        private double _captureMs;
+        private double _captureMaxMs;
+        private double _encodeMs;
+        private double _encodeMaxMs;
 
-            var elapsed = DateTime.UtcNow - statsStart;
-            if (elapsed.TotalSeconds >= 1)
-            {
-                onStats?.Invoke(framesSent / elapsed.TotalSeconds, framesSent > 0 ? busyMs / framesSent : 0);
-                statsStart = DateTime.UtcNow;
-                framesSent = 0;
-                busyMs = 0;
-            }
+        public long Started { get; } = started;
+
+        public int Keyframes { get; set; }
+
+        public void Add(FrameTiming frame, double captureMs, double encodeMs)
+        {
+            _frames.Add(frame);
+            _captureMs += captureMs;
+            _captureMaxMs = Math.Max(_captureMaxMs, captureMs);
+            _encodeMs += encodeMs;
+            _encodeMaxMs = Math.Max(_encodeMaxMs, encodeMs);
+        }
+
+        public MediaStats ToStats(TimeSpan elapsed)
+        {
+            var count = Math.Max(1, _frames.Count);
+            var bytes = _frames.Sum(f => (long)f.Bytes);
+            return new MediaStats(
+                Fps: _frames.Count / elapsed.TotalSeconds,
+                CaptureMs: _captureMs / count,
+                CaptureMaxMs: _captureMaxMs,
+                EncodeMs: _encodeMs / count,
+                EncodeMaxMs: _encodeMaxMs,
+                Kbps: bytes * 8 / elapsed.TotalSeconds / 1000,
+                Keyframes: Keyframes,
+                Frames: _frames);
         }
     }
 
