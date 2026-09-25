@@ -2,10 +2,13 @@
 // VP8, GDI capture) with two changes so a headless browser can drive it unattended:
 //   1. pairing requests are approved automatically;
 //   2. input and app switches are recorded, never applied to the real desktop.
+// It can also lose the start of the next session's video stream (POST /__harness/lose-stream-start).
 // It listens on 127.0.0.1:5081 only and must never be deployed.
 using System.Collections.Concurrent;
 using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Hosting;
+using GlassesRemote.Server.Media;
+using Microsoft.Extensions.Options;
 using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Protocol;
 
@@ -22,6 +25,8 @@ var app = ServerApp.Create(args, builder =>
         ["Web:AllowedOrigins:0"] = "http://127.0.0.1:5081",
         ["Web:ClientRoot"] = Path.Combine(repoRoot, "client-web", "dist"),
         ["Media:IncludeLanCandidates"] = "true",
+        // Keyframes mostly on request, so the lost-stream-start check sees them answered.
+        ["Media:KeyframeIntervalSeconds"] = "30",
         ["Media:PublicIp"] = "",
         ["Desktop:RegionFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-region.json"),
         ["Diagnostics:StatsDirectory"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-stats"),
@@ -35,6 +40,8 @@ var app = ServerApp.Create(args, builder =>
     // Never move real windows from the harness: record the switch instead.
     builder.Services.AddSingleton<IWindowSwitcher>(new RecordingSwitcher(recorder));
     builder.Services.AddSingleton<IKeepAwake, NoKeepAwake>();
+    builder.Services.AddSingleton<HarnessPeers>();
+    builder.Services.AddSingleton<IMediaPeerFactory>(sp => sp.GetRequiredService<HarnessPeers>());
 });
 
 var coordinator = app.Services.GetRequiredService<PairingCoordinator>();
@@ -50,6 +57,8 @@ app.MapGet("/__harness/session", () => coordinator.ActiveSession);
 app.MapGet("/__harness/region", () => app.Services.GetRequiredService<RegionStore>().Load());
 // Ends the session like the tray's "End session", to reach the client's "Session ended" screen.
 app.MapPost("/__harness/terminate", () => coordinator.TerminateActiveSession());
+// The next session's first frames (its first keyframe included) never reach the browser.
+app.MapPost("/__harness/lose-stream-start", () => app.Services.GetRequiredService<HarnessPeers>().DropStartOfNext = true);
 
 app.Run();
 
@@ -76,6 +85,25 @@ sealed class RecordingInput : IInputInjector
     public void TypeText(string text) => Actions.Enqueue($"type {text}");
 
     public void Press(KeyCommand key) => Actions.Enqueue($"key {key}");
+}
+
+/// <summary>The real media peers; can make the next one lose the start of its stream.</summary>
+sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers) : IMediaPeerFactory
+{
+    private readonly MediaPeerFactory _real = new(options, loggers);
+
+    public bool DropStartOfNext { get; set; }
+
+    public IMediaPeer Create(string codec)
+    {
+        var peer = _real.Create(codec);
+        if (DropStartOfNext && peer is SipsorceryMediaPeer real)
+        {
+            DropStartOfNext = false;
+            real.DropFirstFrames(5);
+        }
+        return peer;
+    }
 }
 
 sealed class NoKeepAwake : IKeepAwake

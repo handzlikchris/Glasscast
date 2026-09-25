@@ -406,6 +406,10 @@ try {
     `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
   // 18b. Restarting the page reconnects without pairing: the PC remembers approved glasses for a
   //      while (device token). The old session is replaced if the PC hasn't noticed it's gone.
+  //      The harness also loses the start of this stream (its first keyframe): the browser asks
+  //      for a keyframe (PLI) and the PC answers it; the harness's own keyframes are 30 s apart.
+  await fetch(`${BASE}/__harness/lose-stream-start`, { method: 'POST' });
+  const reloadedAt = Date.now();
   await page.reload({ waitUntil: 'load' });
   const resumedLive = await page
     .waitForFunction(() => document.querySelector('.status')?.textContent?.includes('live'), { timeout: 15_000 })
@@ -415,6 +419,18 @@ try {
   const pairingSeen = await page.$('.pairing');
   check('restarting the page reconnects without pairing', resumedLive && !pairingSeen && starts.at(-1)?.resumed === true,
     `${starts.length} starts, last resumed ${starts.at(-1)?.resumed}`);
+  // Wait for the first picture (frames shown, from the glasses' stats) and the PC's request count.
+  let asked = 0;
+  let firstPictureMs = null;
+  for (let waited = 0; waited < 8000 && (asked === 0 || firstPictureMs === null); waited += 250) {
+    await sleep(250);
+    const session = statsLog().filter((l) => l.session === starts.at(-1)?.session);
+    asked = session.filter((l) => l.kind === 'pc').reduce((sum, l) => sum + (l.keyframeRequests ?? 0), 0);
+    const shown = session.find((l) => l.kind === 'glasses' && l.framesShown > 0);
+    if (shown && firstPictureMs === null) firstPictureMs = Date.parse(shown.t) - reloadedAt;
+  }
+  check('a stream whose start was lost asks for a keyframe and the PC answers it at once',
+    asked > 0 && firstPictureMs !== null && firstPictureMs < 4000, `asked ${asked}, picture within ${firstPictureMs} ms`);
 
   // 19. After the session ends, a pinch anywhere presses the focused "Pair again" (the glasses'
   //     pinch doesn't land on the button), and pairing starts again (auto-approved here).
