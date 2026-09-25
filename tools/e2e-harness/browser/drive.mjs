@@ -106,11 +106,26 @@ try {
   const mode = await page.$eval('.status', (el) => el.textContent);
   check('Use region returns to View mode', mode.includes('view'));
 
-  // 7. Input is rejected in View mode (nothing new recorded).
-  const before = (await input()).length;
+  // 7. Edge panning: in Pointer mode, pushing past the right edge slides the region right.
+  const before = await (await fetch(`${BASE}/__harness/region`)).json();
+  await page.locator('button::-p-text(Pointer)').click();
+  await page.mouse.move(60, 300);
+  await page.mouse.down();
+  await page.mouse.move(590, 300, { steps: 40 });
+  await page.mouse.up();
+  await sleep(600);
+  const after = await (await fetch(`${BASE}/__harness/region`)).json();
+  await shot('6-edge-pan');
+  check('pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
+    `x ${before?.x} -> ${after?.x}`);
+  await page.locator('button::-p-text(View)').click();
+  await sleep(200);
+
+  // 8. Input is rejected in View mode (nothing new recorded).
+  const inputsBefore = (await input()).length;
   await page.mouse.click(300, 300);
   await sleep(300);
-  check('View mode ignores taps', (await input()).length === before);
+  check('View mode ignores taps', (await input()).length === inputsBefore);
 } finally {
   await browser.close();
 }

@@ -39,6 +39,7 @@ coordinator.RequestOpened += request =>
 // Lets the browser script check what the "desktop" received.
 app.MapGet("/__harness/input", () => recorder.Actions.ToArray());
 app.MapGet("/__harness/session", () => coordinator.ActiveSession);
+app.MapGet("/__harness/region", () => app.Services.GetRequiredService<RegionStore>().Load());
 
 app.Run();
 
