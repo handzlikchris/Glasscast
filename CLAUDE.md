@@ -186,7 +186,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
   pointer tap **at the glasses' pointer position, not on the focused element** (so the app
   redirects it to the focused control); pinch-drag → pointer events. Back (middle-finger pinch)
   calls `history.back()` when the page has a history entry, else opens the system web app menu
-  (Restart/Resume/kill); the session keeps one entry so Back toggles view ↔ controls. Double
+  (Restart/Resume/kill); the session keeps one entry so Back goes view → controls, and from
+  the controls (or Type/Overview) home to Pointer mode. Double
   middle pinch toggles the display (reserved).
 - The voice/handwriting **composer** is a system feature: the page only gets text via
   `input`/`change` on a focused `<textarea>`; it opens on user activation, not `.focus()`.

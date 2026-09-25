@@ -287,7 +287,7 @@ try {
   await sleep(500);
   const afterDoubleBack = await focusName();
   const stillInSession = await page.$('.stage').then((el) => el !== null);
-  check('Back toggles view ↔ controls (focus held on Type through a reset), a doubled Back counts once',
+  check('Back: view → controls (focus held on Type through a reset) → Pointer, a doubled Back counts once',
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
   // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, left cycles the apps
@@ -310,6 +310,12 @@ try {
   check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
     swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
+
+  // Back from Type (or from the mode bar) goes home to Pointer.
+  await page.evaluate(() => history.back());
+  await sleep(300);
+  const modeAfterBackFromType = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  check('Back from Type returns to Pointer mode', modeAfterBackFromType === 'pointer', modeAfterBackFromType);
 
   await press('button[data-mode="pointer"]');
   await sleep(100);
