@@ -11,6 +11,13 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage('{"type":"authFailed"}')).toEqual({ type: 'authFailed' });
   });
 
+  it('takes the starting mode from hello, falling back to view', () => {
+    const hello = (mode: string) =>
+      `{"type":"hello","monitor":{"width":2560,"height":1440},"region":{"x":0,"y":0,"width":600,"height":600},"mode":"${mode}","codec":"H264"}`;
+    expect(parseServerMessage(hello('pointer'))).toMatchObject({ type: 'hello', mode: 'pointer' });
+    expect(parseServerMessage(hello('bogus'))).toMatchObject({ type: 'hello', mode: 'view' });
+  });
+
   it('drops malformed or unknown messages', () => {
     expect(parseServerMessage('not json')).toBeNull();
     expect(parseServerMessage('{"type":"pairCode","code":5}')).toBeNull();

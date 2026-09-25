@@ -47,21 +47,6 @@ const MODES: { mode: ViewMode; label: string }[] = [
 
 const LOOKS: Look[] = ['natural', 'lifted', 'contrast'];
 
-const MENU_HINT = 'pinch, then pinch-hold: menu';
-
-function hintFor(mode: ViewMode, nav: NavTarget): string | null {
-  if (mode === 'overview') return 'Pinch-drag to move the box';
-  if (mode === 'type') return null;
-  if (nav === 'controls') return 'Swipe to pick · pinch to press';
-  switch (mode) {
-    case 'view':
-      return `Swipe: move view · ${MENU_HINT}`;
-    case 'pointer':
-      return `Drag: cursor · pinch: click · swipe: move view · ${MENU_HINT}`;
-    case 'scroll':
-      return `Drag: scroll · swipe: move view · ${MENU_HINT}`;
-  }
-}
 
 interface Props {
   onEnded(reason: string): void;
@@ -97,14 +82,16 @@ export function SessionScreen({ onEnded }: Props) {
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
+  const setNavRef = useRef<(next: NavTarget) => void>(() => {});
 
   const [monitor, setMonitor] = useState<Size | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
   const [draft, setDraft] = useState<Region | null>(null);
   const [aspect, setAspect] = useState<AspectName>('square');
-  const [mode, setModeState] = useState<ViewMode>('view');
+  // The server says which mode a session starts in (Pointer); this is only until hello arrives.
+  const [mode, setModeState] = useState<ViewMode>('pointer');
   const [cursor, setCursor] = useState<Point | null>(null);
-  const [look, setLook] = useState<Look>('natural');
+  const [look, setLook] = useState<Look>('lifted');
   const [panEdge, setPanEdge] = useState<Point | null>(null);
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
@@ -139,6 +126,10 @@ export function SessionScreen({ onEnded }: Props) {
           setMonitor(message.monitor);
           setRegion(message.region);
           setAspect(Math.abs(message.region.width / message.region.height - 1) < 0.05 ? 'square' : 'wide');
+          setModeState(message.mode);
+          live.current.mode = message.mode;
+          setNavRef.current(navAfterMode(message.mode));
+          if (message.mode === 'pointer') setCursor(centreOf(contentRect(message.region)));
           break;
         case 'rtcOffer':
           receiver?.handleOffer(message.sdp).catch(() => end('Could not start the video stream.'));
@@ -198,6 +189,7 @@ export function SessionScreen({ onEnded }: Props) {
     setNavState(next);
     if (next === 'view' && document.activeElement instanceof HTMLElement) document.activeElement.blur();
   };
+  setNavRef.current = setNav;
 
   const pressFocused = () => {
     const el = focused.current;
@@ -511,7 +503,6 @@ export function SessionScreen({ onEnded }: Props) {
   // ---- render ----
   const nextLook = LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length];
   const mediaOk = status.media === 'connected';
-  const hint = hintFor(mode, nav);
 
   return (
     <div ref={stageRef} className={`stage look-${look}`}>
@@ -536,8 +527,6 @@ export function SessionScreen({ onEnded }: Props) {
           Look: {look}
         </button>
       </nav>
-
-      {hint && <div className="hint">{hint}</div>}
 
       {mode === 'overview' && (
         <nav className="toolbar bottom" aria-label="Region">

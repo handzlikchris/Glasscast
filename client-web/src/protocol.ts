@@ -86,7 +86,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return { type: data.type };
     case 'hello':
       return isSize(data.monitor) && isRegion(data.region) && isString(data.codec)
-        ? { type: 'hello', monitor: data.monitor, region: data.region, mode: 'view', codec: data.codec }
+        ? { type: 'hello', monitor: data.monitor, region: data.region, mode: toViewMode(data.mode), codec: data.codec }
         : null;
     case 'rtcOffer':
       return isString(data.sdp) ? { type: 'rtcOffer', sdp: data.sdp } : null;
@@ -99,4 +99,11 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     default:
       return null;
   }
+}
+
+const VIEW_MODES: readonly ViewMode[] = ['overview', 'view', 'pointer', 'scroll', 'type'];
+
+/** The server's starting mode; anything unexpected falls back to View, which sends no input. */
+function toViewMode(value: unknown): ViewMode {
+  return VIEW_MODES.find((m) => m === value) ?? 'view';
 }
