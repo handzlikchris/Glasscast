@@ -64,6 +64,7 @@ export function PairingScreen({ onPaired }: Props) {
           </button>
         </>
       )}
+      <p className="build">Build {__BUILD__}</p>
     </main>
   );
 }

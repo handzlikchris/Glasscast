@@ -23,6 +23,7 @@ export function App() {
           <button type="button" autoFocus onClick={() => setPhase({ kind: 'pairing', attempt: Date.now() })}>
             Pair again
           </button>
+          <p className="build">Build {__BUILD__}</p>
         </main>
       );
   }

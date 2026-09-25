@@ -96,6 +96,11 @@ textarea:focus-visible {
   color: var(--danger);
 }
 
+.build {
+  font: 13px/1.2 var(--mono);
+  color: var(--muted);
+}
+
 /* ---------- session ---------- */
 
 .stage {
