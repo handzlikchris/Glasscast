@@ -88,15 +88,7 @@ try {
   check('short tap clicks', actions.includes('click Left'));
   await shot('3-pointer');
 
-  // 4. Scroll mode: dragging up scrolls down (negative Windows wheel).
-  await tapBar('button[data-mode="scroll"]');
-  await page.mouse.move(300, 400);
-  await page.mouse.down();
-  await page.mouse.move(300, 280, { steps: 12 });
-  await page.mouse.up();
-  await sleep(300);
-  actions = await input();
-  check('scroll drag sends wheel', actions.some((a) => /^wheel -\d+/.test(a)));
+  // 4. (Scrolling is by swipes in Pointer mode now: see step 17.)
 
   // 5. Type mode: text and keys are separate; text never presses Enter.
   await tapBar('button[data-mode="type"]');
@@ -136,36 +128,43 @@ try {
   await shot('6-edge-pan');
   check('pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
     `x ${before?.x} -> ${after?.x}`);
-  await tapBar('button[data-mode="scroll"]');
-  await sleep(200);
 
-  // 8. Taps don't click in Scroll mode (nothing new recorded).
+  // 8. Taps don't click in Region mode (nothing new recorded); Cancel returns to Pointer.
+  await tapBar('button[data-mode="overview"]');
+  await sleep(300);
   const inputsBefore = (await input()).length;
   await page.mouse.click(300, 300);
-  await sleep(300);
-  check('Scroll mode ignores taps', (await input()).length === inputsBefore);
+  await sleep(500);
+  check('Region mode ignores taps', (await input()).length === inputsBefore);
+  await page.locator('button::-p-text(Cancel)').click();
+  await sleep(200);
 
   // 9. On the controls, a pinch (a tap on the video) presses the focused button. Tab
-  //    stands in for the glasses' swipes. Picking Scroll sends swipes back to the view.
+  //    stands in for the glasses' swipes. Picking Pointer sends swipes back to the view.
   await page.focus('button[data-mode="overview"]');
   let focusedMode = null;
-  for (let i = 0; i < 8 && focusedMode !== 'scroll'; i++) {
+  for (let i = 0; i < 8 && focusedMode !== 'pointer'; i++) {
     await page.keyboard.press('Tab');
     focusedMode = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
   }
   await page.mouse.click(300, 300);
   await sleep(300);
-  const pinchStatus = await page.$eval('.status', (el) => el.textContent);
+  const pinchMode = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   const focusAfterPick = await page.evaluate(() => document.activeElement?.tagName ?? null);
   check('a pinch presses the focused button, then swipes go back to the view',
-    pinchStatus.includes('scroll') && focusAfterPick === 'BODY', `focus ${focusAfterPick}`);
+    pinchMode === 'pointer' && focusAfterPick === 'BODY', `mode ${pinchMode}, focus ${focusAfterPick}`);
 
-  // 10. Swipes move the view by a quarter of its size (left here: earlier steps panned right).
+  // 10. With Pan on, swipes move the view by a quarter of its size (left here: earlier steps
+  //     panned right).
   const regionAt = async () => (await fetch(`${BASE}/__harness/region`)).json();
+  await tapBar('button[data-toggle="pan"]'); // Pan on
+  await sleep(200);
   const beforeSwipe = await regionAt();
   await page.keyboard.press('ArrowLeft');
   await sleep(400);
   const afterSwipe = await regionAt();
+  await tapBar('button[data-toggle="pan"]'); // Pan off again
+  await sleep(200);
   check('a left swipe moves the view left by a quarter of its width',
     afterSwipe.x === Math.max(0, beforeSwipe.x - Math.round(beforeSwipe.width / 4)) && afterSwipe.y === beforeSwipe.y,
     `x ${beforeSwipe.x} -> ${afterSwipe.x}, width ${beforeSwipe.width}`);
@@ -182,7 +181,7 @@ try {
     await sleep(200);
   };
 
-  // 11. Pinch, then pinch-hold puts focus on the likely next mode (Pointer, from Scroll);
+  // 11. Pinch, then pinch-hold puts focus on the likely next mode (Type, from Pointer);
   //     swipes then stay on the controls.
   await pinchThenHold();
   const heldFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
@@ -190,13 +189,12 @@ try {
   await page.keyboard.press('ArrowRight');
   await sleep(300);
   const afterControlsSwipe = await regionAt();
-  check('pinch, then pinch-hold from Scroll focuses Pointer', heldFocus === 'pointer' &&
+  check('pinch, then pinch-hold from Pointer focuses Type', heldFocus === 'type' &&
     afterControlsSwipe.x === beforeControlsSwipe.x, `focus ${heldFocus}`);
 
   // 12. Pointer mode: a pinch clicks after a short wait, two quick pinches double-click,
   //     and pinch-then-hold clicks nothing.
-  await page.keyboard.press('ArrowLeft'); // back onto Pointer after the swipe above
-  await page.mouse.click(300, 300);
+  await tapBar('button[data-mode="pointer"]'); // back to Pointer, swipes on the view
   await sleep(300);
   const clicksIn = async (fn) => {
     const before = (await input()).length;

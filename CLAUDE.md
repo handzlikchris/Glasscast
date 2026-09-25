@@ -59,7 +59,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 28 checks)
+                        browser/drive.mjs (headless Chrome, 27 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -118,8 +118,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    `pairFailed`, `authFailed`, `authenticated`, `hello`, `rtcOffer`, `region`, `appSwitch`
    (switched/notRunning/failed), `pong`.
 5. Modes (server-gated in `InputController`): Overview (button labelled **"Region"**; moves the
-   region box), View (still in the protocol, no button any more), **Pointer** (cursor, click,
-   scroll; pushing past an edge pans the region), Scroll, Type. The region is persisted by
+   region box), **Pointer** (cursor, click, scroll; pushing past an edge pans the region), Type.
+   View and Scroll are still in the protocol but have no buttons any more. The region is persisted by
    `RegionStore` across sessions and mirrored to `CastArea`, which the tray draws on the monitor.
 6. Geometry is mirrored: `RegionMath.cs` ⇄ `geometry.ts` (letterbox fit, clamp to monitor, min 160 px).
    Frames are always 600×600 with the source letterboxed.
@@ -129,14 +129,14 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Scroll · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look**. Model in
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look**. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
   **left → next app** (1 → 2 → … → 1). The **Pan** toggle makes swipes move the view by a quarter
-  screen instead (as they always do in Scroll mode).
+  screen instead.
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
   otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
   pinch-and-hold 0.5 s (movement ignored) also opens the controls.
@@ -276,8 +276,8 @@ The mode bar: **Region · Scroll · Pointer · Type · 1 · 2 … · Pan · ☀ 
 - Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
   toggle (user reported it not working before the always-visible bar; no readout yet).
 - Pending: M0 latency numbers, external port scan, decode cost on the glasses, pinch-drag
-  gain/threshold tuning, maybe removing Scroll mode (swipes scroll in Pointer now) and the
-  pinch-then-hold gesture (Back replaced it; dropping it would remove the 350 ms click delay).
+  gain/threshold tuning, maybe removing the pinch-then-hold gesture (Back replaced it; dropping
+  it would remove the 350 ms click delay).
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
   the task". `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
