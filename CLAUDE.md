@@ -63,7 +63,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 33 checks)
+                        browser/drive.mjs (headless Chrome, 34 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -143,15 +143,19 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look · Stats**. Model in
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · Look · Stats** (one row;
+tight padding, check a screenshot when adding buttons). Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
   **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
-  the edges, and pushing on past the top/bottom edge **scrolls** (edge scrolling, ~60 px per
-  notch). The **Pan** toggle makes swipes move the view by a quarter screen instead, and pushing
+  the edges, and pushing past the top/bottom edge starts **hold-to-scroll** (`edgeScrollStep`):
+  steady scrolling until the drag ends or comes back in. It also starts when the glasses' own
+  pointer is pushed against the display edge, since it then reports no more movement. **↕** sets
+  the scroll strength per app (9/5/3/2/1 notches per swipe; edge scrolling at half that per
+  second), kept in localStorage by app name. The **Pan** toggle makes swipes move the view by a quarter screen instead, and pushing
   the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
   otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
@@ -214,7 +218,7 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
   Ending a session on the PC, a protocol violation, or **Forget remembered glasses** in the tray
   forget it too. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level and the device token (`connection.ts`, localStorage;
+- The client stores only the brightness level, scroll strengths per app name, and the device token (`connection.ts`, localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); only a
   page (re)load resumes by itself.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
