@@ -395,6 +395,18 @@ try {
   check('the hidden mode bar lets taps through to the desktop',
     hiddenRegion.opacity === '0' && tapClicks === 1 && modeAfterHiddenTap === 'pointer',
     `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
+  // 18b. Restarting the page reconnects without pairing: the PC remembers approved glasses for a
+  //      while (device token). The old session is replaced if the PC hasn't noticed it's gone.
+  await page.reload({ waitUntil: 'load' });
+  const resumedLive = await page
+    .waitForFunction(() => document.querySelector('.status')?.textContent?.includes('live'), { timeout: 15_000 })
+    .then(() => true, () => false);
+  await sleep(500);
+  const starts = statsLog().filter((l) => l.kind === 'event' && l.event === 'start');
+  const pairingSeen = await page.$('.pairing');
+  check('restarting the page reconnects without pairing', resumedLive && !pairingSeen && starts.at(-1)?.resumed === true,
+    `${starts.length} starts, last resumed ${starts.at(-1)?.resumed}`);
+
   // 19. After the session ends, a pinch anywhere presses the focused "Pair again" (the glasses'
   //     pinch doesn't land on the button), and pairing starts again (auto-approved here).
   await fetch(`${BASE}/__harness/terminate`, { method: 'POST' });
