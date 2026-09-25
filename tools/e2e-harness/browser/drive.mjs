@@ -200,6 +200,26 @@ try {
     `single ${single}, double ${double}`);
   check('in Pointer mode pinch-then-hold opens the controls without clicking', held === 0 && heldToPointer === 'pointer',
     `clicks ${held}, focus ${heldToPointer}`);
+
+  // 13. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
+  //     text box (where the glasses' pointer tends to be after typing). Pointer gets pressed.
+  await page.locator('button::-p-text(Type)').click();
+  await page.locator('textarea').fill('typed on the glasses');
+  await page.focus('button[data-mode="type"]');
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Tab'); // Scroll
+  await page.keyboard.press('Tab'); // Pointer
+  await page.keyboard.up('Shift');
+  const focusBeforeBack = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  const box = await page.$eval('textarea', (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.click(box.x, box.y);
+  await sleep(300);
+  const backStatus = await page.$eval('.status', (el) => el.textContent);
+  check('from Type mode, a pinch on the text box presses the focused Pointer button',
+    focusBeforeBack === 'pointer' && backStatus.trim().endsWith('pointer'), `focus ${focusBeforeBack}, status ${backStatus.replace(/\s+/g, ' ')}`);
 } finally {
   await browser.close();
 }
