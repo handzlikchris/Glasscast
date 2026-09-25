@@ -16,6 +16,8 @@ import {
   ARROW_STEPS,
   enterIsSamePinch,
   menuFocusFor,
+  navAfterBack,
+  SAME_BACK_MS,
   navAfterMode,
   routeTap,
   VIEW_NAV_MODES,
@@ -90,6 +92,8 @@ export function SessionScreen({ onEnded }: Props) {
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
+  const backRef = useRef<() => void>(() => {});
+  const lastBackAt = useRef(-Infinity);
   /** Focus was last moved by swipes (arrow keys) or Tab, not by clicking a control. */
   const keyFocus = useRef(false);
 
@@ -233,12 +237,26 @@ export function SessionScreen({ onEnded }: Props) {
   };
 
   /** Pinch, then pinch and hold: put focus on the current mode's button. */
-  const focusControls = () => {
+  const focusControls = (how = 'pinch, hold') => {
     setNav('controls');
     keyFocus.current = true;
     focusModeButton(menuFocusFor(live.current.mode));
-    setLastInput('pinch, hold → controls');
+    setLastInput(`${how} → controls`);
   };
+
+  /** Back: to the controls, or from them back to the view. One gesture may arrive twice. */
+  const onBack = () => {
+    const now = performance.now();
+    if (now - lastBackAt.current < SAME_BACK_MS) return;
+    lastBackAt.current = now;
+    if (navAfterBack(live.current.nav, live.current.mode) === 'view') {
+      setNav('view');
+      setLastInput('back → view');
+    } else {
+      focusControls('back');
+    }
+  };
+  backRef.current = onBack;
 
   useEffect(() => {
     const stage = stageRef.current!;
@@ -251,6 +269,13 @@ export function SessionScreen({ onEnded }: Props) {
     };
     const onKeyDown = (e: KeyboardEvent) => {
       setLastInput(`key ${e.key}`);
+      if ((e.key === 'Escape' || e.key === 'Backspace') && !(e.target instanceof HTMLTextAreaElement)) {
+        // The glasses' Back, as a key.
+        e.preventDefault();
+        e.stopPropagation();
+        backRef.current();
+        return;
+      }
       const step = ARROW_STEPS[e.key];
       const { nav: target, mode: m } = live.current;
       if (step && target === 'view' && VIEW_NAV_MODES.includes(m) && !(e.target instanceof HTMLTextAreaElement)) {
@@ -340,6 +365,22 @@ export function SessionScreen({ onEnded }: Props) {
       document.removeEventListener('keydown', onKeyDown, true);
       if (holdTimer.current !== null) clearTimeout(holdTimer.current);
       if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
+    };
+  }, []);
+
+  // The glasses only call history.back() for Back when the page has an entry to go back to (at the
+  // root they show the system menu), so keep one extra entry for the whole session and put it back
+  // after each Back. Leaving the session drops it, so Back opens the menu again.
+  useEffect(() => {
+    history.pushState({ glassesBack: true }, '');
+    const onPopState = () => {
+      history.pushState({ glassesBack: true }, '');
+      backRef.current();
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+      if ((history.state as { glassesBack?: boolean } | null)?.glassesBack) history.back();
     };
   }, []);
 

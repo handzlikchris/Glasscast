@@ -9,7 +9,8 @@
 //              and Scroll modes, which have no panels of their own.
 //   "controls" swipes move focus between buttons and a pinch presses the focused one.
 //
-// Pinch, then pinch and hold (see TapThenHold) jumps from "view" to "controls".
+// Back (middle-finger pinch) jumps from "view" to "controls" and back again; pinch, then
+// pinch and hold (see TapThenHold) also jumps to "controls".
 // Picking View, Pointer or Scroll goes back to "view". The glasses may also send a
 // pinch as Enter; whichever arrives second is dropped so one pinch never presses twice.
 
@@ -72,4 +73,19 @@ export function menuFocusFor(mode: ViewMode): ViewMode {
     default:
       return mode;
   }
+}
+
+/**
+ * The glasses deliver Back as history.back() (when the page has an entry to go back to) and
+ * possibly also as an Escape/Backspace key. Two Backs this close together are one gesture.
+ */
+export const SAME_BACK_MS = 400;
+
+/**
+ * Where Back takes you: from the view to the controls; from the controls back to the view in
+ * the modes that have one (View, Pointer, Scroll). In Overview and Type it just refocuses the
+ * controls.
+ */
+export function navAfterBack(nav: NavTarget, mode: ViewMode): NavTarget {
+  return nav === 'controls' && VIEW_NAV_MODES.includes(mode) ? 'view' : 'controls';
 }
