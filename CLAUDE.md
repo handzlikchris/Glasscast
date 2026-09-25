@@ -154,15 +154,36 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
-- **Stats** shows a latency panel. `e2e` = PC capture start → frame shown (avg 2 s, max 10 s,
-  with the slowest frame's size), split into `PC→here` and `buffer+show`; `clock ±n` is the
-  clock-offset error. The status bar's `ms` is only the control socket's ping. It excludes the
-  wait for the next capture tick (0–50 ms at 20 fps) and the glasses' display scan-out.
+- **Stats** (last bar button) shows the latency panel; see "Measuring on the device".
+
+## Measuring on the device (Stats panel and stats log)
+
+- **Panel:** `e2e` = PC capture start → frame shown (avg 2 s, max 10 s, with the slowest frame's
+  size), split into `PC→here` (capture, encode, send, network) and `buffer+show` (jitter buffer,
+  decode, render); `clock ±n` is the clock-offset error. Then the receiver's counters (jitter
+  buffer, decode, bitrate, lost, NACK, PLI, freezes, dropped) and the PC's pump figures. The
+  status bar's `ms` is only the control socket's ping. Not included: the wait for the next capture
+  tick (0–50 ms at 20 fps) and the glasses' display scan-out.
+- **How it works:** the PC's `mediaStats` lists `[rtp, capturedAtUnixMs, bytes]` per frame sent;
+  the client matches RTP timestamps with `requestVideoFrameCallback` and takes the PC clock offset
+  from the quickest ping/pong (`mediaStats.ts`).
 - **Stats log (read this instead of asking the user to dictate numbers):**
   `%LOCALAPPDATA%\GlassesRemote\stats\stats-yyyy-MM-dd.jsonl`, one JSON line per second per
   side for every session (panel open or not): `kind` = `glasses` (their figures; `framesShown` 0
   means no per-frame timing in that browser), `pc` (pump timings, frame KB) and `event` (start,
   setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
+- **Keep it accurate.** The user and future agents diagnose from these figures, so a change that
+  affects them updates the measurement and this section in the same piece of work:
+  - Media pipeline changes (capture, encoder, frame rate, keyframes, pacing, RTP/RTCP handling,
+    PLI/NACK, jitter buffer): make sure the panel and log still measure what they claim, and add
+    a field when the change introduces something worth watching (e.g. keyframes sent on PLI).
+  - Changes to the stats fields: keep `ControlProtocol.ClientStatsFields` ⇄ `StatsReport`
+    (`protocol.ts`) ⇄ `statsReport()` (`mediaStats.ts`) in sync, and the `pc` line in
+    `ControlSession.SendStats` ⇄ `mediaStats` parsing. Update the field lists above.
+  - New user actions that change the picture a lot (app switch, mode, region, anything that
+    redraws the whole screen): log them as an `event` so latency spikes can be lined up with them.
+  - Only numbers and fixed names ever go into the stats message and log (see the invariants).
+  - Re-run the e2e harness: its Stats checks confirm e2e matching and the log still work.
 
 ## Security invariants — do not break
 
