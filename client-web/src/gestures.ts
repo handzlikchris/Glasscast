@@ -79,10 +79,40 @@ export class GestureTracker {
     return [];
   }
 
+  /** The press `id` is still down and hasn't moved past the tap threshold. */
+  isStillPress(id: number): boolean {
+    return this.press !== null && this.press.id === id && !this.press.dragging;
+  }
+
   cancel(id: number): GestureEvent[] {
     const p = this.press;
     if (!p || p.id !== id) return [];
     this.press = null;
     return p.dragging ? [{ kind: 'dragEnd' }] : [];
+  }
+}
+
+/** Longest gap between a tap and the next press for the two to count as one gesture (ms). */
+export const DOUBLE_TAP_MS = 350;
+/** How long the second press must stay still to count as "pinch, then pinch and hold" (ms). */
+export const HOLD_MS = 500;
+
+/**
+ * Spots the start of "pinch, then pinch and hold": a press that begins within
+ * DOUBLE_TAP_MS of the previous tap. The caller then waits HOLD_MS and checks the
+ * press is still down and still. Each tap can start at most one such press.
+ */
+export class TapThenHold {
+  private lastTapAt = -Infinity;
+
+  tapped(time: number): void {
+    this.lastTapAt = time;
+  }
+
+  /** Whether this press follows a tap closely enough to become a tap-then-hold. */
+  pressStarted(time: number): boolean {
+    const follows = time - this.lastTapAt <= DOUBLE_TAP_MS;
+    this.lastTapAt = -Infinity;
+    return follows;
   }
 }

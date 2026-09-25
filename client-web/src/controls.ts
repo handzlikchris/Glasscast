@@ -1,5 +1,6 @@
 // Pointer and scroll behaviour, kept free of React and the DOM so it can be tested.
-import type { Point, Rect } from './geometry';
+import { clampRegion, type Point, type Rect } from './geometry';
+import type { Region, Size } from './protocol';
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -109,4 +110,19 @@ export class ScrollAccumulator {
     this.pending -= sent;
     return sent;
   }
+}
+
+/** Share of the view one arrow-button press moves the region by. Half keeps some overlap for context. */
+export const NUDGE_FRACTION = 0.5;
+
+/** The region moved one arrow-button step (dirX, dirY each -1, 0 or 1), kept on the monitor. */
+export function nudgeRegion(region: Region, dirX: number, dirY: number, monitor: Size, fraction = NUDGE_FRACTION): Region {
+  return clampRegion(
+    {
+      ...region,
+      x: region.x + Math.round(dirX * region.width * fraction),
+      y: region.y + Math.round(dirY * region.height * fraction),
+    },
+    monitor,
+  );
 }

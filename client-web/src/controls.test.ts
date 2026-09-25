@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centreOf, moveCursor, moveCursorWithEdgePan, ScrollAccumulator, toNormalized } from './controls';
+import { centreOf, moveCursor, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized } from './controls';
 
 const bounds = { x: 0, y: 131, width: 600, height: 338 };
 
@@ -104,5 +104,23 @@ describe('moveCursorWithEdgePan', () => {
     const r = moveCursorWithEdgePan({ x: 595, y: 300 }, 10, 0, 1, view, ZONE, everywhere);
     expect(r.cursor.x).toBe(595);
     expect(r.panX).toBe(10);
+  });
+});
+
+describe('arrow-button nudges', () => {
+  const monitor = { width: 2560, height: 1440 };
+  const region = { x: 1000, y: 500, width: 800, height: 450 };
+
+  it('moves by half the view in the pressed direction', () => {
+    expect(nudgeRegion(region, 1, 0, monitor)).toEqual({ ...region, x: 1400 });
+    expect(nudgeRegion(region, -1, 0, monitor)).toEqual({ ...region, x: 600 });
+    expect(nudgeRegion(region, 0, -1, monitor)).toEqual({ ...region, y: 275 });
+    expect(nudgeRegion(region, 0, 1, monitor)).toEqual({ ...region, y: 725 });
+  });
+
+  it('stops at the monitor edge without changing size', () => {
+    expect(nudgeRegion({ ...region, x: 1700 }, 1, 0, monitor)).toEqual({ ...region, x: 1760 });
+    expect(nudgeRegion({ ...region, y: 100 }, 0, -1, monitor)).toEqual({ ...region, y: 0 });
+    expect(nudgeRegion({ ...region, x: 0 }, -1, 0, monitor)).toEqual({ ...region, x: 0 });
   });
 });

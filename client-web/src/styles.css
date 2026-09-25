@@ -158,6 +158,11 @@ textarea:focus-visible {
   bottom: 34px;
 }
 
+/* Swipes are moving the view, not the focus: the controls step back. */
+.toolbar.dimmed button {
+  opacity: 0.5;
+}
+
 .toolbar button {
   min-height: 38px;
   padding: 4px 10px;

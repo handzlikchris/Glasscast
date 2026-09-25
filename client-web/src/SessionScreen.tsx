@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { Session } from './connection';
-import { centreOf, moveCursorWithEdgePan, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
+import { centreOf, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
 import {
   ASPECTS,
   clampRegion,
@@ -12,8 +12,15 @@ import {
   type Point,
   type Rect,
 } from './geometry';
-import { DEFAULT_GESTURES, GestureTracker, type GestureEvent } from './gestures';
-import { armedAfterDrag, armedAfterPress, enterIsSamePinch, NAV_KEYS, routeTap } from './focusnav';
+import {
+  ARROW_STEPS,
+  enterIsSamePinch,
+  navAfterMode,
+  routeTap,
+  VIEW_NAV_MODES,
+  type NavTarget,
+} from './focusnav';
+import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { drawOverlay, type Look } from './overlay';
 import type { ClientMessage, KeyName, Region, ServerMessage, Size, ViewMode } from './protocol';
 import { VideoReceiver } from './rtc';
@@ -40,11 +47,21 @@ const MODES: { mode: ViewMode; label: string }[] = [
 
 const LOOKS: Look[] = ['natural', 'lifted', 'contrast'];
 
-const HINTS: Partial<Record<ViewMode, string>> = {
-  overview: 'Pinch-drag to move the box',
-  pointer: 'Pinch-drag to move · short pinch to click · push past an edge to pan',
-  scroll: 'Pinch-drag up or down to scroll',
-};
+const MENU_HINT = 'pinch, then pinch-hold: menu';
+
+function hintFor(mode: ViewMode, nav: NavTarget): string | null {
+  if (mode === 'overview') return 'Pinch-drag to move the box';
+  if (mode === 'type') return null;
+  if (nav === 'controls') return 'Swipe to pick · pinch to press';
+  switch (mode) {
+    case 'view':
+      return `Swipe: move view · ${MENU_HINT}`;
+    case 'pointer':
+      return `Drag: cursor · pinch: click · swipe: move view · ${MENU_HINT}`;
+    case 'scroll':
+      return `Drag: scroll · swipe: move view · ${MENU_HINT}`;
+  }
+}
 
 interface Props {
   onEnded(reason: string): void;
@@ -70,12 +87,16 @@ export function SessionScreen({ onEnded }: Props) {
   const regionTimer = useRef<number | null>(null);
   const unconfirmedRegions = useRef(0);
   const glowTimer = useRef<number | null>(null);
-  // Pinch-to-press on the glasses (see focusnav.ts).
+  // Swipes, pinches and the controls on the glasses (see focusnav.ts).
   const focused = useRef<HTMLElement | null>(null);
-  const armed = useRef(false);
   const lastPointerAt = useRef(-Infinity);
   const lastEnterAt = useRef(-Infinity);
   const pointerType = useRef('');
+  const tapThenHold = useRef(new TapThenHold());
+  const holdTimer = useRef<number | null>(null);
+  /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
+  const pendingClick = useRef<number | 'waiting' | null>(null);
+  const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
 
   const [monitor, setMonitor] = useState<Size | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -88,12 +109,13 @@ export function SessionScreen({ onEnded }: Props) {
   const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
   const [lastInput, setLastInput] = useState('');
+  const [nav, setNavState] = useState<NavTarget>('view');
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
 
   // Latest values for the pointer handlers, which must not go stale between renders.
-  const live = useRef({ mode, monitor, region, draft, cursor, content });
-  live.current = { mode, monitor, region, draft, cursor, content };
+  const live = useRef({ mode, monitor, region, draft, cursor, content, nav });
+  live.current = { mode, monitor, region, draft, cursor, content, nav };
 
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
@@ -170,15 +192,30 @@ export function SessionScreen({ onEnded }: Props) {
     };
   }, []);
 
-  // ---- focus and pinch-to-press ----
+  // ---- swipes, pinches and the controls ----
+  const setNav = (next: NavTarget) => {
+    live.current.nav = next;
+    setNavState(next);
+    if (next === 'view' && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+
   const pressFocused = () => {
     const el = focused.current;
     if (!el || !el.isConnected) return;
-    if (el instanceof HTMLButtonElement) {
-      armed.current = armedAfterPress((el.dataset.mode as ViewMode | undefined) ?? null);
-    }
     el.click();
-    if (el.isConnected) el.focus({ preventScroll: true });
+    // Keep the focus ring unless the press sent swipes back to the view.
+    if (el.isConnected && live.current.nav === 'controls') el.focus({ preventScroll: true });
+  };
+
+  /** Pinch, then pinch and hold: put focus on the current mode's button. */
+  const focusControls = () => {
+    setNav('controls');
+    const button = stageRef.current?.querySelector<HTMLButtonElement>(`button[data-mode="${live.current.mode}"]`);
+    if (button) {
+      focused.current = button;
+      button.focus({ preventScroll: true });
+    }
+    setLastInput('pinch, hold → controls');
   };
 
   useEffect(() => {
@@ -187,12 +224,20 @@ export function SessionScreen({ onEnded }: Props) {
       const t = e.target;
       if (!(t instanceof HTMLButtonElement || t instanceof HTMLTextAreaElement)) return;
       focused.current = t;
-      // Focus moved by a swipe (keyboard-style) shows the focus ring; a mouse click doesn't.
-      if (t.matches(':focus-visible')) armed.current = true;
+      // Focus moved by keyboard (Tab on a laptop) means you're on the controls; a mouse click doesn't.
+      if (t.matches(':focus-visible')) setNav('controls');
     };
     const onKeyDown = (e: KeyboardEvent) => {
       setLastInput(`key ${e.key}`);
-      if (NAV_KEYS.has(e.key)) armed.current = true;
+      const step = ARROW_STEPS[e.key];
+      const { nav: target, mode: m } = live.current;
+      if (step && target === 'view' && VIEW_NAV_MODES.includes(m) && !(e.target instanceof HTMLTextAreaElement)) {
+        // A swipe moves the view instead of the focus.
+        e.preventDefault();
+        e.stopPropagation();
+        nudgeRef.current(step.dx, step.dy);
+        return;
+      }
       // Enter in the text box is typing, never a pinch.
       if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
 
@@ -205,9 +250,11 @@ export function SessionScreen({ onEnded }: Props) {
       }
       lastEnterAt.current = now;
       const active = document.activeElement;
-      if (active instanceof HTMLButtonElement) {
-        armed.current = armedAfterPress((active.dataset.mode as ViewMode | undefined) ?? null);
-      } else if (!(active instanceof HTMLTextAreaElement) && armed.current && focused.current?.isConnected) {
+      if (
+        !(active instanceof HTMLButtonElement || active instanceof HTMLTextAreaElement) &&
+        live.current.nav === 'controls' &&
+        focused.current?.isConnected
+      ) {
         // Focus slipped to the page; press the button the swipe last landed on.
         e.preventDefault();
         pressFocused();
@@ -218,6 +265,8 @@ export function SessionScreen({ onEnded }: Props) {
     return () => {
       stage.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('keydown', onKeyDown, true);
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+      if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
     };
   }, []);
 
@@ -235,6 +284,8 @@ export function SessionScreen({ onEnded }: Props) {
   const setMode = (next: ViewMode) => {
     send({ type: 'setMode', mode: next });
     setModeState(next);
+    live.current.mode = next;
+    setNav(navAfterMode(next));
     if (next === 'overview') setDraft(region);
     if (next === 'pointer' && !cursor && content) setCursor(centreOf(content));
   };
@@ -273,6 +324,17 @@ export function SessionScreen({ onEnded }: Props) {
     glowTimer.current = window.setTimeout(() => setPanEdge(null), PAN_GLOW_MS);
   };
 
+  const nudge = (dx: number, dy: number) => {
+    const { region: r, monitor: mon } = live.current;
+    if (!r || !mon) return;
+    const moved = nudgeRegion(r, dx, dy, mon);
+    if (moved.x === r.x && moved.y === r.y) return;
+    live.current.region = moved;
+    setRegion(moved);
+    sendRegion(moved);
+  };
+  nudgeRef.current = nudge;
+
   const commitRegion = () => {
     if (draft) sendRegion(draft);
     setMode('view');
@@ -306,23 +368,36 @@ export function SessionScreen({ onEnded }: Props) {
     if (p) send({ type: 'move', x: p.x, y: p.y });
   };
 
+  const clearPendingClick = () => {
+    if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
+    pendingClick.current = null;
+  };
+
+  /** Sends a held-back Pointer-mode click now (a drag or cancel followed the pinch). */
+  const releasePendingClick = () => {
+    if (pendingClick.current === null) return;
+    clearPendingClick();
+    send({ type: 'click', button: 'left' });
+  };
+
   const handleGesture = (event: GestureEvent) => {
     const { mode: m, monitor: mon, region: r, draft: d, cursor: c, content: box } = live.current;
 
     if (event.kind === 'tap') {
       const route = routeTap({
-        armed: armed.current,
+        nav: live.current.nav,
         hasFocused: !!focused.current?.isConnected,
         msSinceEnter: performance.now() - lastEnterAt.current,
       });
       setLastInput(`tap (${pointerType.current}) → ${route === 'pressFocused' ? 'button' : route}`);
       if (route === 'ignore') return;
+      tapThenHold.current.tapped(performance.now());
       if (route === 'pressFocused') {
         pressFocused();
         return;
       }
     } else if (event.kind === 'dragStart') {
-      armed.current = armedAfterDrag(m, armed.current);
+      releasePendingClick();
       setLastInput(`drag (${pointerType.current})`);
     }
 
@@ -363,7 +438,18 @@ export function SessionScreen({ onEnded }: Props) {
         flushRegion();
         flushMove();
         if (!c) send({ type: 'move', ...toNormalized(centreOf(box), box) });
-        send({ type: 'click', button: 'left' });
+        if (pendingClick.current !== null) {
+          // Second quick pinch: a double-click.
+          clearPendingClick();
+          send({ type: 'click', button: 'left' });
+          send({ type: 'click', button: 'left' });
+        } else {
+          // Held back briefly: a second pinch held down means "controls", not a click.
+          pendingClick.current = window.setTimeout(() => {
+            pendingClick.current = null;
+            send({ type: 'click', button: 'left' });
+          }, DOUBLE_TAP_MS);
+        }
       }
     } else if (m === 'scroll' && event.kind === 'drag') {
       scroll.current.add(event.dy);
@@ -383,23 +469,49 @@ export function SessionScreen({ onEnded }: Props) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = toLocal(e);
     gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
+
+    // A pinch right after a pinch: wait to see whether it's held (controls), a tap or a drag.
+    if (typeof pendingClick.current === 'number') {
+      clearTimeout(pendingClick.current);
+      pendingClick.current = 'waiting';
+    }
+    if (tapThenHold.current.pressStarted(performance.now())) {
+      const id = e.pointerId;
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+      holdTimer.current = window.setTimeout(() => {
+        holdTimer.current = null;
+        if (!gestures.current.isStillPress(id)) return;
+        gestures.current.cancel(id);
+        clearPendingClick();
+        focusControls();
+      }, HOLD_MS);
+    }
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const p = toLocal(e);
     gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
   };
+  const clearHold = () => {
+    if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     lastPointerAt.current = performance.now();
+    clearHold();
     const p = toLocal(e);
     gestures.current.up(e.pointerId, p.x, p.y, e.timeStamp).forEach(handleGesture);
   };
   const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
+    clearHold();
+    releasePendingClick();
     gestures.current.cancel(e.pointerId).forEach(handleGesture);
   };
 
   // ---- render ----
   const nextLook = LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length];
   const mediaOk = status.media === 'connected';
+  const hint = hintFor(mode, nav);
 
   return (
     <div ref={stageRef} className={`stage look-${look}`}>
@@ -414,7 +526,7 @@ export function SessionScreen({ onEnded }: Props) {
         onMouseDown={(e) => e.preventDefault()}
       />
 
-      <nav className="toolbar top" aria-label="Modes">
+      <nav className={nav === 'view' && VIEW_NAV_MODES.includes(mode) ? 'toolbar top dimmed' : 'toolbar top'} aria-label="Modes">
         {MODES.map(({ mode: m, label }) => (
           <button key={m} type="button" data-mode={m} aria-pressed={mode === m} onClick={() => setMode(m)}>
             {label}
@@ -425,7 +537,7 @@ export function SessionScreen({ onEnded }: Props) {
         </button>
       </nav>
 
-      {HINTS[mode] && <div className="hint">{HINTS[mode]}</div>}
+      {hint && <div className="hint">{hint}</div>}
 
       {mode === 'overview' && (
         <nav className="toolbar bottom" aria-label="Region">

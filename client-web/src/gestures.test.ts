@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GestureTracker } from './gestures';
+import { DOUBLE_TAP_MS, GestureTracker, TapThenHold } from './gestures';
 
 describe('GestureTracker', () => {
   it('reports a short press within the threshold as a tap', () => {
@@ -49,5 +49,39 @@ describe('GestureTracker', () => {
     g.down(1, 0, 0, 0);
     g.move(1, 50, 0);
     expect(g.cancel(1)).toEqual([{ kind: 'dragEnd' }]);
+  });
+});
+
+describe('isStillPress', () => {
+  it('is true only while the press is down and within the tap threshold', () => {
+    const g = new GestureTracker({ tapThreshold: 10, tapMaxMs: 500 });
+    expect(g.isStillPress(1)).toBe(false);
+    g.down(1, 100, 100, 0);
+    expect(g.isStillPress(1)).toBe(true);
+    expect(g.isStillPress(2)).toBe(false);
+    g.move(1, 130, 100);
+    expect(g.isStillPress(1)).toBe(false);
+  });
+});
+
+describe('TapThenHold', () => {
+  it('arms a press that starts soon after a tap', () => {
+    const t = new TapThenHold();
+    t.tapped(1000);
+    expect(t.pressStarted(1000 + DOUBLE_TAP_MS)).toBe(true);
+  });
+
+  it('ignores a press that starts too late or with no tap before it', () => {
+    const t = new TapThenHold();
+    expect(t.pressStarted(0)).toBe(false);
+    t.tapped(1000);
+    expect(t.pressStarted(1001 + DOUBLE_TAP_MS)).toBe(false);
+  });
+
+  it('lets one tap arm only one press', () => {
+    const t = new TapThenHold();
+    t.tapped(1000);
+    expect(t.pressStarted(1100)).toBe(true);
+    expect(t.pressStarted(1200)).toBe(false);
   });
 });
