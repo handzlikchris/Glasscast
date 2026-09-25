@@ -6,7 +6,8 @@
 //
 // Exit code 0 when every step passed.
 import puppeteer from 'puppeteer-core';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const BASE = 'http://127.0.0.1:5081';
@@ -24,6 +25,18 @@ const check = (name, ok, detail = '') => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const input = async () => (await fetch(`${BASE}/__harness/input`)).json();
+const startedAt = Date.now();
+/** Stats log lines written since this run started (the harness logs to %TEMP%/glasses-e2e-stats). */
+const statsLog = () => {
+  const dir = join(tmpdir(), 'glasses-e2e-stats');
+  let files = [];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
+  } catch {}
+  return files
+    .flatMap((f) => readFileSync(join(dir, f), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)))
+    .filter((l) => Date.parse(l.t) >= startedAt);
+};
 
 const browser = await puppeteer.launch({
   executablePath: chromePath,
@@ -84,6 +97,11 @@ try {
   await tapBar('button[data-toggle="stats"]');
   check('the Stats panel shows capture-to-display latency and PC timings',
     statsShown && /PC→here \d+/.test(statsText) && /PC capture \d+/.test(statsText), statsText);
+  const logged = statsLog();
+  const glassesLine = logged.findLast((l) => l.kind === 'glasses');
+  check("the glasses' and the PC's figures reach the PC's stats log",
+    typeof glassesLine?.e2eMs === 'number' && glassesLine.framesShown > 0 && logged.some((l) => l.kind === 'pc'),
+    glassesLine ? `e2e ${glassesLine.e2eMs}, framesShown ${glassesLine.framesShown}, ${logged.length} lines` : `${logged.length} lines`);
 
   // 3. Pointer mode: drag moves, short tap clicks.
   await tapBar('button[data-mode="pointer"]');
