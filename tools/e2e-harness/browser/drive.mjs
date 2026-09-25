@@ -55,6 +55,18 @@ try {
   const playing = await page.$eval('video', (v) => v.videoWidth > 0 && !v.paused);
   check('video element is playing 600px frames', playing);
   const lookLabel = await page.$eval('button[data-look]', (el) => el.dataset.look);
+  // Brightness: starts at 80% (a fresh browser has nothing stored); one press steps down to 65%.
+  const videoFilter = () => page.$eval('video', (v) => getComputedStyle(v).filter);
+  const filterBefore = await videoFilter();
+  await page.$eval('button[data-brightness]', (el) => el.click());
+  await sleep(100);
+  const brightnessAfter = await page.$eval('button[data-brightness]', (el) => el.textContent.trim());
+  const filterAfter = await videoFilter();
+  await page.$eval('button[data-brightness]', (el) => el.click()); // 50%
+  await page.$eval('button[data-brightness]', (el) => el.click()); // 100%
+  await page.$eval('button[data-brightness]', (el) => el.click()); // back to 80%
+  check('the brightness button dims the video', filterBefore !== filterAfter && brightnessAfter.endsWith('65%'),
+    `${filterBefore} -> ${filterAfter} (${brightnessAfter})`);
   check('a session starts in Pointer mode with the lifted look',
     statusText.trim().endsWith('pointer') && lookLabel === 'lifted', `${lookLabel}`);
   await shot('2-view');
