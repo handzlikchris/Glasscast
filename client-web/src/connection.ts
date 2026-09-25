@@ -1,13 +1,61 @@
 // Pairing and session sockets.
 //
-// The session token only ever lives in this module, in memory, between the
-// moment the PC approves pairing and the moment it is sent as the first
-// message of the session socket. It is never put in React state, a URL,
-// localStorage, sessionStorage, or a log, and it is dropped as soon as it has
-// been sent. Every new session needs a fresh pairing.
+// Two credentials live only in this module, never in React state, a URL or a log:
+//
+// - The approval token: in memory from the moment the PC approves pairing until it is sent as
+//   the first message of the session socket, then dropped.
+// - The device token: after an approval the PC remembers these glasses for a while (24 h) and
+//   gives them a device token, so a restart of the page or a lost connection can start a new
+//   session without another approval. It is kept in localStorage (the page has a strict CSP and
+//   no third-party code), swapped for a new one on every use, and dropped when the PC refuses it
+//   or ends the session itself.
 import { parseServerMessage, type ClientMessage, type ServerMessage } from './protocol';
 
 let heldToken: string | null = null;
+
+const DEVICE_KEY = 'glassesRemote.device';
+
+interface RememberedDevice {
+  token: string;
+  expiresAt: number;
+}
+
+function loadDevice(): RememberedDevice | null {
+  try {
+    const raw = localStorage.getItem(DEVICE_KEY);
+    if (!raw) return null;
+    const device = JSON.parse(raw) as Partial<RememberedDevice>;
+    if (typeof device.token === 'string' && typeof device.expiresAt === 'number' && device.expiresAt > Date.now()) {
+      return { token: device.token, expiresAt: device.expiresAt };
+    }
+  } catch {
+    // Unreadable or blocked storage: act as if nothing is remembered.
+  }
+  forgetDevice();
+  return null;
+}
+
+function saveDevice(device: RememberedDevice): void {
+  try {
+    localStorage.setItem(DEVICE_KEY, JSON.stringify(device));
+  } catch {
+    // Can't remember it: the next session simply needs an approval.
+  }
+}
+
+/** Drops the device token: the next session needs an approval on the PC. */
+export function forgetDevice(): void {
+  try {
+    localStorage.removeItem(DEVICE_KEY);
+  } catch {
+    // Nothing stored or storage blocked.
+  }
+}
+
+/** The PC remembers these glasses: a session can start without pairing. */
+export function isDeviceRemembered(): boolean {
+  return loadDevice() !== null;
+}
 
 const socketUrl = (path: string) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${path}`;
 
@@ -58,37 +106,50 @@ export interface SessionHandlers {
   onClose(reason: string): void;
 }
 
-/** Authenticated control socket. Open it right after pairing succeeds. */
+/** Authenticated control socket. Open it right after pairing succeeds, or with a remembered device. */
 export class Session {
   private readonly ws: WebSocket;
   private closedByUs = false;
 
-  private constructor(token: string, private readonly handlers: SessionHandlers) {
+  private constructor(first: ClientMessage, private readonly handlers: SessionHandlers) {
+    const resuming = first.type === 'resume';
     this.ws = new WebSocket(socketUrl('/ws/session'));
     this.ws.onopen = () => {
-      // The token is used exactly once and then only the server's hash remains.
-      this.ws.send(JSON.stringify({ type: 'authenticate', token } satisfies ClientMessage));
+      // Either token is used exactly once; the server keeps only hashes.
+      this.ws.send(JSON.stringify(first));
     };
     this.ws.onmessage = (event) => {
       const message = parseServerMessage(String(event.data));
       if (message?.type === 'authFailed') {
         this.close();
-        this.handlers.onClose('The PC refused the session. Pair again.');
+        if (resuming) forgetDevice();
+        this.handlers.onClose(
+          resuming ? 'The PC no longer remembers these glasses. Pair again.' : 'The PC refused the session. Pair again.',
+        );
+      } else if (message?.type === 'authenticated') {
+        if (message.deviceToken && message.deviceTokenExpiresAt) {
+          saveDevice({ token: message.deviceToken, expiresAt: message.deviceTokenExpiresAt });
+        }
+        this.handlers.onMessage({ type: 'authenticated' });
       } else if (message) {
         this.handlers.onMessage(message);
       }
     };
     this.ws.onclose = (event) => {
+      // The PC forgets the glasses when it ends the session or catches bad messages.
+      if (['terminated', 'invalid message', 'rate limit', 'bad answer'].includes(event.reason)) forgetDevice();
       if (!this.closedByUs) this.handlers.onClose(describeClose(event));
     };
   }
 
-  /** Consumes the token from the last successful pairing. */
+  /** Uses the token from the last successful pairing, or else the remembered device's token. */
   static open(handlers: SessionHandlers): Session {
     const token = heldToken;
     heldToken = null;
-    if (!token) throw new Error('Not paired');
-    return new Session(token, handlers);
+    if (token) return new Session({ type: 'authenticate', token }, handlers);
+    const device = loadDevice();
+    if (device) return new Session({ type: 'resume', token: device.token }, handlers);
+    throw new Error('Not paired');
   }
 
   send(message: ClientMessage): void {
@@ -105,6 +166,8 @@ function describeClose(event: CloseEvent): string {
   switch (event.reason) {
     case 'terminated':
       return 'The session was ended on the PC.';
+    case 'replaced':
+      return 'These glasses connected again in another session.';
     case 'idle':
       return 'The session ended after a long time without input.';
     case 'rate limit':

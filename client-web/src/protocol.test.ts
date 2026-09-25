@@ -35,6 +35,16 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage(hello('bogus'))).toMatchObject({ type: 'hello', mode: 'view' });
   });
 
+  it('takes a device token from authenticated only when both parts are there', () => {
+    expect(parseServerMessage('{"type":"authenticated","deviceToken":"abc","deviceTokenExpiresAt":1790000000000}')).toEqual({
+      type: 'authenticated',
+      deviceToken: 'abc',
+      deviceTokenExpiresAt: 1790000000000,
+    });
+    expect(parseServerMessage('{"type":"authenticated"}')).toEqual({ type: 'authenticated' });
+    expect(parseServerMessage('{"type":"authenticated","deviceToken":5}')).toEqual({ type: 'authenticated' });
+  });
+
   it('reads media stats with their per-frame timings', () => {
     const stats = (frames: string) =>
       `{"type":"mediaStats","fps":20,"captureMs":6.1,"captureMaxMs":9,"encodeMs":4,"encodeMaxMs":12.5,"kbps":2400,"keyframes":1,"frames":${frames}}`;

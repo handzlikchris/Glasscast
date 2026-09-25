@@ -63,7 +63,7 @@ export type ServerMessage =
   | { type: 'paired'; token: string }
   | { type: 'pairFailed' }
   | { type: 'authFailed' }
-  | { type: 'authenticated' }
+  | { type: 'authenticated'; deviceToken?: string; deviceTokenExpiresAt?: number }
   | { type: 'hello'; monitor: Size; region: Region; mode: ViewMode; codec: string; apps: string[] }
   | { type: 'rtcOffer'; sdp: string }
   | { type: 'region'; region: Region }
@@ -73,6 +73,7 @@ export type ServerMessage =
 
 export type ClientMessage =
   | { type: 'authenticate'; token: string }
+  | { type: 'resume'; token: string }
   | { type: 'rtcAnswer'; sdp: string }
   | { type: 'iceCandidate'; candidate: string; sdpMid: string | null; sdpMLineIndex: number | null }
   | { type: 'setMode'; mode: ViewMode }
@@ -138,8 +139,12 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return isString(data.token) ? { type: 'paired', token: data.token } : null;
     case 'pairFailed':
     case 'authFailed':
-    case 'authenticated':
       return { type: data.type };
+    case 'authenticated':
+      // With a device token when the PC remembers these glasses (see connection.ts).
+      return isString(data.deviceToken) && isNumber(data.deviceTokenExpiresAt)
+        ? { type: 'authenticated', deviceToken: data.deviceToken, deviceTokenExpiresAt: data.deviceTokenExpiresAt }
+        : { type: 'authenticated' };
     case 'hello':
       return isSize(data.monitor) && isRegion(data.region) && isString(data.codec)
         ? {
