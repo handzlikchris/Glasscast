@@ -17,6 +17,9 @@ import {
   enterIsSamePinch,
   menuFocusFor,
   navAfterBack,
+  nextAppSlot,
+  swipeAction,
+  type SwipeAction,
   SAME_BACK_MS,
   navAfterMode,
   routeTap,
@@ -92,7 +95,9 @@ export function SessionScreen({ onEnded }: Props) {
   const secondPress = useRef<{ id: number; x: number; y: number; held: boolean } | null>(null);
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
-  const nudgeRef = useRef<(dx: number, dy: number) => void>(() => {});
+  const swipeRef = useRef<(action: SwipeAction) => void>(() => {});
+  /** The app last switched to (1-based); swipe left goes to the one after it. Assume app 1 at the start. */
+  const currentApp = useRef(1);
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
   const backRef = useRef<() => void>(() => {});
   /**
@@ -121,12 +126,14 @@ export function SessionScreen({ onEnded }: Props) {
   const [apps, setApps] = useState<string[]>([]);
   const appsRef = useRef<string[]>([]);
   const [nav, setNavState] = useState<NavTarget>('view');
+  /** Pointer mode only: swipes pan the view (on) or act as shortcuts (off, the default). */
+  const [panSwipes, setPanSwipes] = useState(false);
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
 
   // Latest values for the pointer handlers, which must not go stale between renders.
-  const live = useRef({ mode, monitor, region, draft, cursor, content, nav });
-  live.current = { mode, monitor, region, draft, cursor, content, nav };
+  const live = useRef({ mode, monitor, region, draft, cursor, content, nav, panSwipes });
+  live.current = { mode, monitor, region, draft, cursor, content, nav, panSwipes };
 
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
@@ -303,16 +310,17 @@ export function SessionScreen({ onEnded }: Props) {
         backRef.current();
         return;
       }
-      const step = ARROW_STEPS[e.key];
-      const { nav: target, mode: m } = live.current;
-      if (step && target === 'view' && VIEW_NAV_MODES.includes(m) && !(e.target instanceof HTMLTextAreaElement)) {
-        // A swipe moves the view instead of the focus.
+      const { nav: target, mode: m, panSwipes: pan } = live.current;
+      const onView = target === 'view' && VIEW_NAV_MODES.includes(m) && !(e.target instanceof HTMLTextAreaElement);
+      const action = onView ? swipeAction(e.key, m, pan) : null;
+      if (action) {
+        // A swipe acts on the view (pan, or a Pointer-mode shortcut) instead of moving the focus.
         e.preventDefault();
         e.stopPropagation();
-        nudgeRef.current(step.dx, step.dy);
+        swipeRef.current(action);
         return;
       }
-      if (step || e.key === 'Tab') keyFocus.current = true;
+      if (e.key in ARROW_STEPS || e.key === 'Tab') keyFocus.current = true;
       // Enter in the text box is typing, never a pinch.
       if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
 
@@ -475,13 +483,48 @@ export function SessionScreen({ onEnded }: Props) {
     setRegion(moved);
     sendRegion(moved);
   };
-  nudgeRef.current = nudge;
 
-  /** Brings app N's window to the front, fitted to the cast area; then Pointer is one pinch away. */
-  const switchApp = (slot: number) => {
+  const onSwipe = (action: SwipeAction) => {
+    switch (action.kind) {
+      case 'pan':
+        nudge(action.dx, action.dy);
+        break;
+      case 'scroll':
+        send({ type: 'scroll', dy: action.dy });
+        setLastInput(`swipe → scroll ${action.dy < 0 ? 'up' : 'down'}`);
+        break;
+      case 'type':
+        setMode('type');
+        setLastInput('swipe → type');
+        break;
+      case 'nextApp': {
+        const next = nextAppSlot(currentApp.current, apps.length);
+        if (next === null) setLastInput('no apps set up on the PC');
+        else switchApp(next, false);
+        break;
+      }
+    }
+  };
+  swipeRef.current = onSwipe;
+
+  const togglePanSwipes = () => {
+    const next = !live.current.panSwipes;
+    live.current.panSwipes = next;
+    setPanSwipes(next);
+    setLastInput(next ? 'swipes pan the view' : 'swipes: scroll, type, next app');
+    // Straight back to swiping, so the new meaning takes effect at once.
+    setNav('view');
+  };
+
+  /**
+   * Brings app N's window to the front, fitted to the cast area. From a button, Pointer is then
+   * focused so going back is one pinch; from a swipe, focus stays where it is.
+   */
+  const switchApp = (slot: number, focusPointer = true) => {
+    currentApp.current = slot;
     send({ type: 'switchApp', slot });
     setLastInput(`${apps[slot - 1] ?? `app ${slot}`}…`);
-    focusModeButton('pointer');
+    if (focusPointer) focusModeButton('pointer');
   };
 
   const commitRegion = () => {
@@ -703,6 +746,11 @@ export function SessionScreen({ onEnded }: Props) {
             {i + 1}
           </button>
         ))}
+        {mode === 'pointer' && (
+          <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes pan the view">
+            Pan
+          </button>
+        )}
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
         </button>

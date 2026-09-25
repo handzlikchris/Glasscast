@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { enterIsSamePinch, menuFocusFor, navAfterBack, navAfterMode, routeTap, SAME_PINCH_MS } from './focusnav';
+import {
+  enterIsSamePinch,
+  menuFocusFor,
+  navAfterBack,
+  navAfterMode,
+  nextAppSlot,
+  routeTap,
+  SAME_PINCH_MS,
+  swipeAction,
+  SWIPE_SCROLL,
+} from './focusnav';
 
 describe('routeTap', () => {
   it('presses the focused button while on the controls', () => {
@@ -71,5 +81,37 @@ describe('navAfterBack', () => {
   it('stays on the controls in Overview and Type', () => {
     expect(navAfterBack('controls', 'type')).toBe('controls');
     expect(navAfterBack('controls', 'overview')).toBe('controls');
+  });
+});
+
+describe('swipeAction', () => {
+  it('makes swipes shortcuts in Pointer mode: scroll, Type, next app', () => {
+    expect(swipeAction('ArrowUp', 'pointer', false)).toEqual({ kind: 'scroll', dy: -SWIPE_SCROLL });
+    expect(swipeAction('ArrowDown', 'pointer', false)).toEqual({ kind: 'scroll', dy: SWIPE_SCROLL });
+    expect(swipeAction('ArrowRight', 'pointer', false)).toEqual({ kind: 'type' });
+    expect(swipeAction('ArrowLeft', 'pointer', false)).toEqual({ kind: 'nextApp' });
+  });
+
+  it('pans with Pan on, and always in View and Scroll modes', () => {
+    expect(swipeAction('ArrowLeft', 'pointer', true)).toEqual({ kind: 'pan', dx: -1, dy: 0 });
+    expect(swipeAction('ArrowUp', 'view', false)).toEqual({ kind: 'pan', dx: 0, dy: -1 });
+    expect(swipeAction('ArrowRight', 'scroll', false)).toEqual({ kind: 'pan', dx: 1, dy: 0 });
+  });
+
+  it('ignores keys that are not swipes', () => {
+    expect(swipeAction('Enter', 'pointer', false)).toBeNull();
+    expect(swipeAction('toString', 'pointer', false)).toBeNull();
+  });
+});
+
+describe('nextAppSlot', () => {
+  it('cycles 1 → 2 → … → count → 1', () => {
+    expect(nextAppSlot(1, 3)).toBe(2);
+    expect(nextAppSlot(3, 3)).toBe(1);
+    expect(nextAppSlot(1, 1)).toBe(1);
+  });
+
+  it('has nothing to switch to without apps', () => {
+    expect(nextAppSlot(1, 0)).toBeNull();
   });
 });

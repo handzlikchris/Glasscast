@@ -4,9 +4,9 @@
 // tap at the pointer's position, which is usually over the full-screen gesture layer
 // rather than a button. So the app keeps a navigation target:
 //
-//   "view"     swipes move the view around the monitor by a quarter screen; pinches do
-//              whatever the mode does (click in Pointer mode). Used in View, Pointer
-//              and Scroll modes, which have no panels of their own.
+//   "view"     swipes act on the view (see swipeAction); pinches do whatever the mode
+//              does (click in Pointer mode). Used in View, Pointer and Scroll modes, which
+//              have no panels of their own.
 //   "controls" swipes move focus between buttons and a pinch presses the focused one.
 //
 // Back (middle-finger pinch) jumps from "view" to "controls" and back again; pinch, then
@@ -88,4 +88,40 @@ export const SAME_BACK_MS = 400;
  */
 export function navAfterBack(nav: NavTarget, mode: ViewMode): NavTarget {
   return nav === 'controls' && VIEW_NAV_MODES.includes(mode) ? 'view' : 'controls';
+}
+
+/** Wheel units one swipe scrolls by (three notches). */
+export const SWIPE_SCROLL = 360;
+
+export type SwipeAction =
+  | { kind: 'pan'; dx: number; dy: number }
+  /** Browser deltaY sign: positive scrolls down. */
+  | { kind: 'scroll'; dy: number }
+  | { kind: 'type' }
+  | { kind: 'nextApp' };
+
+/**
+ * What a swipe does while swipes are on the view. In Pointer mode, unless Pan is on, swipes
+ * are shortcuts: up/down scroll the window under the cursor, right opens Type, left switches
+ * to the next app. With Pan on, and in View and Scroll modes, they move the view.
+ */
+export function swipeAction(key: string, mode: ViewMode, pan: boolean): SwipeAction | null {
+  const step = Object.hasOwn(ARROW_STEPS, key) ? ARROW_STEPS[key] : undefined;
+  if (!step) return null;
+  if (mode !== 'pointer' || pan) return { kind: 'pan', dx: step.dx, dy: step.dy };
+  switch (key) {
+    case 'ArrowUp':
+      return { kind: 'scroll', dy: -SWIPE_SCROLL };
+    case 'ArrowDown':
+      return { kind: 'scroll', dy: SWIPE_SCROLL };
+    case 'ArrowRight':
+      return { kind: 'type' };
+    default:
+      return { kind: 'nextApp' };
+  }
+}
+
+/** The app after `current` (1-based), wrapping round: 1 → 2 → … → count → 1. Null with no apps. */
+export function nextAppSlot(current: number, count: number): number | null {
+  return count > 0 ? (current % count) + 1 : null;
 }
