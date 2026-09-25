@@ -36,6 +36,9 @@ try {
   await page.setViewport({ width: 600, height: 600 });
   page.on('pageerror', (err) => console.log(`[page error] ${err.message}`));
   const shot = async (name) => shots && page.screenshot({ path: join(shots, `${name}.png`) });
+  // The mode bar is hidden (and ignores taps) while swipes are on the view, as on the glasses,
+  // so plain navigation presses its buttons directly.
+  const tapBar = (selector) => page.$eval(`.toolbar.top ${selector}`, (el) => el.click());
 
   // 1. Pairing (auto-approved by the harness) leads straight into a session.
   await page.goto(`${BASE}/`, { waitUntil: 'load' });
@@ -72,7 +75,7 @@ try {
   await shot('2-view');
 
   // 3. Pointer mode: drag moves, short tap clicks.
-  await page.locator('button::-p-text(Pointer)').click();
+  await tapBar('button[data-mode="pointer"]');
   await page.mouse.move(300, 300);
   await page.mouse.down();
   await page.mouse.move(360, 330, { steps: 10 });
@@ -86,7 +89,7 @@ try {
   await shot('3-pointer');
 
   // 4. Scroll mode: dragging up scrolls down (negative Windows wheel).
-  await page.locator('button::-p-text(Scroll)').click();
+  await tapBar('button[data-mode="scroll"]');
   await page.mouse.move(300, 400);
   await page.mouse.down();
   await page.mouse.move(300, 280, { steps: 12 });
@@ -96,7 +99,7 @@ try {
   check('scroll drag sends wheel', actions.some((a) => /^wheel -\d+/.test(a)));
 
   // 5. Type mode: text and keys are separate; text never presses Enter.
-  await page.locator('button::-p-text(Type)').click();
+  await tapBar('button[data-mode="type"]');
   await page.locator('textarea').fill('hello from e2e\nsecond line');
   await page.locator('button::-p-text(Send text)').click();
   await sleep(200);
@@ -109,7 +112,7 @@ try {
   await shot('4-type');
 
   // 6. Region (overview): drag the region box and commit it.
-  await page.locator('button::-p-text(Region)').click();
+  await tapBar('button[data-mode="overview"]');
   await sleep(500);
   await page.mouse.move(300, 300);
   await page.mouse.down();
@@ -123,7 +126,7 @@ try {
 
   // 7. Edge panning: in Pointer mode, pushing past the right edge slides the region right.
   const before = await (await fetch(`${BASE}/__harness/region`)).json();
-  await page.locator('button::-p-text(Pointer)').click();
+  await tapBar('button[data-mode="pointer"]');
   await page.mouse.move(60, 300);
   await page.mouse.down();
   await page.mouse.move(590, 300, { steps: 40 });
@@ -133,7 +136,7 @@ try {
   await shot('6-edge-pan');
   check('pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
     `x ${before?.x} -> ${after?.x}`);
-  await page.locator('button::-p-text(Scroll)').click();
+  await tapBar('button[data-mode="scroll"]');
   await sleep(200);
 
   // 8. Taps don't click in Scroll mode (nothing new recorded).
@@ -251,7 +254,7 @@ try {
 
   // 14. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
   //     text box (where the glasses' pointer tends to be after typing). Pointer gets pressed.
-  await page.locator('button::-p-text(Type)').click();
+  await tapBar('button[data-mode="type"]');
   await page.locator('textarea').fill('typed on the glasses');
   await page.keyboard.press('ArrowRight'); // a swipe of yours: leaving the box won't jump to Send text
   await sleep(700); // past the hold on the text box
@@ -274,7 +277,7 @@ try {
   const appButtons = await page.$$eval('button[data-app]', (els) => els.map((el) => `${el.textContent}:${el.title}`));
   const regionNow = await regionAt();
   const switchesBefore = (await input()).length;
-  await page.locator('button[data-app="1"]').click();
+  await tapBar('button[data-app="1"]');
   await sleep(400);
   const switched = (await input()).slice(switchesBefore).filter((a) => a.startsWith('switch '));
   const switchStatus = await page.$eval('.status', (el) => el.textContent);
@@ -286,7 +289,7 @@ try {
     `${appButtons.join(',')} | ${switched.join('|')} | focus ${focusAfterSwitch}`);
   // 16. Back (history.back() on the glasses, or Escape) toggles between the view and the
   //     controls; the same Back arriving both ways counts once.
-  await page.locator('button[data-mode="pointer"]').click(); // Pointer mode, swipes on the view
+  await tapBar('button[data-mode="pointer"]'); // Pointer mode, swipes on the view
   await sleep(200);
   const focusName = () => page.evaluate(() => document.activeElement?.dataset?.mode ?? document.activeElement?.tagName);
   // Like the glasses, reset focus to the first button right after the Back navigation.
@@ -350,6 +353,22 @@ try {
   check('with Pan on, Pointer swipes move the view instead',
     panOn === 'true' && afterPan.x !== beforePan.x && panInputs.length === 0,
     `pan ${panOn}, x ${beforePan.x} -> ${afterPan.x}, other input ${panInputs.join('|')}`);
+  // 18. While swipes are on the view the mode bar is hidden and lets taps through: a tap where
+  //     the Region button sits clicks in Windows instead of switching mode.
+  await tapBar('button[data-mode="pointer"]');
+  await sleep(300);
+  const hiddenRegion = await page.$eval('.toolbar.top button[data-mode="overview"]', (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2, opacity: getComputedStyle(el.parentElement).opacity };
+  });
+  const tapsBefore = (await input()).length;
+  await page.mouse.click(hiddenRegion.x, hiddenRegion.y);
+  await sleep(700);
+  const tapClicks = (await input()).slice(tapsBefore).filter((a) => a === 'click Left').length;
+  const modeAfterHiddenTap = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  check('the hidden mode bar lets taps through to the desktop',
+    hiddenRegion.opacity === '0' && tapClicks === 1 && modeAfterHiddenTap === 'pointer',
+    `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
 } finally {
   await browser.close();
 }
