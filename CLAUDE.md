@@ -180,7 +180,8 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 - **Stats log (read this instead of asking the user to dictate numbers):**
   `%LOCALAPPDATA%\GlassesRemote\stats\stats-yyyy-MM-dd.jsonl`, one JSON line per second per
   side for every session (panel open or not): `kind` = `glasses` (their figures; `framesShown` 0
-  means no per-frame timing in that browser), `pc` (pump timings, frame KB) and `event` (start,
+  means no per-frame timing in that browser), `pc` (pump timings, frame KB, keyframes sent and
+  `keyframeRequests` = PLI/FIR received) and `event` (start,
   setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
 - **Keep it accurate.** The user and future agents diagnose from these figures, so a change that
   affects them updates the measurement and this section in the same piece of work:
