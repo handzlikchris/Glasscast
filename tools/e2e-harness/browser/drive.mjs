@@ -390,6 +390,23 @@ try {
     swipeActions.join('|') === 'wheel -1080|wheel 1080|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
 
+  // 17b. Scroll strength (↕) is per app: one press takes the current app (Claude) from 9 notches a
+  //      swipe to 5. Four more presses wrap it back round to 9 for the steps after this one.
+  await press('button[data-mode="pointer"]');
+  await sleep(200);
+  await tapBar('button[data-scroll]');
+  const scrollLabel = await page.$eval('button[data-scroll]', (el) => el.textContent.trim());
+  await press('button[data-mode="pointer"]');
+  await sleep(200);
+  const beforeGentle = (await input()).length;
+  await page.keyboard.press('ArrowDown');
+  await sleep(300);
+  const gentle = (await input()).slice(beforeGentle).filter((a) => a.startsWith('wheel '));
+  for (let i = 0; i < 4; i++) await tapBar('button[data-scroll]');
+  const restored = await page.$eval('button[data-scroll]', (el) => el.dataset.scroll);
+  check('the scroll strength button makes swipes scroll less for this app', scrollLabel === '↕ 5' &&
+    gentle.join('|') === 'wheel -600' && restored === '9', `${scrollLabel}, ${gentle.join('|')}, back to ${restored}`);
+
   // Back from Type (or from the mode bar) goes home to Pointer.
   await page.evaluate(() => history.back());
   await sleep(300);
