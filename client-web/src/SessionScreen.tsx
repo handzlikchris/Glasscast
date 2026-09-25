@@ -50,7 +50,6 @@ const FOCUS_PIN_MS = 600;
 // Pointer and Type side by side: most use goes Pointer → Type → Pointer.
 const MODES: { mode: ViewMode; label: string }[] = [
   { mode: 'overview', label: 'Region' },
-  { mode: 'scroll', label: 'Scroll' },
   { mode: 'pointer', label: 'Pointer' },
   { mode: 'type', label: 'Type' },
 ];
