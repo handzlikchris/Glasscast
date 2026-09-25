@@ -218,8 +218,11 @@ try {
   await pinch(); // presses Type (focused by step 12's pinch-then-hold)
   const afterType = await page.evaluate(() => document.activeElement?.tagName ?? null);
   await page.keyboard.type('from the composer');
-  await page.$eval('textarea', (el) => el.dispatchEvent(new Event('change', { bubbles: true })));
-  await sleep(200);
+  await sleep(700); // past the hold on the text box
+  // Like the glasses when the composer closes: focus jumps to the first button, which blurs the
+  // box and fires its change event. Focus must still end up on Send text.
+  await page.focus('button[data-mode="overview"]');
+  await sleep(300);
   const afterComposer = await activeName();
   const typedBefore = (await input()).length;
   await pinch(); // presses Send text
@@ -238,6 +241,8 @@ try {
   //     text box (where the glasses' pointer tends to be after typing). Pointer gets pressed.
   await page.locator('button::-p-text(Type)').click();
   await page.locator('textarea').fill('typed on the glasses');
+  await page.keyboard.press('ArrowRight'); // a swipe of yours: leaving the box won't jump to Send text
+  await sleep(700); // past the hold on the text box
   await page.focus('button[data-mode="type"]');
   await page.keyboard.down('Shift');
   await page.keyboard.press('Tab'); // Pointer
@@ -308,7 +313,7 @@ try {
   await sleep(300);
   const modeAfterRight = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
-    swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
+    swipeActions.join('|') === 'wheel -1080|wheel 1080|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
 
   // Back from Type (or from the mode bar) goes home to Pointer.
