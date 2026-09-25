@@ -42,7 +42,8 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Protocol/             ControlMessages + ControlProtocol (strict allowlist parser)
   Desktop/              interfaces (IScreen, ICaptureSource, IInputInjector, IKeepAwake, IWindowSwitcher),
                         RegionMath, RegionStore, CastArea (region of the active session), AppShortcuts
-  Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, MfH264Encoder, Nv12, Vp8 encoder
+  Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, MfH264Encoder, Nv12, Vp8 encoder,
+                        StatsLog (daily JSONL of glasses + PC media figures)
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
                         NativeMethods
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
@@ -61,7 +62,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 28 checks)
+                        browser/drive.mjs (headless Chrome, 29 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -116,7 +117,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
    (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`
-   (slot 1-9), `ping`, `rtcAnswer`, `iceCandidate`. Server → client: `pairCode`, `paired`,
+   (slot 1-9), `ping`, `rtcAnswer`, `iceCandidate`, `stats` (numbers-only allowlist, for the stats
+   log; not input for the idle timeout). Server → client: `pairCode`, `paired`,
    `pairFailed`, `authFailed`, `authenticated`, `hello`, `rtcOffer`, `region`, `appSwitch`
    (switched/notRunning/failed), `pong`, `mediaStats` (about once a second: pump timings and
    `[rtp, capturedAtUnixMs, bytes]` for every frame sent).
@@ -156,6 +158,11 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
   with the slowest frame's size), split into `PC→here` and `buffer+show`; `clock ±n` is the
   clock-offset error. The status bar's `ms` is only the control socket's ping. It excludes the
   wait for the next capture tick (0–50 ms at 20 fps) and the glasses' display scan-out.
+- **Stats log (read this instead of asking the user to dictate numbers):**
+  `%LOCALAPPDATA%\GlassesRemote\stats\stats-yyyy-MM-dd.jsonl`, one JSON line per second per
+  side for every session (panel open or not): `kind` = `glasses` (their figures; `framesShown` 0
+  means no per-frame timing in that browser), `pc` (pump timings, frame KB) and `event` (start,
+  setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
 
 ## Security invariants — do not break
 
