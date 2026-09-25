@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { centreOf, moveCursor, moveCursorLocked, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized } from './controls';
+import { centreOf, edgeScrollStep, moveCursor, moveCursorLocked, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized } from './controls';
 
 const bounds = { x: 0, y: 131, width: 600, height: 338 };
 
@@ -60,6 +60,30 @@ describe('moveCursorLocked', () => {
   it('never scrolls sideways or when moving back in', () => {
     expect(moveCursorLocked({ x: 599, y: 300 }, 40, 0, 1, box).overflowY).toBe(0);
     expect(moveCursorLocked({ x: 300, y: 599 }, 0, -10, 1, box)).toEqual({ cursor: { x: 300, y: 589 }, overflowY: 0 });
+  });
+});
+
+describe('edgeScrollStep', () => {
+  it('starts when the cursor is pushed past the top or bottom', () => {
+    expect(edgeScrollStep(null, { dy: 5, overflowY: 3, pointerPinned: 0 })).toEqual({ dir: 1, back: 0 });
+    expect(edgeScrollStep(null, { dy: -5, overflowY: -2, pointerPinned: 0 })).toEqual({ dir: -1, back: 0 });
+  });
+
+  it("starts when the glasses' pointer is pushed against the display edge", () => {
+    expect(edgeScrollStep(null, { dy: 4, overflowY: 0, pointerPinned: 1 })).toEqual({ dir: 1, back: 0 });
+    // Pinned at the bottom but moving up: no.
+    expect(edgeScrollStep(null, { dy: -4, overflowY: 0, pointerPinned: 1 })).toBeNull();
+    expect(edgeScrollStep(null, { dy: 4, overflowY: 0, pointerPinned: 0 })).toBeNull();
+  });
+
+  it('keeps going through wobbles and stops once the drag comes back in', () => {
+    let state = edgeScrollStep(null, { dy: 5, overflowY: 5, pointerPinned: 0 });
+    state = edgeScrollStep(state, { dy: -8, overflowY: 0, pointerPinned: 0 });
+    expect(state).toEqual({ dir: 1, back: 8 });
+    state = edgeScrollStep(state, { dy: 2, overflowY: 0, pointerPinned: 0 });
+    expect(state).toEqual({ dir: 1, back: 0 });
+    state = edgeScrollStep(state, { dy: -8, overflowY: 0, pointerPinned: 0 });
+    expect(edgeScrollStep(state, { dy: -6, overflowY: 0, pointerPinned: 0 })).toBeNull();
   });
 });
 

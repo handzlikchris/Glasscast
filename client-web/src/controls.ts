@@ -96,6 +96,35 @@ export function moveCursorLocked(
   };
 }
 
+/** Hold-to-scroll at the top (-1) or bottom (1) edge; `back` is how far the drag has come back in. */
+export interface EdgeScroll {
+  dir: 1 | -1;
+  back: number;
+}
+
+/** How far (view px) a drag must come back in to stop edge scrolling; small wobbles don't. */
+export const EDGE_SCROLL_RELEASE_PX = 12;
+
+/**
+ * One drag step of edge scrolling (Pan off). It starts when the cursor is pushed past the top or
+ * bottom of the view, or when the glasses' own pointer is pushed against the top or bottom of the
+ * display (after which it reports no more movement, so "keep pushing" is invisible to the page).
+ * It keeps going while the drag stays put or pushes on, and stops once the drag comes back in.
+ */
+export function edgeScrollStep(
+  state: EdgeScroll | null,
+  step: { dy: number; overflowY: number; pointerPinned: -1 | 0 | 1 },
+): EdgeScroll | null {
+  if (state) {
+    const inward = -step.dy * state.dir;
+    const back = inward > 0 ? state.back + inward : 0;
+    return back > EDGE_SCROLL_RELEASE_PX ? null : { dir: state.dir, back };
+  }
+  if (step.overflowY !== 0) return { dir: step.overflowY > 0 ? 1 : -1, back: 0 };
+  if (step.pointerPinned !== 0 && step.dy * step.pointerPinned > 0) return { dir: step.pointerPinned, back: 0 };
+  return null;
+}
+
 export function toNormalized(cursor: Point, bounds: Rect): Point {
   return {
     x: clamp((cursor.x - bounds.x) / Math.max(1, bounds.width - 1), 0, 1),

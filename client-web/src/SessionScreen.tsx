@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Session } from './connection';
-import { centreOf, moveCursorLocked, moveCursorWithEdgePan, nudgeRegion, ScrollAccumulator, toNormalized, type PanRoom } from './controls';
+import {
+  centreOf,
+  edgeScrollStep,
+  moveCursorLocked,
+  moveCursorWithEdgePan,
+  nudgeRegion,
+  ScrollAccumulator,
+  toNormalized,
+  type EdgeScroll,
+  type PanRoom,
+} from './controls';
 import {
   ASPECTS,
   clampRegion,
@@ -30,6 +40,16 @@ import {
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
 import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines, statsReport } from './mediaStats';
+import {
+  edgeUnitsPerSecond,
+  levelFor,
+  loadScrollLevels,
+  nextScrollLevel,
+  NO_APP,
+  saveScrollLevels,
+  swipeUnits,
+  type ScrollLevels,
+} from './scrollPrefs';
 import { drawOverlay, type Look } from './overlay';
 import type { ClientMessage, KeyName, PcMediaStats, Region, ServerMessage, Size, ViewMode } from './protocol';
 import { VideoReceiver, watchFrames } from './rtc';
@@ -43,8 +63,8 @@ const EDGE_ZONE = 24;
 /** Region updates while panning are sent at most this often. */
 const PAN_SEND_MS = 100;
 const PAN_GLOW_MS = 250;
-/** Edge scrolling (Pan off): wheel units per view pixel pushed past the top or bottom; 60 px ≈ one notch. */
-const EDGE_SCROLL_UNITS_PER_PX = 2;
+/** While edge scrolling, the cursor waits this far (view px) inside the edge, over the page itself. */
+const EDGE_SCROLL_INSET = 24;
 const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
 /** How long focus put on the controls is held there against resets we didn't cause (ms). */
@@ -135,6 +155,13 @@ export function SessionScreen({ onEnded }: Props) {
   const [nav, setNavState] = useState<NavTarget>('view');
   /** Pointer mode only: swipes pan the view (on) or act as shortcuts (off, the default). */
   const [panSwipes, setPanSwipes] = useState(false);
+  /** Scroll strength per app (swipe step and edge-scroll speed), remembered on this device. */
+  const [scrollLevels, setScrollLevels] = useState<ScrollLevels>(loadScrollLevels);
+  const scrollLevelsRef = useRef(scrollLevels);
+  /** Hold-to-scroll at the top or bottom edge while dragging (Pan off). */
+  const edgeScroll = useRef<EdgeScroll | null>(null);
+  /** Where the glasses' own pointer is (stage px): pushed against the display edge it stops moving. */
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
   /** Latency measurement (see mediaStats.ts); collected all the time, shown by the Stats button. */
   const clock = useRef(new ClockSync());
   const latency = useRef(new FrameLatency(clock.current));
@@ -242,6 +269,8 @@ export function SessionScreen({ onEnded }: Props) {
       if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount) });
     }, 1000);
     const scrollFlush = setInterval(() => {
+      const edge = edgeScroll.current;
+      if (edge) scroll.current.addUnits((edge.dir * edgeUnitsPerSecond(currentScrollLevel()) * SCROLL_FLUSH_MS) / 1000);
       const dy = scroll.current.take();
       if (dy !== 0) session.send({ type: 'scroll', dy });
     }, SCROLL_FLUSH_MS);
@@ -515,6 +544,26 @@ export function SessionScreen({ onEnded }: Props) {
     if (next) sendRegion(next);
   };
 
+  /** The app shown as current (moves on a confirmed switch); levels are kept by its name. */
+  const currentAppName = () => appsRef.current[activeAppRef.current - 1] ?? NO_APP;
+  const currentScrollLevel = () => levelFor(scrollLevelsRef.current, currentAppName());
+
+  const cycleScrollLevel = () => {
+    const app = currentAppName();
+    const next = nextScrollLevel(levelFor(scrollLevelsRef.current, app));
+    const levels = { ...scrollLevelsRef.current, [app]: next };
+    scrollLevelsRef.current = levels;
+    setScrollLevels(levels);
+    saveScrollLevels(levels);
+    setLastInput(`${app || 'scroll'}: ${next} notch${next === 1 ? '' : 'es'} per swipe`);
+  };
+
+  const stopEdgeScroll = () => {
+    if (!edgeScroll.current) return;
+    edgeScroll.current = null;
+    setPanEdge(null);
+  };
+
   const showPanEdge = (x: number, y: number) => {
     setPanEdge({ x, y });
     if (glowTimer.current !== null) clearTimeout(glowTimer.current);
@@ -537,7 +586,7 @@ export function SessionScreen({ onEnded }: Props) {
         nudge(action.dx, action.dy);
         break;
       case 'scroll':
-        send({ type: 'scroll', dy: action.dy });
+        send({ type: 'scroll', dy: Math.sign(action.dy) * swipeUnits(currentScrollLevel()) });
         setLastInput(`swipe → scroll ${action.dy < 0 ? 'up' : 'down'}`);
         break;
       case 'type':
@@ -649,22 +698,35 @@ export function SessionScreen({ onEnded }: Props) {
         // With Pan on, pushing past an edge pans the view. With Pan off the view stays locked, the
         // cursor goes up to the edge, and pushing on past the top or bottom scrolls instead.
         if (!live.current.panSwipes) {
-          const { cursor: next, overflowY } = moveCursorLocked(c ?? centreOf(box), event.dx, event.dy, POINTER_GAIN, box);
-          if (overflowY !== 0) {
-            // Get Windows' cursor to the edge first (once), so the wheel goes to what's under it.
-            if (!c || c.x !== next.x || c.y !== next.y) {
-              live.current.cursor = next;
-              setCursor(next);
-              queueMove(toNormalized(next, box));
-              flushMove();
-            }
-            scroll.current.addUnits(overflowY * EDGE_SCROLL_UNITS_PER_PX);
-            showPanEdge(0, Math.sign(overflowY));
+          const from = c ?? centreOf(box);
+          const { cursor: moved, overflowY } = moveCursorLocked(from, event.dx, event.dy, POINTER_GAIN, box);
+          const height = stageRef.current?.clientHeight ?? 600;
+          const py = lastPointer.current?.y;
+          const pinned = py === undefined ? 0 : py >= height - 2 ? 1 : py <= 1 ? -1 : 0;
+          const was = edgeScroll.current;
+          const now = edgeScrollStep(was, { dy: event.dy, overflowY, pointerPinned: pinned });
+          edgeScroll.current = now;
+
+          if (now && !was) {
+            // Start: the scrolling itself runs on the flush timer until the drag ends or comes
+            // back in. Wait a little inside the edge, over the page rather than its border.
+            const top = box.y + EDGE_SCROLL_INSET;
+            const bottom = box.y + box.height - 1 - EDGE_SCROLL_INSET;
+            const at = { x: moved.x, y: now.dir > 0 ? Math.min(moved.y, bottom) : Math.max(moved.y, top) };
+            live.current.cursor = at;
+            setCursor(at);
+            queueMove(toNormalized(at, box));
+            flushMove();
+            setPanEdge({ x: 0, y: now.dir });
+            setLastInput(`edge scroll ${now.dir > 0 ? 'down' : 'up'}`);
             return;
           }
-          live.current.cursor = next;
-          setCursor(next);
-          queueMove(toNormalized(next, box));
+          if (now) return; // scrolling: the cursor stays put
+          if (was) stopEdgeScroll();
+
+          live.current.cursor = moved;
+          setCursor(moved);
+          queueMove(toNormalized(moved, box));
           return;
         }
 
@@ -691,6 +753,7 @@ export function SessionScreen({ onEnded }: Props) {
         setCursor(next);
         queueMove(toNormalized(next, box));
       } else if (event.kind === 'dragEnd') {
+        stopEdgeScroll();
         // Land the final region before the final cursor position.
         flushRegion();
         flushMove();
@@ -753,6 +816,7 @@ export function SessionScreen({ onEnded }: Props) {
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (secondPress.current?.id === e.pointerId) return; // wobble during pinch-then-hold
     const p = toLocal(e);
+    lastPointer.current = p;
     gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
   };
   const clearHold = () => {
@@ -784,6 +848,7 @@ export function SessionScreen({ onEnded }: Props) {
   const nextLook = LOOKS[(LOOKS.indexOf(look) + 1) % LOOKS.length];
   const mediaOk = status.media === 'connected';
   const barHidden = nav === 'view' && VIEW_NAV_MODES.includes(mode);
+  const shownScrollLevel = levelFor(scrollLevels, apps[activeApp - 1] ?? NO_APP);
 
   return (
     <div
@@ -824,6 +889,9 @@ export function SessionScreen({ onEnded }: Props) {
         {/* Always shown so the bar doesn't shift between modes; it only changes Pointer-mode swipes. */}
         <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes and pushing past an edge pan the view">
           Pan
+        </button>
+        <button type="button" data-scroll={shownScrollLevel} onClick={cycleScrollLevel} title="Scroll strength for this app">
+          ↕ {shownScrollLevel}
         </button>
         <button
           type="button"
