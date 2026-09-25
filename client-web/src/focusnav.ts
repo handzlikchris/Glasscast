@@ -57,3 +57,19 @@ export const ARROW_STEPS: Readonly<Record<string, { dx: number; dy: number }>> =
   ArrowUp: { dx: 0, dy: -1 },
   ArrowDown: { dx: 0, dy: 1 },
 };
+
+/**
+ * Which mode button pinch-then-hold focuses: the likely next step, so it's one pinch away.
+ * From Pointer that's Type; from View or Scroll it's back to Pointer.
+ */
+export function menuFocusFor(mode: ViewMode): ViewMode {
+  switch (mode) {
+    case 'pointer':
+      return 'type';
+    case 'view':
+    case 'scroll':
+      return 'pointer';
+    default:
+      return mode;
+  }
+}

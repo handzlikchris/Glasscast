@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enterIsSamePinch, navAfterMode, routeTap, SAME_PINCH_MS } from './focusnav';
+import { enterIsSamePinch, menuFocusFor, navAfterMode, routeTap, SAME_PINCH_MS } from './focusnav';
 
 describe('routeTap', () => {
   it('presses the focused button while on the controls', () => {
@@ -45,5 +45,18 @@ describe('navAfterMode', () => {
   it('keeps swipes on the controls in Overview and Type, which have their own buttons', () => {
     expect(navAfterMode('overview')).toBe('controls');
     expect(navAfterMode('type')).toBe('controls');
+  });
+});
+
+describe('menuFocusFor', () => {
+  it('focuses the likely next step: Type from Pointer, Pointer from View or Scroll', () => {
+    expect(menuFocusFor('pointer')).toBe('type');
+    expect(menuFocusFor('view')).toBe('pointer');
+    expect(menuFocusFor('scroll')).toBe('pointer');
+  });
+
+  it('stays on the current mode in Overview and Type', () => {
+    expect(menuFocusFor('overview')).toBe('overview');
+    expect(menuFocusFor('type')).toBe('type');
   });
 });

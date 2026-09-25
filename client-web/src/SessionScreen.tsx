@@ -15,6 +15,7 @@ import {
 import {
   ARROW_STEPS,
   enterIsSamePinch,
+  menuFocusFor,
   navAfterMode,
   routeTap,
   VIEW_NAV_MODES,
@@ -37,11 +38,12 @@ const PAN_GLOW_MS = 250;
 const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
 
+// Pointer and Type side by side: most use goes Pointer → Type → Pointer.
 const MODES: { mode: ViewMode; label: string }[] = [
   { mode: 'overview', label: 'Overview' },
   { mode: 'view', label: 'View' },
-  { mode: 'pointer', label: 'Pointer' },
   { mode: 'scroll', label: 'Scroll' },
+  { mode: 'pointer', label: 'Pointer' },
   { mode: 'type', label: 'Type' },
 ];
 
@@ -200,18 +202,25 @@ export function SessionScreen({ onEnded }: Props) {
     const el = focused.current;
     if (!el || !el.isConnected) return;
     el.click();
-    // Keep the focus ring unless the press sent swipes back to the view.
-    if (el.isConnected && live.current.nav === 'controls') el.focus({ preventScroll: true });
+    // Keep the focus ring if the press lost it, unless it sent swipes back to the view or
+    // moved focus on purpose (Type → text box, Send text → Pointer).
+    const lost = document.activeElement === null || document.activeElement === document.body;
+    if (lost && el.isConnected && live.current.nav === 'controls') el.focus({ preventScroll: true });
+  };
+
+  /** Moves focus to a mode button without switching modes, so the next pinch picks it. */
+  const focusModeButton = (target: ViewMode) => {
+    const button = stageRef.current?.querySelector<HTMLButtonElement>(`button[data-mode="${target}"]`);
+    if (!button) return;
+    focused.current = button;
+    button.focus({ preventScroll: true });
   };
 
   /** Pinch, then pinch and hold: put focus on the current mode's button. */
   const focusControls = () => {
     setNav('controls');
-    const button = stageRef.current?.querySelector<HTMLButtonElement>(`button[data-mode="${live.current.mode}"]`);
-    if (button) {
-      focused.current = button;
-      button.focus({ preventScroll: true });
-    }
+    keyFocus.current = true;
+    focusModeButton(menuFocusFor(live.current.mode));
     setLastInput('pinch, hold → controls');
   };
 
@@ -269,13 +278,12 @@ export function SessionScreen({ onEnded }: Props) {
       const active = document.activeElement;
       const target = e.target;
       if (!(target instanceof Element) || target.classList.contains('gesture-layer')) return; // taps handled there
-      const redirect =
-        keyFocus.current &&
-        live.current.nav === 'controls' &&
-        (active instanceof HTMLButtonElement || active instanceof HTMLTextAreaElement) &&
-        stage.contains(active) &&
-        !active.contains(target);
-      if (!redirect) {
+      const activeControl =
+        (active instanceof HTMLButtonElement || active instanceof HTMLTextAreaElement) && stage.contains(active)
+          ? active
+          : null;
+      if (activeControl?.contains(target)) return; // pressing the focused control itself
+      if (!(keyFocus.current && live.current.nav === 'controls' && activeControl)) {
         // Clicking a control directly takes over from the keys.
         if (target.closest('button, textarea')) keyFocus.current = false;
         return;
@@ -284,7 +292,7 @@ export function SessionScreen({ onEnded }: Props) {
       e.stopPropagation();
       redirectedPointer = e.pointerId;
       lastPointerAt.current = performance.now();
-      focused.current = active as HTMLElement;
+      focused.current = activeControl;
     };
     const onPointerUpCapture = (e: globalThis.PointerEvent) => {
       if (e.pointerId !== redirectedPointer) return;
@@ -610,7 +618,11 @@ export function SessionScreen({ onEnded }: Props) {
 
       {mode === 'type' && (
         <TypePanel
-          onSendText={(text) => send({ type: 'typeText', text })}
+          onSendText={(text) => {
+            send({ type: 'typeText', text });
+            // Usually straight back to Pointer: focus it so that's one pinch.
+            focusModeButton('pointer');
+          }}
           onKey={(key: KeyName) => send({ type: 'key', key })}
         />
       )}
