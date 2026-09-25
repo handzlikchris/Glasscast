@@ -165,21 +165,20 @@ try {
     await sleep(200);
   };
 
-  // 11. Pinch, then pinch-hold puts focus on the current mode's button; swipes then stay on the controls.
+  // 11. Pinch, then pinch-hold puts focus on the likely next mode (Pointer, from Scroll);
+  //     swipes then stay on the controls.
   await pinchThenHold();
   const heldFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
   const beforeControlsSwipe = await regionAt();
   await page.keyboard.press('ArrowRight');
   await sleep(300);
   const afterControlsSwipe = await regionAt();
-  check('pinch, then pinch-hold moves focus to the controls', heldFocus === 'scroll' &&
+  check('pinch, then pinch-hold from Scroll focuses Pointer', heldFocus === 'pointer' &&
     afterControlsSwipe.x === beforeControlsSwipe.x, `focus ${heldFocus}`);
 
   // 12. Pointer mode: a pinch clicks after a short wait, two quick pinches double-click,
   //     and pinch-then-hold clicks nothing.
-  await page.keyboard.down('Shift');
-  await page.keyboard.press('Tab');
-  await page.keyboard.up('Shift');
+  await page.keyboard.press('ArrowLeft'); // back onto Pointer after the swipe above
   await page.mouse.click(300, 300);
   await sleep(300);
   const clicksIn = async (fn) => {
@@ -195,19 +194,46 @@ try {
     await page.mouse.click(320, 300);
   });
   const held = await clicksIn(pinchThenHold);
-  const heldToPointer = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  const heldToType = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
   check('in Pointer mode a pinch clicks once and two quick pinches double-click', single === 1 && double === 2,
     `single ${single}, double ${double}`);
-  check('in Pointer mode pinch-then-hold opens the controls without clicking', held === 0 && heldToPointer === 'pointer',
-    `clicks ${held}, focus ${heldToPointer}`);
+  check('in Pointer mode pinch-then-hold focuses Type without clicking', held === 0 && heldToType === 'type',
+    `clicks ${held}, focus ${heldToType}`);
 
-  // 13. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
+  // 13. The whole Type round trip by pinches alone (taps on the video): Type → text box →
+  //     (composer) → Send text → Pointer focused → Pointer.
+  const activeName = () => page.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || el === document.body) return 'BODY';
+    return el.dataset?.mode ?? (el.textContent?.trim() || el.tagName);
+  });
+  const pinch = async () => {
+    await page.mouse.click(300, 150);
+    await sleep(400);
+  };
+  await pinch(); // presses Type (focused by step 12's pinch-then-hold)
+  const afterType = await page.evaluate(() => document.activeElement?.tagName ?? null);
+  await page.keyboard.type('from the composer');
+  await page.$eval('textarea', (el) => el.dispatchEvent(new Event('change', { bubbles: true })));
+  await sleep(200);
+  const afterComposer = await activeName();
+  const typedBefore = (await input()).length;
+  await pinch(); // presses Send text
+  const typed = (await input()).slice(typedBefore);
+  const afterSend = await activeName();
+  await pinch(); // presses Pointer
+  const roundTripStatus = await page.$eval('.status', (el) => el.textContent);
+  check('Type round trip by pinches: text box, Send text, then Pointer',
+    afterType === 'TEXTAREA' && afterComposer === 'Send text' && typed.includes('type from the composer') &&
+      afterSend === 'pointer' && roundTripStatus.trim().endsWith('pointer'),
+    `after Type ${afterType}, after composer ${afterComposer}, after Send ${afterSend}, sent ${typed.join('|')}`);
+
+  // 14. Back out of Type mode: focus the Pointer button with the keyboard, then "pinch" on the
   //     text box (where the glasses' pointer tends to be after typing). Pointer gets pressed.
   await page.locator('button::-p-text(Type)').click();
   await page.locator('textarea').fill('typed on the glasses');
   await page.focus('button[data-mode="type"]');
   await page.keyboard.down('Shift');
-  await page.keyboard.press('Tab'); // Scroll
   await page.keyboard.press('Tab'); // Pointer
   await page.keyboard.up('Shift');
   const focusBeforeBack = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
