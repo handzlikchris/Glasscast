@@ -20,6 +20,15 @@ public static class ControlProtocol
     public const int MaxScrollPerMessage = 1200;
     public const int MaxRegionCoordinate = 32_768;
     public const int MaxAppSlot = 9;
+    public const double MaxStatsValue = 1e9;
+
+    /// <summary>What the glasses may report in a <c>stats</c> message: numbers (or null) only.</summary>
+    public static readonly string[] ClientStatsFields =
+    [
+        "e2eMs", "e2eMaxMs", "arrivalMs", "arrivalMaxMs", "playoutMs", "playoutMaxMs", "slowestKb",
+        "clockErrorMs", "framesShown", "fps", "jitterBufferMs", "decodeMs", "kbps", "lost", "lostTotal",
+        "nacks", "plis", "freezes", "dropped", "keyframes",
+    ];
 
     private const char LineSeparator = (char)0x2028;
     private const char ParagraphSeparator = (char)0x2029;
@@ -88,6 +97,7 @@ public static class ControlProtocol
                 "key" => ParseKey(root),
                 "ping" => ParsePing(root),
                 "switchApp" => ParseSwitchApp(root),
+                "stats" => ParseClientStats(root),
                 _ => null,
             };
         }
@@ -203,6 +213,36 @@ public static class ControlProtocol
         Only(e, "slot") && Int(e, "slot", out var slot) && slot is >= 1 and <= MaxAppSlot
             ? new SwitchAppMessage(slot)
             : null;
+
+    private static ControlMessage? ParseClientStats(JsonElement e)
+    {
+        if (!Only(e, ClientStatsFields))
+        {
+            return null;
+        }
+
+        var values = new Dictionary<string, double?>(StringComparer.Ordinal);
+        foreach (var name in ClientStatsFields)
+        {
+            if (!e.TryGetProperty(name, out var p))
+            {
+                continue;
+            }
+            if (p.ValueKind == JsonValueKind.Null)
+            {
+                values[name] = null;
+            }
+            else if (Num(e, name, out var value))
+            {
+                values[name] = Math.Round(Math.Clamp(value, -MaxStatsValue, MaxStatsValue), 1);
+            }
+            else
+            {
+                return null;
+            }
+        }
+        return new ClientStatsMessage(values);
+    }
 
     private static ControlMessage? ParsePing(JsonElement e) =>
         Only(e, "t") && Num(e, "t", out var t) ? new PingMessage(t) : null;

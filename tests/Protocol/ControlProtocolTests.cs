@@ -133,6 +133,26 @@ public sealed class ControlProtocolTests
     }
 
     [Fact]
+    public void Stats_carry_known_numbers_rounded_and_bounded()
+    {
+        var stats = Parse<ClientStatsMessage>(
+            "{\"type\":\"stats\",\"e2eMs\":123.456,\"jitterBufferMs\":null,\"lostTotal\":1e15,\"arrivalMs\":-12}");
+        Assert.Equal(123.5, stats.Values["e2eMs"]);
+        Assert.Null(stats.Values["jitterBufferMs"]);
+        Assert.Equal(ControlProtocol.MaxStatsValue, stats.Values["lostTotal"]);
+        Assert.Equal(-12, stats.Values["arrivalMs"]);
+        Assert.False(stats.Values.ContainsKey("plis"));
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"stats\",\"e2eMs\":\"12\"}")]
+    [InlineData("{\"type\":\"stats\",\"e2eMs\":[12]}")]
+    [InlineData("{\"type\":\"stats\",\"e2eMs\":true}")]
+    [InlineData("{\"type\":\"stats\",\"note\":\"hello\"}")]
+    [InlineData("{\"type\":\"stats\",\"e2eMs\":1,\"token\":\"x\"}")]
+    public void Stats_reject_anything_but_known_numbers(string json) => Rejected(json);
+
+    [Fact]
     public void Mode_must_be_known()
     {
         Assert.Equal(ViewMode.Pointer, Parse<SetModeMessage>("{\"type\":\"setMode\",\"mode\":\"pointer\"}").Mode);

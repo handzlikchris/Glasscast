@@ -45,6 +45,10 @@ public static class ServerApp
             config["Desktop:RegionFile"] is { Length: > 0 } path ? path : RegionStore.DefaultPath,
             sp.GetRequiredService<ILogger<RegionStore>>()));
 
+        services.AddSingleton(sp => new StatsLog(
+            config["Diagnostics:StatsDirectory"] is { Length: > 0 } dir ? dir : StatsLog.DefaultDirectory,
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<StatsLog>>()));
         services.AddSingleton<CastArea>();
         services.AddSingleton<IScreen, WindowsScreen>();
         services.AddSingleton<ICaptureSource, GdiCaptureSource>();

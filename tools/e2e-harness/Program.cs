@@ -24,6 +24,7 @@ var app = ServerApp.Create(args, builder =>
         ["Media:IncludeLanCandidates"] = "true",
         ["Media:PublicIp"] = "",
         ["Desktop:RegionFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-region.json"),
+        ["Diagnostics:StatsDirectory"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-stats"),
         ["Apps:Shortcuts:0:Name"] = "Claude",
         ["Apps:Shortcuts:0:Title"] = "herdr",
         ["Apps:Shortcuts:1:Name"] = "Browser",

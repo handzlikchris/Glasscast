@@ -23,6 +23,7 @@ public sealed record SessionServices(
     IWindowSwitcher Windows,
     IOptions<AppShortcutOptions> Apps,
     AlertLog Alerts,
+    StatsLog Stats,
     TimeProvider Time,
     ILogger<ControlSession> Logger);
 
@@ -76,6 +77,14 @@ public sealed class ControlSession
 
             await _io.SendAsync(new { type = "rtcOffer", sdp = await peer.CreateOfferAsync() }, ct);
 
+            _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
+            {
+                ["event"] = "start",
+                ["codec"] = encoder.Codec,
+                ["mode"] = ControlProtocol.ModeName(controller.Mode),
+                ["region"] = $"{controller.Region.Width}x{controller.Region.Height}",
+            });
+
             _lastInputTimestamp = _s.Time.GetTimestamp();
             var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
             var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
@@ -106,6 +115,7 @@ public sealed class ControlSession
                 closeReason = "terminated";
             }
             _s.CastArea.Set(null);
+            _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?> { ["event"] = "end", ["reason"] = closeReason });
             await _io.CloseQuietlyAsync(closeStatus, closeReason);
             _s.Logger.LogInformation("Session {Session} closed: {Reason}", _lease.Id, closeReason);
         }
@@ -171,7 +181,18 @@ public sealed class ControlSession
                         ? _s.Windows.Switch(apps[switchApp.Slot - 1], controller.Region)
                         : AppSwitchResult.Failed;
                     _s.Logger.LogInformation("Session {Session} switched to app {Slot}: {Result}", _lease.Id, switchApp.Slot, result);
+                    _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
+                    {
+                        ["event"] = "switchApp",
+                        ["slot"] = switchApp.Slot,
+                        ["result"] = ResultName(result),
+                    });
                     await _io.SendAsync(new { type = "appSwitch", slot = switchApp.Slot, result = ResultName(result) }, ct);
+                    break;
+
+                case ClientStatsMessage stats:
+                    // Measurements, not input: they don't keep an idle session alive.
+                    _s.Stats.Write(_lease.Id, "glasses", stats.Values.Select(v => new KeyValuePair<string, object?>(v.Key, v.Value)));
                     break;
 
                 case PingMessage ping:
@@ -180,6 +201,14 @@ public sealed class ControlSession
 
                 default:
                     Interlocked.Exchange(ref _lastInputTimestamp, _s.Time.GetTimestamp());
+                    if (message is SetModeMessage setMode)
+                    {
+                        _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
+                        {
+                            ["event"] = "setMode",
+                            ["mode"] = ControlProtocol.ModeName(setMode.Mode),
+                        });
+                    }
                     if (controller.Handle(message!) == HandleResult.RegionChanged)
                     {
                         _s.CastArea.Set(controller.Region);
@@ -212,6 +241,20 @@ public sealed class ControlSession
             frames = stats.Frames.Select(f => new long[] { f.Rtp, f.CapturedAtUnixMs, f.Bytes }).ToArray(),
         };
         _ = Swallow(_io.SendAsync(message, ct));
+
+        var sizes = stats.Frames.Select(f => f.Bytes / 1024.0).DefaultIfEmpty(0).ToArray();
+        _s.Stats.Write(_lease.Id, "pc", new Dictionary<string, object?>
+        {
+            ["fps"] = message.fps,
+            ["captureMs"] = message.captureMs,
+            ["captureMaxMs"] = message.captureMaxMs,
+            ["encodeMs"] = message.encodeMs,
+            ["encodeMaxMs"] = message.encodeMaxMs,
+            ["kbps"] = message.kbps,
+            ["keyframes"] = message.keyframes,
+            ["frameKb"] = Math.Round(sizes.Average(), 1),
+            ["frameMaxKb"] = Math.Round(sizes.Max(), 1),
+        });
     }
 
     private static string ResultName(AppSwitchResult result) => result switch

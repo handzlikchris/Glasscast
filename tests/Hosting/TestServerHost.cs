@@ -25,6 +25,9 @@ public sealed class TestServerHost : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly string _regionFile = Path.Combine(Path.GetTempPath(), $"region-{Guid.NewGuid():N}.json");
 
+    /// <summary>Where this host's media stats log goes (a fresh temp folder).</summary>
+    public string StatsDirectory { get; } = Path.Combine(Path.GetTempPath(), $"stats-{Guid.NewGuid():N}");
+
     public TestServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
         var config = new Dictionary<string, string?>
@@ -33,6 +36,7 @@ public sealed class TestServerHost : IAsyncDisposable
             ["Web:ClientRoot"] = "does-not-exist",
             ["Session:AuthTimeout"] = "00:00:00.500",
             ["Desktop:RegionFile"] = _regionFile,
+            ["Diagnostics:StatsDirectory"] = StatsDirectory,
             ["Media:FramesPerSecond"] = "30",
         };
         foreach (var (key, value) in settings ?? new())
@@ -130,6 +134,10 @@ public sealed class TestServerHost : IAsyncDisposable
         await _app.StopAsync();
         await _app.DisposeAsync();
         File.Delete(_regionFile);
+        if (Directory.Exists(StatsDirectory))
+        {
+            Directory.Delete(StatsDirectory, recursive: true);
+        }
     }
 }
 

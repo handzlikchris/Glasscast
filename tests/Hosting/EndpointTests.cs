@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Text.Json;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Hosting;
@@ -105,6 +106,39 @@ public sealed class EndpointTests : IAsyncLifetime
         Assert.Equal(3000u, frames[1][0].GetUInt32());
         Assert.InRange(frames[0][1].GetInt64(), before - 1000, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         Assert.Equal(3, frames[0][2].GetInt32()); // FakeEncoder's frame
+    }
+
+    [Fact]
+    public async Task Stats_from_the_glasses_and_the_pc_go_to_the_stats_log_without_counting_as_input()
+    {
+        var token = await _host.PairAsync();
+        using var session = await _host.StartSessionAsync(token);
+        await session.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+        await session.ReceiveAsync("mediaStats");
+        await session.SendAsync(new { type = "stats", e2eMs = 142.26, plis = 3, jitterBufferMs = (double?)null });
+        await session.SendAsync(new { type = "switchApp", slot = 1 });
+        await session.ReceiveAsync("appSwitch");
+
+        var lines = ReadStatsLog();
+        var glasses = lines.Single(l => l.GetProperty("kind").GetString() == "glasses");
+        Assert.Equal(142.3, glasses.GetProperty("e2eMs").GetDouble());
+        Assert.Equal(3, glasses.GetProperty("plis").GetDouble());
+        Assert.Equal(JsonValueKind.Null, glasses.GetProperty("jitterBufferMs").ValueKind);
+        Assert.Contains(lines, l => l.GetProperty("kind").GetString() == "pc" && l.GetProperty("frameMaxKb").GetDouble() >= 0);
+        var events = lines.Where(l => l.GetProperty("kind").GetString() == "event")
+            .Select(l => l.GetProperty("event").GetString()).ToArray();
+        Assert.Equal(["start", "switchApp"], events);
+        Assert.All(lines, l => Assert.Equal(glasses.GetProperty("session").GetString(), l.GetProperty("session").GetString()));
+        Assert.Empty(_host.Input.Actions);
+    }
+
+    private JsonElement[] ReadStatsLog()
+    {
+        var file = Directory.GetFiles(_host.StatsDirectory, "stats-*.jsonl").Single();
+        using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonDocument.Parse(line).RootElement.Clone()).ToArray();
     }
 
     [Fact]

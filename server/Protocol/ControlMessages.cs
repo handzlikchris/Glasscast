@@ -65,5 +65,11 @@ public sealed record KeyMessage(KeyCommand Key) : ControlMessage;
 
 public sealed record PingMessage(double T) : ControlMessage;
 
+/// <summary>
+/// The glasses' own video measurements (Stats panel figures), for the PC's stats log.
+/// Only the names in <see cref="ControlProtocol.ClientStatsFields"/>; a null means "not measured".
+/// </summary>
+public sealed record ClientStatsMessage(IReadOnlyDictionary<string, double?> Values) : ControlMessage;
+
 /// <summary>Switch to app shortcut <paramref name="Slot"/> (1-based) from the PC's configured list.</summary>
 public sealed record SwitchAppMessage(int Slot) : ControlMessage;
