@@ -1,6 +1,7 @@
 # Task: companion phone app — glasses camera and microphone into the web app
 
-Status: **not started**. Written 2026-09-25 at the end of the session that built M0–M4.
+Status: **planned, not built**. Written 2026-09-25 at the end of the session that built M0–M4;
+plan added the same day (plan page, "Companion app track"). Waiting on the open questions there.
 Pick this up in a fresh session. Read `CLAUDE.md` first, then the plan page
 (https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV, read it with the Artifact tool).
 
@@ -45,6 +46,26 @@ Prove the whole path with the smallest useful feature:
 Acceptance: from the glasses (or the laptop/phone stand-in), tap Snap and see the photo on the
 600×600 view, with the time from tap to photo measured and written down. Then, as a second step,
 audio: stream the mic to the server, transcribe, and show or type the text.
+
+## Checked on 2026-09-25 (docs, CHANGELOG and Meta's Android sample; nothing run yet)
+
+The plan built from these is on the plan page, "Companion app track" (sections 11–19).
+
+- **DAT 1.0.0** came out on 2026-09-24 on Maven Central (`com.meta.wearable:mwdat-core`, `-camera`,
+  `-display`, `-inputs`, `-motion`, `-speech`, `-mockdevice`). No GitHub token needed any more.
+- It supports **Meta Ray-Ban Display** on glasses firmware **V128** with Meta AI app **V290**. SDK 0.9.0
+  needs Display V125 and app V282.
+- Meta's `samples/CameraAccess`: `minSdk 31` (Android 12), `compileSdk 36`, JDK 17, Android Studio
+  Narwhal or newer. Its foreground service is `connectedDevice`; the mic comes over HFP/SCO through
+  `AudioRecord` + `setCommunicationDevice`. `stream.capturePhoto()` needs a running stream and
+  returns `PhotoData.Bitmap` or `PhotoData.HEIC` (orientation in EXIF).
+- **Developer Mode** in the Meta AI app (Settings → App info, tap the version five times) lets an
+  unpublished app register. The app ID and client token can stay empty. Sideload with `adb`.
+- One DAT session per device. It pauses or stops when "another app or system feature" starts a
+  session. **Whether our glasses web app counts is unknown**: that's the first thing to test (C0).
+- The "Android 10" user agent is Chrome's frozen value; the real Android version is still unknown.
+- This PC has JDK 17, the Android SDK up to platform 35, `adb`, and Android Studio 2024.1 and 2024.3.
+  Platform 36 isn't installed yet (ask first).
 
 ## Research notes (verify before relying on them)
 
