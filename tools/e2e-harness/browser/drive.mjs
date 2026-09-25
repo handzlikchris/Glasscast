@@ -267,6 +267,25 @@ try {
       switched.join('|') === `switch Claude ${regionNow.x},${regionNow.y} ${regionNow.width}x${regionNow.height}` &&
       switchStatus.includes('Claude: switched') && focusAfterSwitch === 'pointer',
     `${appButtons.join(',')} | ${switched.join('|')} | focus ${focusAfterSwitch}`);
+  // 16. Back (history.back() on the glasses, or Escape) toggles between the view and the
+  //     controls; the same Back arriving both ways counts once.
+  await page.locator('button[data-mode="pointer"]').click(); // Pointer mode, swipes on the view
+  await sleep(200);
+  const focusName = () => page.evaluate(() => document.activeElement?.dataset?.mode ?? document.activeElement?.tagName);
+  await page.evaluate(() => history.back());
+  await sleep(400);
+  const afterHistoryBack = await focusName();
+  await page.keyboard.press('Escape');
+  await sleep(500);
+  const afterEscape = await focusName();
+  await page.evaluate(() => history.back());
+  await page.keyboard.press('Escape');
+  await sleep(500);
+  const afterDoubleBack = await focusName();
+  const stillInSession = await page.$('.stage').then((el) => el !== null);
+  check('Back toggles view ↔ controls, and a doubled Back counts once',
+    afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
+    `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
 } finally {
   await browser.close();
 }
