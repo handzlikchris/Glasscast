@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { PairingScreen } from './PairingScreen';
+import { usePinchPressesFocused } from './pinchPress';
 import { SessionScreen } from './SessionScreen';
 
 type Phase = { kind: 'pairing'; attempt: number } | { kind: 'session' } | { kind: 'ended'; reason: string };
 
 export function App() {
   const [phase, setPhase] = useState<Phase>({ kind: 'pairing', attempt: 0 });
+  usePinchPressesFocused(phase.kind !== 'session');
 
   switch (phase.kind) {
     case 'pairing':
