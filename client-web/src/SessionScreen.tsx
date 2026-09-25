@@ -29,9 +29,10 @@ import {
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
+import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines } from './mediaStats';
 import { drawOverlay, type Look } from './overlay';
-import type { ClientMessage, KeyName, Region, ServerMessage, Size, ViewMode } from './protocol';
-import { VideoReceiver } from './rtc';
+import type { ClientMessage, KeyName, PcMediaStats, Region, ServerMessage, Size, ViewMode } from './protocol';
+import { VideoReceiver, watchFrames } from './rtc';
 import { TypePanel } from './TypePanel';
 
 /** View pixels of cursor travel per pixel of pinch-drag. Tune on the device. */
@@ -132,6 +133,12 @@ export function SessionScreen({ onEnded }: Props) {
   const [nav, setNavState] = useState<NavTarget>('view');
   /** Pointer mode only: swipes pan the view (on) or act as shortcuts (off, the default). */
   const [panSwipes, setPanSwipes] = useState(false);
+  /** Latency measurement (see mediaStats.ts); collected all the time, shown by the Stats button. */
+  const clock = useRef(new ClockSync());
+  const latency = useRef(new FrameLatency(clock.current));
+  const pcStats = useRef<PcMediaStats[]>([]);
+  const [showStats, setShowStats] = useState(false);
+  const [statsText, setStatsText] = useState<string[]>([]);
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
 
@@ -178,8 +185,16 @@ export function SessionScreen({ onEnded }: Props) {
           if (unconfirmedRegions.current === 0 && !pendingRegion.current) setRegion(message.region);
           setDraft(null);
           break;
-        case 'pong':
-          setStatus((s) => ({ ...s, rttMs: Date.now() - message.t }));
+        case 'pong': {
+          const rtt = Date.now() - message.t;
+          const receivedAt = performance.timeOrigin + performance.now();
+          clock.current.add(receivedAt - rtt, receivedAt, message.serverTime);
+          setStatus((s) => ({ ...s, rttMs: rtt }));
+          break;
+        }
+        case 'mediaStats':
+          latency.current.addSent(message.frames, performance.timeOrigin + performance.now());
+          pcStats.current = [...pcStats.current, message].slice(-PC_STATS_KEPT);
           break;
         case 'appSwitch': {
           const name = appsRef.current[message.slot - 1] ?? `app ${message.slot}`;
@@ -210,10 +225,15 @@ export function SessionScreen({ onEnded }: Props) {
       if (media === 'failed') end('The video connection failed.');
     });
 
+    const stopWatchingFrames = watchFrames(videoRef.current!, (frame) => latency.current.addShown(frame));
+    // Ping at once too: the clock offset for the latency figures comes from pongs.
+    session.send({ type: 'ping', t: Date.now() });
     const ping = setInterval(() => session.send({ type: 'ping', t: Date.now() }), PING_MS);
     const stats = setInterval(async () => {
       const s = await receiver!.stats();
       setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec }));
+      const now = performance.timeOrigin + performance.now();
+      setStatsText(statsLines(latency.current.summary(now), s.receiver, pcStats.current));
     }, 1000);
     const scrollFlush = setInterval(() => {
       const dy = scroll.current.take();
@@ -222,6 +242,7 @@ export function SessionScreen({ onEnded }: Props) {
 
     return () => {
       ended = true;
+      stopWatchingFrames();
       clearInterval(ping);
       clearInterval(stats);
       clearInterval(scrollFlush);
@@ -791,7 +812,18 @@ export function SessionScreen({ onEnded }: Props) {
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
         </button>
+        <button type="button" data-toggle="stats" aria-pressed={showStats} onClick={() => setShowStats((v) => !v)} title="Latency stats">
+          Stats
+        </button>
       </nav>
+
+      {showStats && mode !== 'overview' && mode !== 'type' && (
+        <div className="stats-panel" aria-label="Latency stats">
+          {statsText.map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
 
       {mode === 'overview' && (
         <nav className="toolbar bottom" aria-label="Region">

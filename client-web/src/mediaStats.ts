@@ -1,0 +1,233 @@
+// Where the video latency goes, for the stats panel. The PC lists every frame it sends with its
+// RTP timestamp and capture time (mediaStats); the video element reports the RTP timestamp of
+// each frame it shows. Matching the two, with the PC's clock offset from ping/pong, gives
+// capture-to-display latency per frame. Pure logic: times are epoch milliseconds.
+import type { PcMediaStats, SentFrame } from './protocol';
+
+/** Ping/pong samples kept for the clock offset (one every 2 s: the last 20 s). */
+const CLOCK_SAMPLES = 10;
+/** Frames waiting for their other half are dropped after this long. */
+const MATCH_WINDOW_MS = 5_000;
+/** Averages cover the last 2 s, maxima the last 10 s (long enough to read after a screen change). */
+export const AVG_WINDOW_MS = 2_000;
+export const MAX_WINDOW_MS = 10_000;
+
+/** Offset from this device's clock to the PC's: pcTime ≈ localTime + offset. */
+export class ClockSync {
+  private samples: { rtt: number; offset: number }[] = [];
+
+  /** A ping sent at `sentAt` and answered at `receivedAt` (local), stamped `pcTime` by the PC. */
+  add(sentAt: number, receivedAt: number, pcTime: number): void {
+    const rtt = receivedAt - sentAt;
+    if (rtt < 0) return;
+    this.samples.push({ rtt, offset: pcTime - (sentAt + rtt / 2) });
+    if (this.samples.length > CLOCK_SAMPLES) this.samples.shift();
+  }
+
+  /** From the quickest round trip: the PC stamped it within ±rtt/2 of our midpoint. */
+  get best(): { offset: number; errorMs: number } | null {
+    if (this.samples.length === 0) return null;
+    const s = this.samples.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+    return { offset: s.offset, errorMs: s.rtt / 2 };
+  }
+}
+
+/** A frame the video element showed. `receivedAt` is when its last packet arrived, if the browser says. */
+export interface ShownFrame {
+  rtp: number;
+  receivedAt: number | null;
+  shownAt: number;
+}
+
+interface Matched {
+  capturedAt: number; // PC clock
+  receivedAt: number | null;
+  shownAt: number;
+  bytes: number;
+}
+
+export interface Span {
+  avg: number;
+  max: number;
+}
+
+export interface LatencySummary {
+  /** Frames shown in the averaging window. */
+  frames: number;
+  /** PC capture start → shown here. */
+  total: Span;
+  /** PC capture start → last packet here (capture, encode, send, network). */
+  arrival: Span | null;
+  /** Last packet here → shown (jitter buffer, decode, render). */
+  playout: Span | null;
+  /** Size of the slowest frame in the max window, KB. */
+  slowestKb: number;
+  clockErrorMs: number;
+}
+
+export class FrameLatency {
+  private readonly sent = new Map<number, { frame: SentFrame; at: number }>();
+  private readonly shown = new Map<number, ShownFrame>();
+  private matched: Matched[] = [];
+
+  constructor(private readonly clock: ClockSync) {}
+
+  addSent(frames: readonly SentFrame[], now: number): void {
+    for (const frame of frames) {
+      const shown = this.shown.get(frame.rtp);
+      if (shown) {
+        this.shown.delete(frame.rtp);
+        this.match(frame, shown);
+      } else {
+        this.sent.set(frame.rtp, { frame, at: now });
+      }
+    }
+    this.prune(now);
+  }
+
+  addShown(frame: ShownFrame): void {
+    const sent = this.sent.get(frame.rtp);
+    if (sent) {
+      this.sent.delete(frame.rtp);
+      this.match(sent.frame, frame);
+    } else {
+      this.shown.set(frame.rtp, frame);
+    }
+  }
+
+  summary(now: number): LatencySummary | null {
+    const clock = this.clock.best;
+    if (!clock) return null;
+    const recent = this.matched.filter((m) => m.shownAt >= now - MAX_WINDOW_MS);
+    if (recent.length === 0) return null;
+
+    // PC capture time on our clock.
+    const captured = (m: Matched) => m.capturedAt - clock.offset;
+    const span = (values: { at: number; v: number }[]): Span | null => {
+      if (values.length === 0) return null;
+      const avgOf = values.filter((x) => x.at >= now - AVG_WINDOW_MS);
+      const pool = avgOf.length > 0 ? avgOf : values.slice(-1);
+      return {
+        avg: pool.reduce((sum, x) => sum + x.v, 0) / pool.length,
+        max: Math.max(...values.map((x) => x.v)),
+      };
+    };
+
+    const total = span(recent.map((m) => ({ at: m.shownAt, v: m.shownAt - captured(m) })))!;
+    const withArrival = recent.filter((m) => m.receivedAt !== null);
+    const slowest = recent.reduce((a, b) => (b.shownAt - captured(b) > a.shownAt - captured(a) ? b : a));
+    return {
+      frames: recent.filter((m) => m.shownAt >= now - AVG_WINDOW_MS).length,
+      total,
+      arrival: span(withArrival.map((m) => ({ at: m.shownAt, v: m.receivedAt! - captured(m) }))),
+      playout: span(withArrival.map((m) => ({ at: m.shownAt, v: m.shownAt - m.receivedAt! }))),
+      slowestKb: slowest.bytes / 1024,
+      clockErrorMs: clock.errorMs,
+    };
+  }
+
+  private match(frame: SentFrame, shown: ShownFrame): void {
+    this.matched.push({ capturedAt: frame.capturedAt, receivedAt: shown.receivedAt, shownAt: shown.shownAt, bytes: frame.bytes });
+  }
+
+  private prune(now: number): void {
+    for (const [rtp, s] of this.sent) if (s.at < now - MATCH_WINDOW_MS) this.sent.delete(rtp);
+    for (const [rtp, s] of this.shown) if (s.shownAt < now - MATCH_WINDOW_MS) this.shown.delete(rtp);
+    this.matched = this.matched.filter((m) => m.shownAt >= now - MAX_WINDOW_MS);
+  }
+}
+
+/** Cumulative inbound-rtp counters from getStats() (times in seconds, as the browser gives them). */
+export interface InboundSnapshot {
+  at: number;
+  jitterBufferDelay: number;
+  jitterBufferEmittedCount: number;
+  framesDecoded: number;
+  totalDecodeTime: number;
+  bytesReceived: number;
+  packetsLost: number;
+  nackCount: number;
+  pliCount: number;
+  freezeCount: number;
+  framesDropped: number;
+  keyFramesDecoded: number;
+}
+
+/** What the receiver did since the previous snapshot (rates, per-frame times) plus session totals. */
+export interface ReceiverStats {
+  jitterBufferMs: number | null;
+  decodeMs: number | null;
+  kbps: number | null;
+  lost: number;
+  lostTotal: number;
+  nacks: number;
+  plis: number;
+  freezes: number;
+  dropped: number;
+  keyframes: number;
+}
+
+export function receiverStats(prev: InboundSnapshot | null, cur: InboundSnapshot): ReceiverStats {
+  const perFrameMs = (time: keyof InboundSnapshot, count: keyof InboundSnapshot) => {
+    if (!prev || cur[count] <= prev[count]) return null;
+    return ((cur[time] - prev[time]) / (cur[count] - prev[count])) * 1000;
+  };
+  const seconds = prev ? (cur.at - prev.at) / 1000 : 0;
+  return {
+    jitterBufferMs: perFrameMs('jitterBufferDelay', 'jitterBufferEmittedCount'),
+    decodeMs: perFrameMs('totalDecodeTime', 'framesDecoded'),
+    kbps: prev && seconds > 0 ? ((cur.bytesReceived - prev.bytesReceived) * 8) / seconds / 1000 : null,
+    lost: prev ? Math.max(0, cur.packetsLost - prev.packetsLost) : 0,
+    lostTotal: cur.packetsLost,
+    nacks: cur.nackCount,
+    plis: cur.pliCount,
+    freezes: cur.freezeCount,
+    dropped: cur.framesDropped,
+    keyframes: cur.keyFramesDecoded,
+  };
+}
+
+/** PC stats messages kept for the panel: about the last 10 s. */
+export const PC_STATS_KEPT = MAX_WINDOW_MS / 1000;
+
+const ms = (v: number | null | undefined) => (v === null || v === undefined ? '–' : Math.round(v).toString());
+
+/** The stats panel's lines. `pc` is the recent mediaStats messages, oldest first. */
+export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | null, pc: readonly PcMediaStats[]): string[] {
+  const lines: string[] = [];
+  if (latency) {
+    lines.push(
+      `e2e ${ms(latency.total.avg)} ms · max ${ms(latency.total.max)} (${ms(latency.slowestKb)} KB) · clock ±${ms(latency.clockErrorMs)}`,
+    );
+    if (latency.arrival && latency.playout) {
+      lines.push(
+        `PC→here ${ms(latency.arrival.avg)} (max ${ms(latency.arrival.max)}) · buffer+show ${ms(latency.playout.avg)} (max ${ms(latency.playout.max)})`,
+      );
+    }
+  } else {
+    lines.push('e2e – (no frame timings yet)');
+  }
+
+  if (rx) {
+    const mbps = rx.kbps === null ? '–' : (rx.kbps / 1000).toFixed(1);
+    lines.push(`jitter buf ${ms(rx.jitterBufferMs)} ms · decode ${ms(rx.decodeMs)} ms · ${mbps} Mbps in`);
+    lines.push(`lost ${rx.lost} (${rx.lostTotal}) · nack ${rx.nacks} · pli ${rx.plis} · freezes ${rx.freezes} · dropped ${rx.dropped}`);
+  }
+
+  if (pc.length > 0) {
+    const recent = pc.slice(-2);
+    const avg = (pick: (s: PcMediaStats) => number) => recent.reduce((sum, s) => sum + pick(s), 0) / recent.length;
+    const max = (pick: (s: PcMediaStats) => number) => Math.max(...pc.map(pick));
+    const recentFrames = recent.flatMap((s) => s.frames);
+    const frameKb = recentFrames.length > 0 ? recentFrames.reduce((sum, f) => sum + f.bytes, 0) / recentFrames.length / 1024 : null;
+    const maxKb = Math.max(0, ...pc.flatMap((s) => s.frames.map((f) => f.bytes))) / 1024;
+    const keyframes = pc.reduce((sum, s) => sum + s.keyframes, 0);
+    lines.push(
+      `PC capture ${ms(avg((s) => s.captureMs))} (max ${ms(max((s) => s.captureMaxMs))}) · encode ${ms(avg((s) => s.encodeMs))} (max ${ms(max((s) => s.encodeMaxMs))}) ms`,
+    );
+    lines.push(
+      `PC frame ${ms(frameKb)} KB (max ${ms(maxKb)}) · ${ms(pc[pc.length - 1].fps)} fps · ${ms(pc[pc.length - 1].kbps)} kbps · keyframes ${keyframes}`,
+    );
+  }
+  return lines;
+}

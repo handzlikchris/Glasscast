@@ -36,6 +36,28 @@ export const MAX_APP_NAME_LENGTH = 16;
 
 export type AppSwitchResult = 'switched' | 'notRunning' | 'failed';
 
+/** One frame the PC sent: RTP timestamp, capture start (Unix ms, PC clock), encoded bytes. */
+export interface SentFrame {
+  rtp: number;
+  capturedAt: number;
+  bytes: number;
+}
+
+/** About a second of the PC's frame pump (see FramePump.cs). Times in ms. */
+export interface PcMediaStats {
+  fps: number;
+  captureMs: number;
+  captureMaxMs: number;
+  encodeMs: number;
+  encodeMaxMs: number;
+  kbps: number;
+  keyframes: number;
+  frames: SentFrame[];
+}
+
+/** More frames than a second at 60 fps would be a malformed stats message. */
+const MAX_STATS_FRAMES = 120;
+
 export type ServerMessage =
   | { type: 'pairCode'; code: string; expiresInSeconds: number }
   | { type: 'paired'; token: string }
@@ -46,7 +68,8 @@ export type ServerMessage =
   | { type: 'rtcOffer'; sdp: string }
   | { type: 'region'; region: Region }
   | { type: 'pong'; t: number; serverTime: number }
-  | { type: 'appSwitch'; slot: number; result: AppSwitchResult };
+  | { type: 'appSwitch'; slot: number; result: AppSwitchResult }
+  | ({ type: 'mediaStats' } & PcMediaStats);
 
 export type ClientMessage =
   | { type: 'authenticate'; token: string }
@@ -115,6 +138,23 @@ export function parseServerMessage(raw: string): ServerMessage | null {
       return isNumber(data.slot) && isAppSwitchResult(data.result)
         ? { type: 'appSwitch', slot: data.slot, result: data.result }
         : null;
+    case 'mediaStats': {
+      const numbers = ['fps', 'captureMs', 'captureMaxMs', 'encodeMs', 'encodeMaxMs', 'kbps', 'keyframes'] as const;
+      const frames = toSentFrames(data.frames);
+      if (!numbers.every((k) => isNumber(data[k])) || !frames) return null;
+      const n = (k: (typeof numbers)[number]) => data[k] as number;
+      return {
+        type: 'mediaStats',
+        fps: n('fps'),
+        captureMs: n('captureMs'),
+        captureMaxMs: n('captureMaxMs'),
+        encodeMs: n('encodeMs'),
+        encodeMaxMs: n('encodeMaxMs'),
+        kbps: n('kbps'),
+        keyframes: n('keyframes'),
+        frames,
+      };
+    }
     default:
       return null;
   }
@@ -135,4 +175,15 @@ function toApps(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > MAX_APPS) return [];
   const ok = value.every((n) => isString(n) && n.length > 0 && n.length <= MAX_APP_NAME_LENGTH);
   return ok ? (value as string[]) : [];
+}
+
+/** The frames list of mediaStats: [rtp, capturedAt, bytes] triples. */
+function toSentFrames(value: unknown): SentFrame[] | null {
+  if (!Array.isArray(value) || value.length > MAX_STATS_FRAMES) return null;
+  const frames: SentFrame[] = [];
+  for (const f of value) {
+    if (!Array.isArray(f) || f.length !== 3 || !f.every(isNumber)) return null;
+    frames.push({ rtp: f[0], capturedAt: f[1], bytes: f[2] });
+  }
+  return frames;
 }

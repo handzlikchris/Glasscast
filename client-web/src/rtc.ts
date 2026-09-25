@@ -1,18 +1,19 @@
 // Receive-only WebRTC video from the PC. The server sends the offer; we answer.
 // No STUN/TURN: the offer already carries the router's public address and the
 // forwarded media port, and our checks go straight there.
+import { receiverStats, type InboundSnapshot, type ReceiverStats, type ShownFrame } from './mediaStats';
 import type { ClientMessage } from './protocol';
 
 export interface VideoStats {
   fps: number | null;
   codec: string | null;
   rttMs: number | null;
-  decodeMs: number | null;
+  receiver: ReceiverStats | null;
 }
 
 export class VideoReceiver {
   private readonly pc = new RTCPeerConnection({ iceServers: [] });
-  private lastDecode: { frames: number; time: number } | null = null;
+  private lastInbound: InboundSnapshot | null = null;
 
   constructor(
     private readonly send: (message: ClientMessage) => void,
@@ -53,19 +54,30 @@ export class VideoReceiver {
       if (s.type === 'transport' && typeof s.selectedCandidatePairId === 'string') pairId = s.selectedCandidatePairId;
     });
 
-    const result: VideoStats = { fps: null, codec: null, rttMs: null, decodeMs: null };
+    const result: VideoStats = { fps: null, codec: null, rttMs: null, receiver: null };
     const video = inbound as Record<string, unknown> | null;
     if (video) {
       result.fps = typeof video.framesPerSecond === 'number' ? video.framesPerSecond : null;
       const codec = byId.get(video.codecId as string);
       result.codec = codec ? String(codec.mimeType).replace('video/', '') : null;
 
-      const frames = Number(video.framesDecoded ?? 0);
-      const time = Number(video.totalDecodeTime ?? 0);
-      if (this.lastDecode && frames > this.lastDecode.frames) {
-        result.decodeMs = ((time - this.lastDecode.time) / (frames - this.lastDecode.frames)) * 1000;
-      }
-      this.lastDecode = { frames, time };
+      const n = (key: string) => Number(video[key] ?? 0);
+      const snapshot: InboundSnapshot = {
+        at: performance.now(),
+        jitterBufferDelay: n('jitterBufferDelay'),
+        jitterBufferEmittedCount: n('jitterBufferEmittedCount'),
+        framesDecoded: n('framesDecoded'),
+        totalDecodeTime: n('totalDecodeTime'),
+        bytesReceived: n('bytesReceived'),
+        packetsLost: n('packetsLost'),
+        nackCount: n('nackCount'),
+        pliCount: n('pliCount'),
+        freezeCount: n('freezeCount'),
+        framesDropped: n('framesDropped'),
+        keyFramesDecoded: n('keyFramesDecoded'),
+      };
+      result.receiver = receiverStats(this.lastInbound, snapshot);
+      this.lastInbound = snapshot;
     }
 
     const pair = pairId ? byId.get(pairId) : null;
@@ -78,4 +90,31 @@ export class VideoReceiver {
   close(): void {
     this.pc.close();
   }
+}
+
+/**
+ * Calls back for every frame the video element presents, with the RTP timestamp it arrived with
+ * (requestVideoFrameCallback). Times are epoch ms on this device's clock. Returns a stop function;
+ * does nothing where the browser lacks the API.
+ */
+export function watchFrames(video: HTMLVideoElement, onFrame: (frame: ShownFrame) => void): () => void {
+  if (typeof video.requestVideoFrameCallback !== 'function') return () => {};
+  let handle = 0;
+  let stopped = false;
+  const tick = (_now: number, meta: VideoFrameCallbackMetadata) => {
+    if (stopped) return;
+    if (typeof meta.rtpTimestamp === 'number') {
+      onFrame({
+        rtp: meta.rtpTimestamp,
+        receivedAt: typeof meta.receiveTime === 'number' ? performance.timeOrigin + meta.receiveTime : null,
+        shownAt: performance.timeOrigin + meta.expectedDisplayTime,
+      });
+    }
+    handle = video.requestVideoFrameCallback(tick);
+  };
+  handle = video.requestVideoFrameCallback(tick);
+  return () => {
+    stopped = true;
+    video.cancelVideoFrameCallback(handle);
+  };
 }

@@ -35,6 +35,20 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage(hello('bogus'))).toMatchObject({ type: 'hello', mode: 'view' });
   });
 
+  it('reads media stats with their per-frame timings', () => {
+    const stats = (frames: string) =>
+      `{"type":"mediaStats","fps":20,"captureMs":6.1,"captureMaxMs":9,"encodeMs":4,"encodeMaxMs":12.5,"kbps":2400,"keyframes":1,"frames":${frames}}`;
+    expect(parseServerMessage(stats('[[4500,1790000000000,1234]]'))).toMatchObject({
+      type: 'mediaStats',
+      fps: 20,
+      encodeMaxMs: 12.5,
+      frames: [{ rtp: 4500, capturedAt: 1790000000000, bytes: 1234 }],
+    });
+    expect(parseServerMessage(stats('[[4500,1790000000000]]'))).toBeNull();
+    expect(parseServerMessage(stats('[["a",1,2]]'))).toBeNull();
+    expect(parseServerMessage(stats(JSON.stringify(Array(121).fill([1, 2, 3]))))).toBeNull();
+  });
+
   it('drops malformed or unknown messages', () => {
     expect(parseServerMessage('not json')).toBeNull();
     expect(parseServerMessage('{"type":"pairCode","code":5}')).toBeNull();
