@@ -54,6 +54,9 @@ try {
   check('video is live', live && fps > 0, statusText.replace(/\s+/g, ' '));
   const playing = await page.$eval('video', (v) => v.videoWidth > 0 && !v.paused);
   check('video element is playing 600px frames', playing);
+  const lookLabel = await page.$eval('button[title="Display look"]', (el) => el.textContent);
+  check('a session starts in Pointer mode with the lifted look',
+    statusText.trim().endsWith('pointer') && lookLabel === 'Look: lifted', `${lookLabel}`);
   await shot('2-view');
 
   // 3. Pointer mode: drag moves, short tap clicks.
