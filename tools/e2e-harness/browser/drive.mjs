@@ -267,8 +267,9 @@ try {
       switched.join('|') === `switch Claude ${regionNow.x},${regionNow.y} ${regionNow.width}x${regionNow.height}` &&
       switchStatus.includes('Claude: switched') && focusAfterSwitch === 'pointer',
     `${appButtons.join(',')} | ${switched.join('|')} | focus ${focusAfterSwitch}`);
-  // 16. Back (history.back() on the glasses, or Escape) toggles between the view and the
-  //     controls; the same Back arriving both ways counts once.
+  // 16. Back (history.back() on the glasses, or Escape) with no swipe after it toggles between
+  //     the view and the controls once the chord wait is over; the same Back arriving both ways
+  //     counts once.
   await page.locator('button[data-mode="pointer"]').click(); // Pointer mode, swipes on the view
   await sleep(200);
   const focusName = () => page.evaluate(() => document.activeElement?.dataset?.mode ?? document.activeElement?.tagName);
@@ -277,19 +278,38 @@ try {
     history.back();
     setTimeout(() => document.querySelector('button[data-mode="overview"]')?.focus(), 30);
   });
-  await sleep(400);
+  await sleep(900);
   const afterHistoryBack = await focusName();
   await page.keyboard.press('Escape');
-  await sleep(500);
+  await sleep(900);
   const afterEscape = await focusName();
   await page.evaluate(() => history.back());
   await page.keyboard.press('Escape');
-  await sleep(500);
+  await sleep(900);
   const afterDoubleBack = await focusName();
   const stillInSession = await page.$('.stage').then((el) => el !== null);
   check('Back toggles view ↔ controls (focus held on Type through a reset), a doubled Back counts once',
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
+
+  // 17. Back + swipe up goes straight to Scroll; Back + swipe down straight to Type (text box focused).
+  await page.locator('button[data-mode="pointer"]').click();
+  await sleep(200);
+  const modeNow = () => page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  await page.evaluate(() => history.back());
+  await sleep(100);
+  await page.keyboard.press('ArrowUp');
+  await sleep(700);
+  const afterBackUp = await modeNow();
+  await page.evaluate(() => history.back());
+  await sleep(100);
+  await page.keyboard.press('ArrowDown');
+  await sleep(700);
+  const afterBackDown = await modeNow();
+  const typeFocus = await page.evaluate(() => document.activeElement?.tagName);
+  check('Back + swipe up opens Scroll, Back + swipe down opens Type',
+    afterBackUp === 'scroll' && afterBackDown === 'type' && typeFocus === 'TEXTAREA',
+    `up ${afterBackUp}, down ${afterBackDown}, focus ${typeFocus}`);
 } finally {
   await browser.close();
 }
