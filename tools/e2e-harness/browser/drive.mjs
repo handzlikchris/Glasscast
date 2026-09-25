@@ -368,6 +368,14 @@ try {
   check('the hidden mode bar lets taps through to the desktop',
     hiddenRegion.opacity === '0' && tapClicks === 1 && modeAfterHiddenTap === 'pointer',
     `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
+  // 19. After the session ends, a pinch anywhere presses the focused "Pair again" (the glasses'
+  //     pinch doesn't land on the button), and pairing starts again (auto-approved here).
+  await fetch(`${BASE}/__harness/terminate`, { method: 'POST' });
+  const ended = await page.waitForSelector('main.ended', { timeout: 5000 }).then(() => true, () => false);
+  await page.mouse.click(300, 520);
+  const repaired = await page.waitForSelector('.stage', { timeout: 15_000 }).then(() => true, () => false);
+  check('a pinch anywhere presses "Pair again" and a new session starts', ended && repaired,
+    `ended ${ended}, new session ${repaired}`);
 } finally {
   await browser.close();
 }

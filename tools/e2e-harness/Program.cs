@@ -46,6 +46,8 @@ coordinator.RequestOpened += request =>
 app.MapGet("/__harness/input", () => recorder.Actions.ToArray());
 app.MapGet("/__harness/session", () => coordinator.ActiveSession);
 app.MapGet("/__harness/region", () => app.Services.GetRequiredService<RegionStore>().Load());
+// Ends the session like the tray's "End session", to reach the client's "Session ended" screen.
+app.MapPost("/__harness/terminate", () => coordinator.TerminateActiveSession());
 
 app.Run();
 
