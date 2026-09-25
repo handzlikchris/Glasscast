@@ -63,7 +63,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 31 checks)
+                        browser/drive.mjs (headless Chrome, 33 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -149,9 +149,10 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
-  **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor stops at
-  the edges. The **Pan** toggle makes swipes move the view by a quarter screen instead, and
-  pushing the cursor past an edge slides the view (edge panning).
+  **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
+  the edges, and pushing on past the top/bottom edge **scrolls** (edge scrolling, ~60 px per
+  notch). The **Pan** toggle makes swipes move the view by a quarter screen instead, and pushing
+  the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
   otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
   pinch-and-hold 0.5 s (movement ignored) also opens the controls.
@@ -253,6 +254,10 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
   they're async-only, so filter on `MF_TRANSFORM_FLAGS` & SYNCMFT. Set low-latency mode
   (`MF_LOW_LATENCY` / `CODECAPI_AVLowLatencyMode`) **before** setting media types, or the encoder
   silently buffers every frame. `ICodecAPI` is declared by hand (Vortice doesn't wrap it).
+- **Keyframe requests:** SIPSorcery's offer lists only `transport-cc`; `SdpFeedback` adds
+  `nack pli`/`ccm fir` or Chrome's PLIs don't come through. Plain `nack` stays out (no
+  retransmission). Chrome asks for keyframes when a stream starts undecodable, but after a
+  mid-stream loss it waits for the next keyframe instead (that needs NACK + retransmission).
 - **SIPSorcery:** media port must be **even**; `RTCConfiguration.X_BindAddress` pins the adapter;
   browsers' mDNS `.local` candidates are unusable and ignored; "DTLS packet received … no DTLS
   transport available" warnings at startup are a harmless race.
