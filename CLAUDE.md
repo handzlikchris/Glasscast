@@ -7,7 +7,8 @@ Guide for AI agents (and humans) picking up this repo. Read this first, then `RE
 A proof of concept that lets a **Meta Ray-Ban Display** web app control this Windows PC:
 view a region of the primary monitor over WebRTC video, move/click/scroll the mouse with
 Neural Band gestures, switch between configured apps, and type through the glasses'
-voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**.
+voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**,
+or (for 24 h after such an approval) the **device token** of the glasses that were approved.
 
 - **Plan / design / decisions / setup / status** live in a shared page:
   https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV (read it with the Artifact tool, action `read`).
@@ -62,7 +63,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 29 checks)
+                        browser/drive.mjs (headless Chrome, 31 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -93,6 +94,12 @@ and `dotnet build tools/e2e-harness -p:OutDir=E:/_src-unity/MetaDisplayRDP/tools
 Don't stop the user's server without asking. Run the harness on another media port while a
 real session may be live: `Media__MediaPort=50002 ./tools/e2e-harness/bin/isolated/E2eHarness.exe`.
 
+**When the user asks Claude to run the server** (as on 2026-09-25): stop the old process, then
+`dotnet build server` and `dotnet run --project server --launch-profile server --no-build` as a
+background command, with output to a scratchpad log. Check `http://127.0.0.1:5080/health` and the
+Caddy path (8443). Restart it yourself after server changes and say so. A Rider re-run that
+can't rebuild (exe locked) silently leaves the old server running: check the process start time.
+
 **Client changes go live without a server restart:** the running server serves `client-web/dist`
 from disk, so `npm run build` is enough; the user presses Restart in the glasses' web app menu.
 Build **after** committing so the label shows a clean commit (a `+` means uncommitted changes).
@@ -108,8 +115,10 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 1. `/ws/pair`: server opens a request (6-char code), the tray shows the **ApprovePopup**; Approve
    sends a 256-bit token down that pair socket only.
-2. `/ws/session`: first message must be `{type:"authenticate",token}` within 3 s; token is
-   single-use, SHA-256 stored, consumed on use, dies with the session.
+2. `/ws/session`: first message must be `{type:"authenticate",token}` or `{type:"resume",token}`
+   within 3 s. The approval token is single-use, SHA-256 stored, consumed on use, dies with the
+   session. `authenticated` then carries a **device token** (`deviceToken`, `deviceTokenExpiresAt`):
+   the glasses resume with it later without the popup (see the security invariants).
 3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names),
    then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
    `Media:PublicIp`:`MediaPort` as a host candidate; the browser's checks come in through the port
@@ -123,7 +132,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    (switched/notRunning/failed), `pong`, `mediaStats` (about once a second: pump timings and
    `[rtp, capturedAtUnixMs, bytes]` for every frame sent).
 5. Modes (server-gated in `InputController`): Overview (button labelled **"Region"**; moves the
-   region box), **Pointer** (cursor, click, scroll; pushing past an edge pans the region), Type.
+   region box), **Pointer** (cursor, click, scroll; with Pan on, pushing past an edge pans the region), Type.
    View and Scroll are still in the protocol but have no buttons any more. The region is persisted by
    `RegionStore` across sessions and mirrored to `CastArea`, which the tray draws on the monitor.
 6. Geometry is mirrored: `RegionMath.cs` ⇄ `geometry.ts` (letterbox fit, clamp to monitor, min 160 px).
@@ -140,8 +149,9 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
-  **left → next app** (1 → 2 → … → 1). The **Pan** toggle makes swipes move the view by a quarter
-  screen instead.
+  **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor stops at
+  the edges. The **Pan** toggle makes swipes move the view by a quarter screen instead, and
+  pushing the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
   otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
   pinch-and-hold 0.5 s (movement ignored) also opens the controls.
@@ -189,12 +199,22 @@ The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ☀ n% · Look
 
 - Only public ports: TCP 443 (→ Caddy 8443) and UDP 50000. App listens on loopback (except the
   dev `lan` profile). RDP, admin endpoints, shells, file APIs: never.
-- No session without a human clicking **Approve** on the PC. **Never** add auto-approve, a
-  bypass flag, or a network approval endpoint to `server/`. Auto-approval exists only in
-  `tools/e2e-harness` (dev-only, 127.0.0.1:5081).
-- Token: single-use, hashed server-side, constant-time compare, never in URLs, storage, React
-  state or logs (test `Tokens_never_appear_in_logs`). Failures are generic (`pairFailed`/`authFailed`).
-  The only thing the client stores is the brightness level.
+- No session without a human clicking **Approve** on the PC, or a device token from such an
+  approval less than 24 h ago. **Never** add auto-approve, a bypass flag, or a network approval
+  endpoint to `server/`. Auto-approval exists only in `tools/e2e-harness` (dev-only, 127.0.0.1:5081).
+- Approval token: single-use, hashed server-side, constant-time compare, never in URLs, storage,
+  React state or logs (test `Tokens_never_appear_in_logs`). Failures are generic (`pairFailed`/`authFailed`).
+- Device token (`PairingCoordinator`, `DeviceGrant`; `Pairing:DeviceGrantLifetime`, 24 h, 0 = off):
+  256-bit, sent once on the session socket, **swapped for a new one on every use**, only SHA-256
+  hashes kept (also in `%LOCALAPPDATA%\GlassesRemote\device-grant.json`). The expiry is fixed at
+  approval, never extended. One device remembered at a time; a new approval replaces it.
+  Reusing a swapped-out token forgets the device, ends any session and raises `DeviceTokenReused`.
+  Ending a session on the PC, a protocol violation, or **Forget remembered glasses** in the tray
+  forget it too. Still one session at a time: a resume only takes over a session of the **same**
+  device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
+- The client stores only the brightness level and the device token (`connection.ts`, localStorage;
+  never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); only a
+  page (re)load resumes by itself.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
   outside Development.
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
