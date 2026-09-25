@@ -126,6 +126,35 @@ try {
   await page.mouse.click(300, 300);
   await sleep(300);
   check('View mode ignores taps', (await input()).length === inputsBefore);
+
+  // 9. Glasses-style pinch: a swipe moves focus (Tab stands in for it), then the pinch
+  //    arrives as a tap on the video. It presses the focused button and focus stays put.
+  await page.focus('button[data-mode="view"]');
+  let focusedMode = null;
+  for (let i = 0; i < 8 && focusedMode !== 'scroll'; i++) {
+    await page.keyboard.press('Tab');
+    focusedMode = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  }
+  await page.mouse.click(300, 300);
+  await sleep(300);
+  const pinchStatus = await page.$eval('.status', (el) => el.textContent);
+  const keptFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  check('a pinch presses the button a swipe focused', pinchStatus.includes('scroll') && keptFocus === 'scroll',
+    `focus ${keptFocus}`);
+
+  // 10. After pressing Pointer that way, the next pinch clicks in Windows instead.
+  await page.keyboard.down('Shift');
+  await page.keyboard.press('Tab');
+  await page.keyboard.up('Shift');
+  await page.mouse.click(300, 300);
+  await sleep(300);
+  const clicksBefore = (await input()).length;
+  await page.mouse.click(320, 300);
+  await sleep(300);
+  const pointerStatus = await page.$eval('.status', (el) => el.textContent);
+  const newActions = (await input()).slice(clicksBefore);
+  check('after a pinch on Pointer, the next pinch clicks in Windows',
+    pointerStatus.includes('pointer') && newActions.includes('click Left'), newActions.join(', '));
 } finally {
   await browser.close();
 }
