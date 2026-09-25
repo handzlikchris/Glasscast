@@ -55,10 +55,11 @@ client-web/             glasses client (600×600)
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
+  src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 27 checks)
+                        browser/drive.mjs (headless Chrome, 28 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
