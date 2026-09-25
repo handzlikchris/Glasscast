@@ -1,7 +1,7 @@
 // DEV-ONLY: runs the real server pipeline (Kestrel, WebSockets, pairing, SIPSorcery,
 // VP8, GDI capture) with two changes so a headless browser can drive it unattended:
 //   1. pairing requests are approved automatically;
-//   2. input is recorded, never injected into the real desktop.
+//   2. input and app switches are recorded, never applied to the real desktop.
 // It listens on 127.0.0.1:5081 only and must never be deployed.
 using System.Collections.Concurrent;
 using GlassesRemote.Server.Desktop;
@@ -24,8 +24,14 @@ var app = ServerApp.Create(args, builder =>
         ["Media:IncludeLanCandidates"] = "true",
         ["Media:PublicIp"] = "",
         ["Desktop:RegionFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-region.json"),
+        ["Apps:Shortcuts:0:Name"] = "Claude",
+        ["Apps:Shortcuts:0:Title"] = "herdr",
+        ["Apps:Shortcuts:1:Name"] = "Browser",
+        ["Apps:Shortcuts:1:Process"] = "chrome",
     });
     builder.Services.AddSingleton<IInputInjector>(recorder);
+    // Never move real windows from the harness: record the switch instead.
+    builder.Services.AddSingleton<IWindowSwitcher>(new RecordingSwitcher(recorder));
     builder.Services.AddSingleton<IKeepAwake, NoKeepAwake>();
 });
 
@@ -77,5 +83,14 @@ sealed class NoKeepAwake : IKeepAwake
         public void Dispose()
         {
         }
+    }
+}
+
+sealed class RecordingSwitcher(RecordingInput recorder) : IWindowSwitcher
+{
+    public AppSwitchResult Switch(AppShortcut app, CaptureRegion area)
+    {
+        recorder.Actions.Enqueue($"switch {app.Name} {area.X},{area.Y} {area.Width}x{area.Height}");
+        return AppSwitchResult.Switched;
     }
 }

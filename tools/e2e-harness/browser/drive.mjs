@@ -54,9 +54,9 @@ try {
   check('video is live', live && fps > 0, statusText.replace(/\s+/g, ' '));
   const playing = await page.$eval('video', (v) => v.videoWidth > 0 && !v.paused);
   check('video element is playing 600px frames', playing);
-  const lookLabel = await page.$eval('button[title="Display look"]', (el) => el.textContent);
+  const lookLabel = await page.$eval('button[data-look]', (el) => el.dataset.look);
   check('a session starts in Pointer mode with the lifted look',
-    statusText.trim().endsWith('pointer') && lookLabel === 'Look: lifted', `${lookLabel}`);
+    statusText.trim().endsWith('pointer') && lookLabel === 'lifted', `${lookLabel}`);
   await shot('2-view');
 
   // 3. Pointer mode: drag moves, short tap clicks.
@@ -252,6 +252,21 @@ try {
   const backStatus = await page.$eval('.status', (el) => el.textContent);
   check('from Type mode, a pinch on the text box presses the focused Pointer button',
     focusBeforeBack === 'pointer' && backStatus.trim().endsWith('pointer'), `focus ${focusBeforeBack}, status ${backStatus.replace(/\s+/g, ' ')}`);
+  // 15. App shortcuts: buttons 1..N come from the PC's config; pressing one fits that app's
+  //     window to the cast area (recorded by the harness) and leaves Pointer focused.
+  const appButtons = await page.$$eval('button[data-app]', (els) => els.map((el) => `${el.textContent}:${el.title}`));
+  const regionNow = await regionAt();
+  const switchesBefore = (await input()).length;
+  await page.locator('button[data-app="1"]').click();
+  await sleep(400);
+  const switched = (await input()).slice(switchesBefore).filter((a) => a.startsWith('switch '));
+  const switchStatus = await page.$eval('.status', (el) => el.textContent);
+  const focusAfterSwitch = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
+  check('app button 1 fits Claude to the cast area and focuses Pointer',
+    appButtons.join(',') === '1:Claude,2:Browser' &&
+      switched.join('|') === `switch Claude ${regionNow.x},${regionNow.y} ${regionNow.width}x${regionNow.height}` &&
+      switchStatus.includes('Claude: switched') && focusAfterSwitch === 'pointer',
+    `${appButtons.join(',')} | ${switched.join('|')} | focus ${focusAfterSwitch}`);
 } finally {
   await browser.close();
 }
