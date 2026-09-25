@@ -107,15 +107,15 @@ describe('moveCursorWithEdgePan', () => {
   });
 });
 
-describe('arrow-button nudges', () => {
+describe('swipe steps', () => {
   const monitor = { width: 2560, height: 1440 };
-  const region = { x: 1000, y: 500, width: 800, height: 450 };
+  const region = { x: 1000, y: 500, width: 800, height: 400 };
 
-  it('moves by half the view in the pressed direction', () => {
-    expect(nudgeRegion(region, 1, 0, monitor)).toEqual({ ...region, x: 1400 });
-    expect(nudgeRegion(region, -1, 0, monitor)).toEqual({ ...region, x: 600 });
-    expect(nudgeRegion(region, 0, -1, monitor)).toEqual({ ...region, y: 275 });
-    expect(nudgeRegion(region, 0, 1, monitor)).toEqual({ ...region, y: 725 });
+  it('moves by a quarter of the view in the swiped direction', () => {
+    expect(nudgeRegion(region, 1, 0, monitor)).toEqual({ ...region, x: 1200 });
+    expect(nudgeRegion(region, -1, 0, monitor)).toEqual({ ...region, x: 800 });
+    expect(nudgeRegion(region, 0, -1, monitor)).toEqual({ ...region, y: 400 });
+    expect(nudgeRegion(region, 0, 1, monitor)).toEqual({ ...region, y: 600 });
   });
 
   it('stops at the monitor edge without changing size', () => {

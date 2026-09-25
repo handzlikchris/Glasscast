@@ -4,7 +4,7 @@
 // tap at the pointer's position, which is usually over the full-screen gesture layer
 // rather than a button. So the app keeps a navigation target:
 //
-//   "view"     swipes move the view around the monitor by half a screen; pinches do
+//   "view"     swipes move the view around the monitor by a quarter screen; pinches do
 //              whatever the mode does (click in Pointer mode). Used in View, Pointer
 //              and Scroll modes, which have no panels of their own.
 //   "controls" swipes move focus between buttons and a pinch presses the focused one.

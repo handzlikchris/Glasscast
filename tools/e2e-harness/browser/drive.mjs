@@ -145,14 +145,14 @@ try {
   check('a pinch presses the focused button, then swipes go back to the view',
     pinchStatus.includes('scroll') && focusAfterPick === 'BODY', `focus ${focusAfterPick}`);
 
-  // 10. Swipes move the view by half its size (left here: earlier steps panned right).
+  // 10. Swipes move the view by a quarter of its size (left here: earlier steps panned right).
   const regionAt = async () => (await fetch(`${BASE}/__harness/region`)).json();
   const beforeSwipe = await regionAt();
   await page.keyboard.press('ArrowLeft');
   await sleep(400);
   const afterSwipe = await regionAt();
-  check('a left swipe moves the view left by half its width',
-    afterSwipe.x === Math.max(0, beforeSwipe.x - Math.round(beforeSwipe.width / 2)) && afterSwipe.y === beforeSwipe.y,
+  check('a left swipe moves the view left by a quarter of its width',
+    afterSwipe.x === Math.max(0, beforeSwipe.x - Math.round(beforeSwipe.width / 4)) && afterSwipe.y === beforeSwipe.y,
     `x ${beforeSwipe.x} -> ${afterSwipe.x}, width ${beforeSwipe.width}`);
 
   // Pinch, then pinch and hold (a tap, then a press held still past the hold time).

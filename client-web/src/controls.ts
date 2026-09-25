@@ -112,10 +112,10 @@ export class ScrollAccumulator {
   }
 }
 
-/** Share of the view one arrow-button press moves the region by. Half keeps some overlap for context. */
-export const NUDGE_FRACTION = 0.5;
+/** Share of the view one swipe moves the region by: a quarter keeps most of the view in place. */
+export const NUDGE_FRACTION = 0.25;
 
-/** The region moved one arrow-button step (dirX, dirY each -1, 0 or 1), kept on the monitor. */
+/** The region moved one swipe step (dirX, dirY each -1, 0 or 1), kept on the monitor. */
 export function nudgeRegion(region: Region, dirX: number, dirY: number, monitor: Size, fraction = NUDGE_FRACTION): Region {
   return clampRegion(
     {

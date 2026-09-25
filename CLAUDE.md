@@ -103,7 +103,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
    region is persisted by `RegionStore` across sessions.
 7. Glasses navigation (`client-web/src/focusnav.ts`, `gestures.ts`): in View/Pointer/Scroll,
-   swipes (arrow keys) move the view by half a screen; **pinch, then pinch-and-hold 0.5 s**
+   swipes (arrow keys) move the view by a quarter screen; **pinch, then pinch-and-hold 0.5 s**
    (movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
    the controls a pinch presses the focused control wherever it lands. Pointer-mode clicks wait
    350 ms for a possible second pinch (double-click). Type walks focus: text box → Send text
