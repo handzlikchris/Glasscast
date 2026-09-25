@@ -245,11 +245,20 @@ export function SessionScreen({ onEnded }: Props) {
   };
 
   /** Moves focus to a mode button without switching modes, so the next pinch picks it. */
+  /**
+   * Moves focus for you (the next step of a flow) and holds it there briefly: the glasses
+   * sometimes reset focus right after a navigation or when the composer closes.
+   */
+  const focusPinned = (el: HTMLElement) => {
+    focused.current = el;
+    el.focus({ preventScroll: true });
+    pin.current = { el, until: performance.now() + FOCUS_PIN_MS };
+    for (const delay of [50, 150, 300, 500]) window.setTimeout(() => restorePinRef.current(), delay);
+  };
+
   const focusModeButton = (target: ViewMode) => {
     const button = stageRef.current?.querySelector<HTMLButtonElement>(`button[data-mode="${target}"]`);
-    if (!button) return;
-    focused.current = button;
-    button.focus({ preventScroll: true });
+    if (button) focusPinned(button);
   };
 
   /** Pinch, then pinch and hold: put focus on the current mode's button. */
@@ -258,10 +267,6 @@ export function SessionScreen({ onEnded }: Props) {
     keyFocus.current = true;
     focusModeButton(menuFocusFor(live.current.mode));
     setLastInput(`${how} → controls`);
-    if (focused.current) {
-      pin.current = { el: focused.current, until: performance.now() + FOCUS_PIN_MS };
-      for (const delay of [50, 150, 300, 500]) window.setTimeout(() => restorePinRef.current(), delay);
-    }
   };
 
   const restorePin = () => {
@@ -780,6 +785,7 @@ export function SessionScreen({ onEnded }: Props) {
 
       {mode === 'type' && (
         <TypePanel
+          focusPinned={focusPinned}
           onSendText={(text) => send({ type: 'typeText', text })}
           onKey={(key: KeyName) => {
             send({ type: 'key', key });

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { MAX_TEXT_LENGTH, type KeyName } from './protocol';
 
 interface Props {
+  /** Moves focus for the user and holds it against the glasses resetting it (SessionScreen). */
+  focusPinned(el: HTMLElement): void;
   onSendText(text: string): void;
   onKey(key: KeyName): void;
 }
@@ -27,7 +29,9 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
  * text box when the panel opens → Send text once the composer hands text back
  * (a "change" event) → Enter after sending → Pointer after Enter (SessionScreen).
  */
-export function TypePanel({ onSendText, onKey }: Props) {
+const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
+
+export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
   const [text, setText] = useState('');
   const trimmed = text.trim();
   const textRef = useRef(text);
@@ -36,27 +40,40 @@ export function TypePanel({ onSendText, onKey }: Props) {
   const sendRef = useRef<HTMLButtonElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
 
+  const focusPinnedRef = useRef(focusPinned);
+  focusPinnedRef.current = focusPinned;
+
   useEffect(() => {
     const box = boxRef.current!;
-    box.focus({ preventScroll: true });
+    focusPinnedRef.current(box);
+    // When the composer closes the glasses may move focus elsewhere; only a swipe of yours
+    // (or Tab) since the box got focus means you chose to go somewhere else.
+    let movedByYou = false;
+    const onFocusBox = () => (movedByYou = false);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (NAV_KEYS.has(e.key)) movedByYou = true;
+    };
     const onChange = () => {
-      // After the input events have re-rendered, so Send text is enabled. Only if focus is
-      // still in the box or went nowhere: if you moved to another control, that wins.
+      // After the input events have re-rendered, so Send text is enabled.
       requestAnimationFrame(() => {
-        const active = document.activeElement;
-        const free = active === box || active === null || active === document.body;
-        if (free && textRef.current.trim()) sendRef.current?.focus({ preventScroll: true });
+        if (!movedByYou && textRef.current.trim() && sendRef.current) focusPinnedRef.current(sendRef.current);
       });
     };
+    box.addEventListener('focus', onFocusBox);
     box.addEventListener('change', onChange);
-    return () => box.removeEventListener('change', onChange);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      box.removeEventListener('focus', onFocusBox);
+      box.removeEventListener('change', onChange);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, []);
 
   const send = () => {
     if (!trimmed) return;
     onSendText(trimmed);
     setText('');
-    enterRef.current?.focus({ preventScroll: true });
+    if (enterRef.current) focusPinned(enterRef.current);
   };
 
   return (
