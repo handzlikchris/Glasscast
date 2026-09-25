@@ -76,6 +76,7 @@ public sealed class AlertThrottle
         AlertKind.BadOrigin => "connection from another site",
         AlertKind.ProtocolViolation => "invalid messages",
         AlertKind.MessageRateLimited => "message flood",
+        AlertKind.DeviceTokenReused => "old device token reused, device forgotten",
         _ => "unexpected connection",
     };
 }

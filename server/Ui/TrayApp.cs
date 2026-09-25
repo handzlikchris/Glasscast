@@ -27,6 +27,7 @@ internal sealed class TrayApp : ApplicationContext
     private readonly CastArea _castArea;
     private readonly CastFrame _frame = new();
     private readonly ToolStripMenuItem _showFrame;
+    private readonly ToolStripMenuItem _forget;
     private readonly AlertThrottle _throttle = new(TimeProvider.System, TimeSpan.FromMinutes(1));
     private readonly System.Windows.Forms.Timer _flushTimer = new() { Interval = 10_000 };
     private readonly TerminateHotkey _hotkey;
@@ -52,12 +53,15 @@ internal sealed class TrayApp : ApplicationContext
         };
         _showFrame = new ToolStripMenuItem("Show cast area on screen") { Checked = true, CheckOnClick = true };
         _showFrame.CheckedChanged += (_, _) => UpdateFrame(_castArea.Current);
+        _forget = new ToolStripMenuItem("Forget remembered glasses", null, (_, _) => _coordinator.ForgetDevice("forgotten from the tray"));
+        UpdateForget(_coordinator.RememberedDeviceExpiresAt);
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
         [
             _status,
             new ToolStripSeparator(),
             _terminate,
+            _forget,
             _showFrame,
             new ToolStripMenuItem("Recent alerts…", null, (_, _) => ShowAlerts()),
             new ToolStripSeparator(),
@@ -85,6 +89,7 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.RequestOpened += OnRequestOpened;
         _coordinator.RequestClosed += OnRequestClosed;
         _coordinator.SessionChanged += OnSessionChanged;
+        _coordinator.DeviceGrantChanged += OnDeviceGrantChanged;
         _castArea.Changed += OnCastAreaChanged;
         _alerts.Raised += OnAlert;
 
@@ -120,6 +125,17 @@ internal sealed class TrayApp : ApplicationContext
             SetIdle();
         }
     });
+
+    private void OnDeviceGrantChanged(DateTimeOffset? expiresAt) => Ui(() => UpdateForget(expiresAt));
+
+    /// <summary>Remembered glasses reconnect without the popup until then; this undoes that.</summary>
+    private void UpdateForget(DateTimeOffset? expiresAt)
+    {
+        _forget.Enabled = expiresAt is not null;
+        _forget.Text = expiresAt is { } until
+            ? $"Forget remembered glasses (until {until.ToLocalTime():ddd HH:mm})"
+            : "No glasses remembered";
+    }
 
     private void OnSessionChanged(ActiveSessionInfo? session) => Ui(() =>
     {
@@ -212,6 +228,7 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.RequestOpened -= OnRequestOpened;
         _coordinator.RequestClosed -= OnRequestClosed;
         _coordinator.SessionChanged -= OnSessionChanged;
+        _coordinator.DeviceGrantChanged -= OnDeviceGrantChanged;
         _castArea.Changed -= OnCastAreaChanged;
         _alerts.Raised -= OnAlert;
         _flushTimer.Stop();

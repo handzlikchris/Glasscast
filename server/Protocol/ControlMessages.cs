@@ -38,6 +38,13 @@ public sealed record AuthenticateMessage(string Token) : ControlMessage
     public override string ToString() => "AuthenticateMessage { Token = *** }";
 }
 
+/// <summary>First message of a session from remembered glasses: their device token instead of an approval's token.</summary>
+public sealed record ResumeMessage(string Token) : ControlMessage
+{
+    // Never print the token, even in debug output.
+    public override string ToString() => "ResumeMessage { Token = *** }";
+}
+
 public sealed record RtcAnswerMessage(string Sdp) : ControlMessage;
 
 public sealed record IceCandidateMessage(string Candidate, string? SdpMid, int SdpMLineIndex) : ControlMessage;

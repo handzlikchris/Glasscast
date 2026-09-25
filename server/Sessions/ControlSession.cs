@@ -83,6 +83,7 @@ public sealed class ControlSession
                 ["codec"] = encoder.Codec,
                 ["mode"] = ControlProtocol.ModeName(controller.Mode),
                 ["region"] = $"{controller.Region.Width}x{controller.Region.Height}",
+                ["resumed"] = _lease.Resumed,
             });
 
             _lastInputTimestamp = _s.Time.GetTimestamp();
@@ -95,6 +96,8 @@ public sealed class ControlSession
             {
                 closeStatus = WebSocketCloseStatus.PolicyViolation;
                 closeReason = violation;
+                // Rule-breaking glasses don't get to come back without an approval.
+                _lease.ForgetDevice(violation);
             }
             else if (finished == watching && !ct.IsCancellationRequested)
             {
@@ -112,7 +115,8 @@ public sealed class ControlSession
         {
             if (_lease.Ended.IsCancellationRequested)
             {
-                closeReason = "terminated";
+                // Replaced: the same glasses reconnected. Terminated: ended on the PC.
+                closeReason = _lease.Superseded ? "replaced" : "terminated";
             }
             _s.CastArea.Set(null);
             _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?> { ["event"] = "end", ["reason"] = closeReason });

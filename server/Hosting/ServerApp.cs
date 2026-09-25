@@ -34,6 +34,14 @@ public static class ServerApp
                 web.AllowSameOrigin = false;
             }
         });
+        services.PostConfigure<PairingOptions>(pairing =>
+        {
+            // Tests and the e2e harness point this at a temp file.
+            if (string.IsNullOrEmpty(pairing.DeviceGrantFile))
+            {
+                pairing.DeviceGrantFile = PairingOptions.DefaultDeviceGrantFile;
+            }
+        });
         services.Configure<ControlSessionOptions>(config.GetSection(ControlSessionOptions.SectionName));
         services.Configure<MediaOptions>(config.GetSection(MediaOptions.SectionName));
         services.Configure<AppShortcutOptions>(config.GetSection(AppShortcutOptions.SectionName));

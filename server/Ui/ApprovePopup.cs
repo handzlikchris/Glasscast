@@ -29,7 +29,8 @@ internal sealed class ApprovePopup : Form
         TopMost = true;
         ShowInTaskbar = true;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(420, 260);
+        var remembers = coordinator.DeviceGrantLifetime > TimeSpan.Zero;
+        ClientSize = new Size(420, remembers ? 300 : 260);
         Font = new Font("Segoe UI", 10f);
 
         var intro = new Label
@@ -86,6 +87,17 @@ internal sealed class ApprovePopup : Form
         approve.Click += (_, _) => Decide(approve: true);
 
         Controls.AddRange([intro, code, origin, _countdown, reject, approve]);
+        if (remembers)
+        {
+            Controls.Add(new Label
+            {
+                Text = $"Approving also lets these glasses reconnect without asking for {coordinator.DeviceGrantLifetime.TotalHours:0} h. "
+                       + "End session or Forget in the tray menu undoes that.",
+                ForeColor = SystemColors.GrayText,
+                Location = new Point(20, 240),
+                Size = new Size(380, 44),
+            });
+        }
 
         // Never a default "accept" action: Enter must not approve.
         AcceptButton = null;

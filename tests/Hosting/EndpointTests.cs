@@ -357,6 +357,44 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Approved_glasses_reconnect_with_their_device_token_and_never_log_it()
+    {
+        var token = await _host.PairAsync();
+        string deviceToken;
+        using (var session = await _host.ConnectAsync("/ws/session"))
+        {
+            await session.SendAsync(new { type = "authenticate", token });
+            var authenticated = await session.ReceiveAsync();
+            Assert.Equal("authenticated", authenticated.GetProperty("type").GetString());
+            deviceToken = authenticated.GetProperty("deviceToken").GetString()!;
+            Assert.True(authenticated.GetProperty("deviceTokenExpiresAt").GetInt64() > DateTimeOffset.UtcNow.AddHours(23).ToUnixTimeMilliseconds());
+        }
+        await WaitUntil(() => _host.Coordinator.ActiveSession is null);
+
+        // No popup this time: the device token starts the session and is swapped for a new one.
+        using (var resumed = await _host.ConnectAsync("/ws/session"))
+        {
+            await resumed.SendAsync(new { type = "resume", token = deviceToken });
+            var authenticated = await resumed.ReceiveAsync();
+            Assert.Equal("authenticated", authenticated.GetProperty("type").GetString());
+            Assert.NotEqual(deviceToken, authenticated.GetProperty("deviceToken").GetString());
+            Assert.Equal("hello", (await resumed.ReceiveAsync()).GetProperty("type").GetString());
+            Assert.Null(_host.Coordinator.PendingRequest);
+        }
+
+        Assert.DoesNotContain(_host.Logs, line => line.Contains(deviceToken, StringComparison.Ordinal));
+        Assert.DoesNotContain(deviceToken, File.ReadAllText(_host.DeviceGrantFile), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_made_up_device_token_gets_the_generic_failure()
+    {
+        using var session = await _host.ConnectAsync("/ws/session");
+        await session.SendAsync(new { type = "resume", token = "not-a-real-device-token" });
+        Assert.Equal("authFailed", (await session.ReceiveAsync()).GetProperty("type").GetString());
+    }
+
+    [Fact]
     public async Task Rejected_pairing_sends_a_generic_failure()
     {
         using var pair = await _host.ConnectAsync("/ws/pair");

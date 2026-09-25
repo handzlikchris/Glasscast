@@ -53,13 +53,20 @@ public sealed class SessionLease : IDisposable
 {
     private readonly PairingCoordinator _owner;
     private readonly CancellationTokenSource _ended = new();
+    private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private string? _deviceToken;
 
-    internal SessionLease(PairingCoordinator owner, string id, IPAddress remoteAddress, DateTimeOffset startedAt)
+    internal SessionLease(PairingCoordinator owner, string id, IPAddress remoteAddress, DateTimeOffset startedAt,
+        string? grantId = null, bool resumed = false, string? deviceToken = null, DateTimeOffset? deviceTokenExpiresAt = null)
     {
         _owner = owner;
         Id = id;
         RemoteAddress = remoteAddress;
         StartedAt = startedAt;
+        GrantId = grantId;
+        Resumed = resumed;
+        _deviceToken = deviceToken;
+        DeviceTokenExpiresAt = deviceTokenExpiresAt;
     }
 
     public string Id { get; }
@@ -68,7 +75,30 @@ public sealed class SessionLease : IDisposable
 
     public DateTimeOffset StartedAt { get; }
 
+    /// <summary>The remembered device this session belongs to, if any.</summary>
+    public string? GrantId { get; }
+
+    /// <summary>Started with a device token rather than a fresh approval.</summary>
+    public bool Resumed { get; }
+
+    public DateTimeOffset? DeviceTokenExpiresAt { get; }
+
+    /// <summary>The same device reconnected and took over this session.</summary>
+    public bool Superseded { get; internal set; }
+
     public CancellationToken Ended => _ended.Token;
+
+    /// <summary>Completes once the session slot is free again.</summary>
+    internal Task Released => _released.Task;
+
+    /// <summary>
+    /// The device token for the glasses' next session. Handed out once (in "authenticated") and
+    /// then dropped here; the coordinator keeps only its hash.
+    /// </summary>
+    public string? TakeDeviceToken() => Interlocked.Exchange(ref _deviceToken, null);
+
+    /// <summary>The session broke the rules: stop remembering its device.</summary>
+    public void ForgetDevice(string reason) => _owner.ForgetDevice(GrantId, reason);
 
     internal void Signal()
     {
@@ -82,6 +112,8 @@ public sealed class SessionLease : IDisposable
     }
 
     public void Dispose() => _owner.EndSession(this);
+
+    internal void MarkReleased() => _released.TrySetResult();
 }
 
 /// <summary>
@@ -93,6 +125,11 @@ public sealed class SessionLease : IDisposable
 /// Only one request can be pending, and only one session active, at a time.
 /// The raw token is handed back once to the approved request; only its SHA-256
 /// hash is kept, and it is consumed on first use.
+///
+/// The first session after an approval also remembers the device (a <see cref="DeviceGrant"/>):
+/// it gets a device token to start later sessions without the popup, until a fixed time after
+/// the approval. Each use swaps it for a new one; presenting a swapped-out token forgets the
+/// device. Still one session at a time: only the same device may take over its own session.
 /// </summary>
 public sealed class PairingCoordinator : IDisposable
 {
@@ -118,6 +155,8 @@ public sealed class PairingCoordinator : IDisposable
     private byte[]? _issuedTokenHash;
     private ITimer? _tokenTimer;
     private SessionLease? _active;
+    private readonly DeviceGrantStore _grantStore;
+    private DeviceGrant? _grant;
 
     public PairingCoordinator(IOptions<PairingOptions> options, TimeProvider time, AlertLog alerts,
         ILogger<PairingCoordinator> logger)
@@ -128,6 +167,26 @@ public sealed class PairingCoordinator : IDisposable
         _logger = logger;
         _perIpLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRequestsPerIp);
         _globalLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRequestsGlobal);
+        _grantStore = new DeviceGrantStore(_options.DeviceGrantFile, logger);
+        _grant = _options.DeviceGrantLifetime > TimeSpan.Zero ? _grantStore.Load() : null;
+    }
+
+    /// <summary>How long an approval lets the glasses reconnect without the popup (zero: never).</summary>
+    public TimeSpan DeviceGrantLifetime => _options.DeviceGrantLifetime;
+
+    /// <summary>A device was remembered (until the given time) or forgotten (null).</summary>
+    public event Action<DateTimeOffset?>? DeviceGrantChanged;
+
+    /// <summary>Until when approved glasses can reconnect without the popup; null when none are remembered.</summary>
+    public DateTimeOffset? RememberedDeviceExpiresAt
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return CurrentGrant()?.ExpiresAt;
+            }
+        }
     }
 
     /// <summary>A new request needs a decision: show the popup.</summary>
@@ -290,14 +349,123 @@ public sealed class PairingCoordinator : IDisposable
             }
 
             ClearToken();
-            lease = new SessionLease(this, Secrets.NewId(), remote, _time.GetUtcNow());
+            var now = _time.GetUtcNow();
+            string? deviceToken = null;
+            if (_options.DeviceGrantLifetime > TimeSpan.Zero)
+            {
+                // A fresh approval remembers this device, replacing any other.
+                deviceToken = Secrets.NewToken();
+                _grant = new DeviceGrant(Secrets.NewId(), Secrets.HashToken(deviceToken), null, now + _options.DeviceGrantLifetime);
+                _grantStore.Save(_grant);
+            }
+
+            lease = new SessionLease(this, Secrets.NewId(), remote, now, _grant?.Id, resumed: false, deviceToken,
+                deviceToken is null ? null : _grant!.ExpiresAt);
             _active = lease;
             _state = State.ActiveSession;
         }
 
         _logger.LogInformation("Session {Session} started from {Remote}", lease.Id, remote);
         SessionChanged?.Invoke(Describe(lease));
+        if (lease.DeviceTokenExpiresAt is { } expires)
+        {
+            DeviceGrantChanged?.Invoke(expires);
+        }
         return lease;
+    }
+
+    /// <summary>
+    /// Starts a session with a device token instead of an approval. If that device's own session
+    /// is still open (a dropped connection the server hasn't noticed yet), it is closed first.
+    /// Returns null for any failure; callers must not reveal why.
+    /// </summary>
+    public async Task<SessionLease?> TryResumeAsync(string presentedToken, IPAddress remote, CancellationToken ct)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            SessionLease? stale = null;
+            SessionLease? lease = null;
+            var reused = false;
+            lock (_gate)
+            {
+                var grant = CurrentGrant();
+                if (grant?.PreviousHash is { } previous && Secrets.TokenMatches(presentedToken, previous))
+                {
+                    // Already swapped for a newer token: a copy is in someone else's hands.
+                    _alerts.Raise(AlertKind.DeviceTokenReused, remote, "An old device token was presented; the device was forgotten");
+                    ClearGrant();
+                    reused = true;
+                }
+                else if (grant is null || !Secrets.TokenMatches(presentedToken, grant.CurrentHash))
+                {
+                    _alerts.Raise(AlertKind.AuthenticationFailed, remote, "Session authentication failed");
+                    return null;
+                }
+                else if (_state == State.ActiveSession && _active?.GrantId == grant.Id && attempt == 0)
+                {
+                    stale = _active;
+                    stale.Superseded = true;
+                }
+                else if (_state != State.Idle)
+                {
+                    _alerts.Raise(AlertKind.PairingWhileBusy, remote, $"Reconnect attempted while {Describe(_state)}");
+                    return null;
+                }
+                else
+                {
+                    var deviceToken = Secrets.NewToken();
+                    _grant = grant with { PreviousHash = grant.CurrentHash, CurrentHash = Secrets.HashToken(deviceToken) };
+                    _grantStore.Save(_grant);
+                    lease = new SessionLease(this, Secrets.NewId(), remote, _time.GetUtcNow(), grant.Id, resumed: true,
+                        deviceToken, grant.ExpiresAt);
+                    _active = lease;
+                    _state = State.ActiveSession;
+                }
+            }
+
+            if (reused)
+            {
+                DeviceGrantChanged?.Invoke(null);
+                TerminateActiveSession();
+                return null;
+            }
+
+            if (lease is not null)
+            {
+                _logger.LogInformation("Session {Session} resumed by the remembered device from {Remote}", lease.Id, remote);
+                SessionChanged?.Invoke(Describe(lease));
+                return lease;
+            }
+
+            _logger.LogInformation("Session {Session} replaced: its device reconnected", stale!.Id);
+            stale.Signal();
+            try
+            {
+                await stale.Released.WaitAsync(_options.TakeoverTimeout, _time, ct);
+            }
+            catch (TimeoutException)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Stops remembering approved glasses: their next session needs the popup again.</summary>
+    public void ForgetDevice(string reason) => ForgetDevice(grantId: null, reason);
+
+    internal void ForgetDevice(string? grantId, string reason)
+    {
+        lock (_gate)
+        {
+            if (_grant is null || (grantId is not null && _grant.Id != grantId))
+            {
+                return;
+            }
+            ClearGrant();
+        }
+
+        _logger.LogInformation("Remembered device forgotten: {Reason}", reason);
+        DeviceGrantChanged?.Invoke(null);
     }
 
     /// <summary>Signals the active session to close. The slot frees once its handler disposes the lease.</summary>
@@ -315,6 +483,8 @@ public sealed class PairingCoordinator : IDisposable
         }
 
         _logger.LogInformation("Session {Session} terminated from the PC", lease.Id);
+        // Ending a session on the PC means "not now": the glasses need a new approval.
+        ForgetDevice(lease.GrantId, "session ended on the PC");
         lease.Signal();
         return true;
     }
@@ -333,6 +503,7 @@ public sealed class PairingCoordinator : IDisposable
         }
 
         lease.Signal();
+        lease.MarkReleased();
         _logger.LogInformation("Session {Session} ended", lease.Id);
         SessionChanged?.Invoke(null);
     }
@@ -353,6 +524,22 @@ public sealed class PairingCoordinator : IDisposable
         _issuedTokenHash = null;
         _tokenTimer?.Dispose();
         _tokenTimer = null;
+    }
+
+    /// <summary>The remembered device, unless its time is up (then it's dropped). Call under the lock.</summary>
+    private DeviceGrant? CurrentGrant()
+    {
+        if (_grant is not null && _time.GetUtcNow() >= _grant.ExpiresAt)
+        {
+            ClearGrant();
+        }
+        return _grant;
+    }
+
+    private void ClearGrant()
+    {
+        _grant = null;
+        _grantStore.Save(null);
     }
 
     private static ActiveSessionInfo Describe(SessionLease lease) =>

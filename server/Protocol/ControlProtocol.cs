@@ -86,6 +86,7 @@ public static class ControlProtocol
             message = typeElement.GetString() switch
             {
                 "authenticate" => ParseAuthenticate(root),
+                "resume" => ParseResume(root),
                 "rtcAnswer" => ParseRtcAnswer(root),
                 "iceCandidate" => ParseIceCandidate(root),
                 "setMode" => ParseSetMode(root),
@@ -122,6 +123,11 @@ public static class ControlProtocol
     private static ControlMessage? ParseAuthenticate(JsonElement e) =>
         Only(e, "token") && Str(e, "token", MaxTokenLength, out var token)
             ? new AuthenticateMessage(token)
+            : null;
+
+    private static ControlMessage? ParseResume(JsonElement e) =>
+        Only(e, "token") && Str(e, "token", MaxTokenLength, out var token)
+            ? new ResumeMessage(token)
             : null;
 
     private static ControlMessage? ParseRtcAnswer(JsonElement e) =>

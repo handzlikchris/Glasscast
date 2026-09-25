@@ -88,9 +88,10 @@ public static class GlassesEndpoints
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         var io = new SocketIO(socket, ControlProtocol.MaxMessageBytes);
 
-        // The first message must be "authenticate", within a few seconds. Until then the
-        // socket holds nothing: the session slot is only taken by a valid token.
-        AuthenticateMessage? auth;
+        // The first message must be "authenticate" (an approval's token) or "resume" (a remembered
+        // device's token), within a few seconds. Until then the socket holds nothing: the session
+        // slot is only taken by a valid token.
+        ControlMessage? auth;
         using (var authDeadline = new CancellationTokenSource(session.Value.AuthTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(authDeadline.Token, context.RequestAborted))
         {
@@ -103,7 +104,7 @@ public static class GlassesEndpoints
                 }
 
                 ControlProtocol.TryParse(first.Value.Span, out var message, out _);
-                auth = message as AuthenticateMessage;
+                auth = message is AuthenticateMessage or ResumeMessage ? message : null;
             }
             catch (OperationCanceledException) when (authDeadline.IsCancellationRequested)
             {
@@ -125,14 +126,28 @@ public static class GlassesEndpoints
             return;
         }
 
-        using var lease = coordinator.TryAuthenticate(auth.Token, remote);
+        using var lease = auth switch
+        {
+            AuthenticateMessage approved => coordinator.TryAuthenticate(approved.Token, remote),
+            ResumeMessage resume => await coordinator.TryResumeAsync(resume.Token, remote, context.RequestAborted),
+            _ => null,
+        };
         if (lease is null)
         {
             await FailAsync(io, "authFailed", context.RequestAborted);
             return;
         }
 
-        await io.SendAsync(new { type = "authenticated" }, context.RequestAborted);
+        // A new device token goes down this socket only, once; the server keeps its hash.
+        var deviceToken = lease.TakeDeviceToken();
+        await io.SendAsync(deviceToken is null
+            ? (object)new { type = "authenticated" }
+            : new
+            {
+                type = "authenticated",
+                deviceToken,
+                deviceTokenExpiresAt = lease.DeviceTokenExpiresAt!.Value.ToUnixTimeMilliseconds(),
+            }, context.RequestAborted);
         await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
     }
 

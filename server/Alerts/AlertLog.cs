@@ -13,6 +13,7 @@ public enum AlertKind
     BadOrigin,
     ProtocolViolation,
     MessageRateLimited,
+    DeviceTokenReused,
 }
 
 public sealed record Alert(DateTimeOffset At, AlertKind Kind, string? RemoteAddress, string Detail);

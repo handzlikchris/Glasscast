@@ -28,6 +28,9 @@ public sealed class TestServerHost : IAsyncDisposable
     /// <summary>Where this host's media stats log goes (a fresh temp folder).</summary>
     public string StatsDirectory { get; } = Path.Combine(Path.GetTempPath(), $"stats-{Guid.NewGuid():N}");
 
+    /// <summary>Where this host remembers approved glasses (a fresh temp file).</summary>
+    public string DeviceGrantFile { get; } = Path.Combine(Path.GetTempPath(), $"grant-{Guid.NewGuid():N}.json");
+
     public TestServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
         var config = new Dictionary<string, string?>
@@ -37,6 +40,7 @@ public sealed class TestServerHost : IAsyncDisposable
             ["Session:AuthTimeout"] = "00:00:00.500",
             ["Desktop:RegionFile"] = _regionFile,
             ["Diagnostics:StatsDirectory"] = StatsDirectory,
+            ["Pairing:DeviceGrantFile"] = DeviceGrantFile,
             ["Media:FramesPerSecond"] = "30",
         };
         foreach (var (key, value) in settings ?? new())
@@ -134,6 +138,7 @@ public sealed class TestServerHost : IAsyncDisposable
         await _app.StopAsync();
         await _app.DisposeAsync();
         File.Delete(_regionFile);
+        File.Delete(DeviceGrantFile);
         if (Directory.Exists(StatsDirectory))
         {
             Directory.Delete(StatsDirectory, recursive: true);
