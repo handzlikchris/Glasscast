@@ -97,6 +97,9 @@ export function SessionScreen({ onEnded }: Props) {
   const swipeRef = useRef<(action: SwipeAction) => void>(() => {});
   /** The app last switched to (1-based); swipe left goes to the one after it. Assume app 1 at the start. */
   const currentApp = useRef(1);
+  /** The app shown as current on its button: moves only when the PC confirms a switch. */
+  const [activeApp, setActiveApp] = useState(1);
+  const activeAppRef = useRef(1);
   const setNavRef = useRef<(next: NavTarget) => void>(() => {});
   const backRef = useRef<() => void>(() => {});
   /**
@@ -180,6 +183,13 @@ export function SessionScreen({ onEnded }: Props) {
           const name = appsRef.current[message.slot - 1] ?? `app ${message.slot}`;
           const outcome = { switched: 'switched', notRunning: 'not open', failed: 'failed' }[message.result];
           setLastInput(`${name}: ${outcome}`);
+          if (message.result === 'switched') {
+            activeAppRef.current = message.slot;
+            setActiveApp(message.slot);
+          } else {
+            // Didn't happen: the next swipe counts on from the app that really is in front.
+            currentApp.current = activeAppRef.current;
+          }
           break;
         }
       }
@@ -744,6 +754,7 @@ export function SessionScreen({ onEnded }: Props) {
             key={name + i}
             type="button"
             data-app={i + 1}
+            aria-pressed={activeApp === i + 1}
             title={name}
             aria-label={`Switch to ${name}`}
             onClick={() => switchApp(i + 1)}
