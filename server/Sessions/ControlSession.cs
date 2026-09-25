@@ -64,7 +64,7 @@ public sealed class ControlSession
                 type = "hello",
                 monitor = new { width = controller.Monitor.Width, height = controller.Monitor.Height },
                 region = controller.Region,
-                mode = "view",
+                mode = ControlProtocol.ModeName(controller.Mode),
                 codec = encoder.Codec,
             }, ct);
 

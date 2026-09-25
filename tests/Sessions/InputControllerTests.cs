@@ -21,9 +21,18 @@ public sealed class InputControllerTests : IDisposable
     public void Dispose() => File.Delete(_storePath);
 
     [Fact]
-    public void Starts_in_view_mode_and_ignores_input_there()
+    public void Starts_in_pointer_mode_where_typing_is_ignored()
     {
-        Assert.Equal(ViewMode.View, _controller.Mode);
+        Assert.Equal(ViewMode.Pointer, _controller.Mode);
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new TypeTextMessage("hello")));
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new KeyMessage(KeyCommand.Enter)));
+        Assert.Empty(_input.Actions);
+    }
+
+    [Fact]
+    public void View_mode_ignores_input()
+    {
+        _controller.Handle(new SetModeMessage(ViewMode.View));
         Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new MoveMessage(0.5, 0.5)));
         Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new ClickMessage(MouseButton.Left)));
         Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new TypeTextMessage("hello")));

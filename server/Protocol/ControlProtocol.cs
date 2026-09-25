@@ -47,6 +47,9 @@ public static class ControlProtocol
         ["type"] = ViewMode.Type,
     };
 
+    /// <summary>The wire name of a mode ("pointer", ...), as the client sends and expects it.</summary>
+    public static string ModeName(ViewMode mode) => Modes.First(pair => pair.Value == mode).Key;
+
     public static bool TryParse(ReadOnlySpan<byte> utf8Json, out ControlMessage? message, out string? error)
     {
         message = null;

@@ -35,7 +35,8 @@ public sealed class InputController
         Region = RegionMath.Clamp(savedRegion ?? RegionMath.Default(monitor), monitor);
     }
 
-    public ViewMode Mode { get; private set; } = ViewMode.View;
+    /// <summary>Sessions start in Pointer mode: that's what the glasses are mostly used for.</summary>
+    public ViewMode Mode { get; private set; } = ViewMode.Pointer;
 
     public CaptureRegion Region { get; private set; }
 
