@@ -12,7 +12,12 @@ public sealed class FakePeer : IMediaPeer
 
     public event Action? Closed;
 
+    public event Action? KeyframeRequested;
+
     public bool IsConnected { get; private set; }
+
+    /// <summary>Acts like the glasses sending a PLI.</summary>
+    public void RequestKeyframe() => KeyframeRequested?.Invoke();
 
     public string? AppliedAnswer { get; private set; }
 
@@ -62,13 +67,15 @@ public sealed class FakePeerFactory : IMediaPeerFactory
 
 public sealed class FakeEncoder : IFrameEncoder
 {
+    private int _keyframes;
+
     public string Codec => "VP8";
+
+    public int KeyframesForced => Volatile.Read(ref _keyframes);
 
     public byte[]? Encode(byte[] bgra, int width, int height) => [1, 2, 3];
 
-    public void ForceKeyFrame()
-    {
-    }
+    public void ForceKeyFrame() => Interlocked.Increment(ref _keyframes);
 
     public void Dispose()
     {

@@ -66,6 +66,12 @@ public sealed class MediaOptions
     /// <summary>Periodic keyframes let the stream recover quickly from packet loss.</summary>
     public int KeyframeIntervalSeconds { get; set; } = 2;
 
+    /// <summary>
+    /// Keyframes the glasses ask for (PLI/FIR) are sent at once, but no closer together than this:
+    /// they repeat the request every ~200 ms until one arrives, and each keyframe is 50-90 KB.
+    /// </summary>
+    public int RequestedKeyframeMinGapMs { get; set; } = 500;
+
     public int FrameWidth { get; set; } = 600;
 
     public int FrameHeight { get; set; } = 600;

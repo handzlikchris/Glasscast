@@ -19,6 +19,7 @@ public sealed record MediaStats(
     double EncodeMaxMs,
     double Kbps,
     int Keyframes,
+    int KeyframeRequests,
     IReadOnlyList<FrameTiming> Frames);
 
 /// <summary>
@@ -58,53 +59,73 @@ public sealed class FramePump
         var bgra = new byte[frame.Width * frame.Height * 4];
         var rtpDuration = (uint)(RtpClockRate / fps);
         var keyframeEvery = TimeSpan.FromSeconds(Math.Max(1, _options.KeyframeIntervalSeconds));
+        var requestedGap = TimeSpan.FromMilliseconds(Math.Max(0, _options.RequestedKeyframeMinGapMs));
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / fps));
         var lastSource = default(PixelRect);
         var lastKeyframe = DateTime.UtcNow;
         var window = new StatsWindow(_time.GetTimestamp());
-
-        encoder.ForceKeyFrame();
-
-        while (await timer.WaitForNextTickAsync(ct))
+        var keyframeWanted = 0;
+        var requests = 0;
+        void OnKeyframeRequested()
         {
-            var started = _time.GetTimestamp();
-            var capturedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
-            var source = currentSource();
+            Interlocked.Increment(ref requests);
+            Volatile.Write(ref keyframeWanted, 1);
+        }
+        peer.KeyframeRequested += OnKeyframeRequested;
+        try
+        {
+            encoder.ForceKeyFrame();
 
-            // A source of a different size (mode switch, resized region) changes the whole picture,
-            // so start it with a keyframe. A region that merely moves (edge panning) is just motion,
-            // which delta frames handle far more cheaply; the periodic keyframe covers packet loss.
-            var resized = source.Width != lastSource.Width || source.Height != lastSource.Height;
-            if (resized || DateTime.UtcNow - lastKeyframe >= keyframeEvery)
+            while (await timer.WaitForNextTickAsync(ct))
             {
-                encoder.ForceKeyFrame();
-                lastKeyframe = DateTime.UtcNow;
-                window.Keyframes++;
-            }
-            lastSource = source;
+                var started = _time.GetTimestamp();
+                var capturedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
+                var source = currentSource();
 
-            if (_capture.TryCapture(source, frame, bgra))
-            {
-                var captured = _time.GetTimestamp();
-                var encoded = encoder.Encode(bgra, frame.Width, frame.Height);
-                var encodedAt = _time.GetTimestamp();
-
-                if (encoded is { Length: > 0 } && peer.IsConnected)
+                // A source of a different size (mode switch, resized region) changes the whole picture,
+                // so start it with a keyframe. A region that merely moves (edge panning) is just motion,
+                // which delta frames handle far more cheaply; requested and periodic keyframes cover loss.
+                var resized = source.Width != lastSource.Width || source.Height != lastSource.Height;
+                // The glasses asked for one: send it now (unless one went out moments ago; the request
+                // stays pending until then).
+                var requested = Volatile.Read(ref keyframeWanted) == 1 && DateTime.UtcNow - lastKeyframe >= requestedGap;
+                if (resized || requested || DateTime.UtcNow - lastKeyframe >= keyframeEvery)
                 {
-                    var rtp = peer.SendFrame(encoded, rtpDuration);
-                    window.Add(new FrameTiming(rtp, capturedAt, encoded.Length),
-                        _time.GetElapsedTime(started, captured).TotalMilliseconds,
-                        _time.GetElapsedTime(captured, encodedAt).TotalMilliseconds);
+                    Volatile.Write(ref keyframeWanted, 0);
+                    encoder.ForceKeyFrame();
+                    lastKeyframe = DateTime.UtcNow;
+                    window.Keyframes++;
+                }
+                lastSource = source;
+
+                if (_capture.TryCapture(source, frame, bgra))
+                {
+                    var captured = _time.GetTimestamp();
+                    var encoded = encoder.Encode(bgra, frame.Width, frame.Height);
+                    var encodedAt = _time.GetTimestamp();
+
+                    if (encoded is { Length: > 0 } && peer.IsConnected)
+                    {
+                        var rtp = peer.SendFrame(encoded, rtpDuration);
+                        window.Add(new FrameTiming(rtp, capturedAt, encoded.Length),
+                            _time.GetElapsedTime(started, captured).TotalMilliseconds,
+                            _time.GetElapsedTime(captured, encodedAt).TotalMilliseconds);
+                    }
+                }
+
+                var now = _time.GetTimestamp();
+                if (_time.GetElapsedTime(window.Started, now) >= TimeSpan.FromSeconds(1))
+                {
+                    window.KeyframeRequests = Interlocked.Exchange(ref requests, 0);
+                    onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
+                    window = new StatsWindow(now);
                 }
             }
-
-            var now = _time.GetTimestamp();
-            if (_time.GetElapsedTime(window.Started, now) >= TimeSpan.FromSeconds(1))
-            {
-                onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
-                window = new StatsWindow(now);
-            }
+        }
+        finally
+        {
+            peer.KeyframeRequested -= OnKeyframeRequested;
         }
     }
 
@@ -120,6 +141,8 @@ public sealed class FramePump
         public long Started { get; } = started;
 
         public int Keyframes { get; set; }
+
+        public int KeyframeRequests { get; set; }
 
         public void Add(FrameTiming frame, double captureMs, double encodeMs)
         {
@@ -142,6 +165,7 @@ public sealed class FramePump
                 EncodeMaxMs: _encodeMaxMs,
                 Kbps: bytes * 8 / elapsed.TotalSeconds / 1000,
                 Keyframes: Keyframes,
+                KeyframeRequests: KeyframeRequests,
                 Frames: _frames);
         }
     }

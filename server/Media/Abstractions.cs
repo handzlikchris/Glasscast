@@ -21,6 +21,12 @@ public interface IMediaPeer : IDisposable
     /// <summary>Raised when the connection fails or closes.</summary>
     event Action? Closed;
 
+    /// <summary>
+    /// The glasses can't decode the picture (lost packets, or the stream just started) and ask for
+    /// a keyframe (RTCP PLI or FIR). Raised on a network thread.
+    /// </summary>
+    event Action? KeyframeRequested;
+
     bool IsConnected { get; }
 
     /// <summary>Creates the SDP offer (with our public-IP candidate) to send to the glasses.</summary>

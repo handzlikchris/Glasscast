@@ -241,6 +241,7 @@ public sealed class ControlSession
             encodeMaxMs = Math.Round(stats.EncodeMaxMs, 1),
             kbps = Math.Round(stats.Kbps),
             keyframes = stats.Keyframes,
+            keyframeRequests = stats.KeyframeRequests,
             // [RTP timestamp, capture start in Unix ms (server clock), bytes] per frame sent.
             frames = stats.Frames.Select(f => new long[] { f.Rtp, f.CapturedAtUnixMs, f.Bytes }).ToArray(),
         };
@@ -256,6 +257,7 @@ public sealed class ControlSession
             ["encodeMaxMs"] = message.encodeMaxMs,
             ["kbps"] = message.kbps,
             ["keyframes"] = message.keyframes,
+            ["keyframeRequests"] = message.keyframeRequests,
             ["frameKb"] = Math.Round(sizes.Average(), 1),
             ["frameMaxKb"] = Math.Round(sizes.Max(), 1),
         });

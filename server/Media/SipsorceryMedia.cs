@@ -76,6 +76,19 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             : new VideoFormat(VideoCodecsEnum.VP8, 96);
         _peer.addTrack(new MediaStreamTrack(format, MediaStreamStatusEnum.SendOnly));
 
+        // Lost packets aren't resent, so a keyframe is the only way the glasses recover a broken
+        // picture; they ask with PLI (or FIR) and we answer on the next frame.
+        _peer.OnReceiveReport += (_, media, report) =>
+        {
+            if (media == SDPMediaTypesEnum.video
+                && report.Feedback?.Header is { } header
+                && header.PacketType == RTCPReportTypesEnum.PSFB
+                && header.PayloadFeedbackMessageType is PSFBFeedbackTypesEnum.PLI or PSFBFeedbackTypesEnum.FIR)
+            {
+                KeyframeRequested?.Invoke();
+            }
+        };
+
         _peer.onconnectionstatechange += state =>
         {
             _logger.LogInformation("Media peer state: {State}", state);
@@ -93,6 +106,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     public event Action? Connected;
 
     public event Action? Closed;
+
+    public event Action? KeyframeRequested;
 
     public bool IsConnected => _peer.connectionState == RTCPeerConnectionState.connected;
 
