@@ -139,9 +139,16 @@ public sealed class TestServerHost : IAsyncDisposable
         await _app.DisposeAsync();
         File.Delete(_regionFile);
         File.Delete(DeviceGrantFile);
-        if (Directory.Exists(StatsDirectory))
+        try
         {
-            Directory.Delete(StatsDirectory, recursive: true);
+            if (Directory.Exists(StatsDirectory))
+            {
+                Directory.Delete(StatsDirectory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // A session still writing its "end" line holds the file for a moment; it's a temp folder.
         }
     }
 }

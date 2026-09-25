@@ -58,6 +58,29 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private readonly MediaOptions _options;
     private readonly ILogger _logger;
     private int _closed;
+    private int _compoundRequests;
+    private int _standaloneRequests;
+
+    /// <summary>
+    /// An RTCP packet whose first part is a payload-specific feedback (PT 206) PLI (FMT 1) or FIR
+    /// (FMT 4). Only the unencrypted first 8 bytes of SRTCP are read.
+    /// </summary>
+    internal static bool IsStandaloneKeyframeRequest(byte[] packet) =>
+        packet.Length >= 12
+        && packet[0] is >= 128 and <= 191   // RTP/RTCP version 2
+        && packet[1] == 206                 // PSFB
+        && (packet[0] & 0x1F) is 1 or 4;    // PLI or FIR
+
+    private void OnKeyframeRequest(string how, ref int count)
+    {
+        // Log the first few of each shape: which one the glasses use is worth knowing.
+        if (Interlocked.Increment(ref count) <= 3)
+        {
+            _logger.LogInformation("Keyframe request from the glasses, {How}", how);
+        }
+        KeyframeRequested?.Invoke();
+    }
+
 
     public SipsorceryMediaPeer(MediaOptions options, string codec, ILogger logger)
     {
@@ -77,15 +100,29 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         _peer.addTrack(new MediaStreamTrack(format, MediaStreamStatusEnum.SendOnly));
 
         // Lost packets aren't resent, so a keyframe is the only way the glasses recover a broken
-        // picture; they ask with PLI (or FIR) and we answer on the next frame.
+        // picture; they ask with PLI (or FIR) and we answer on the next frame. The request arrives
+        // in one of two shapes:
+        // - inside a compound report (receiver report first): SIPSorcery decrypts and parses it and
+        //   raises OnReceiveReport;
+        // - on its own (PLI first): SIPSorcery matches RTCP to a stream by the sender's SSRC, which
+        //   for a receive-only browser is none of ours, so it drops the packet unseen. The first
+        //   RTCP header isn't encrypted (SRTCP), so it's read here straight off the channel.
         _peer.OnReceiveReport += (_, media, report) =>
         {
             if (media == SDPMediaTypesEnum.video
+                && (report.ReceiverReport is not null || report.SenderReport is not null)
                 && report.Feedback?.Header is { } header
                 && header.PacketType == RTCPReportTypesEnum.PSFB
                 && header.PayloadFeedbackMessageType is PSFBFeedbackTypesEnum.PLI or PSFBFeedbackTypesEnum.FIR)
             {
-                KeyframeRequested?.Invoke();
+                OnKeyframeRequest("in a compound report", ref _compoundRequests);
+            }
+        };
+        _peer.GetRtpChannel().OnRTPDataReceived += (_, _, packet) =>
+        {
+            if (IsStandaloneKeyframeRequest(packet))
+            {
+                OnKeyframeRequest("on its own", ref _standaloneRequests);
             }
         };
 
@@ -120,7 +157,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             _logger.LogWarning("No Media:PublicIp configured and LAN candidates are off: the glasses have no address to reach");
         }
-        return SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates);
+        return SdpFeedback.AddKeyframeRequests(
+            SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates));
     }
 
     public bool ApplyAnswer(string sdp)
@@ -156,9 +194,22 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     {
         // SendVideo stamps the frame with the track's current timestamp, then advances it.
         var rtpTimestamp = _peer.VideoLocalTrack?.Timestamp ?? 0;
+        if (_framesToDrop > 0 && Interlocked.Decrement(ref _framesToDrop) >= 0)
+        {
+            return rtpTimestamp; // dev/test only, see DropFirstFrames
+        }
         _peer.SendVideo(durationRtpUnits, encoded);
         return rtpTimestamp;
     }
+
+    private int _framesToDrop;
+
+    /// <summary>
+    /// DEV/TEST ONLY (e2e harness): doesn't send the next <paramref name="count"/> frames, like a
+    /// session whose first keyframe was lost. The glasses then get frames they can't decode and
+    /// ask for a keyframe.
+    /// </summary>
+    internal void DropFirstFrames(int count) => _framesToDrop = count;
 
     private void RaiseClosed()
     {

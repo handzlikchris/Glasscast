@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="GlassesRemote.Server.Tests" />
+    <!-- The e2e harness loses the start of a stream (SipsorceryMediaPeer.DropFirstFrames). -->
+    <InternalsVisibleTo Include="E2eHarness" />
   </ItemGroup>
 
 </Project>
