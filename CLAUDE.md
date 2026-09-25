@@ -103,8 +103,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    input outside its mode. Sessions start in **Pointer** (the server says so in `hello`); the
    region is persisted by `RegionStore` across sessions.
 7. Glasses navigation (`client-web/src/focusnav.ts`, `gestures.ts`): in View/Pointer/Scroll,
-   swipes (arrow keys) move the view by a quarter screen; **pinch, then pinch-and-hold 0.5 s**
-   (movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
+   swipes (arrow keys) move the view by a quarter screen; **Back** (or pinch, then pinch-and-hold
+   0.5 s, movement ignored) jumps to the mode bar (Type from Pointer, Pointer from View/Scroll). On
    the controls a pinch presses the focused control wherever it lands. Pointer-mode clicks wait
    350 ms for a possible second pinch (double-click). Type walks focus: text box → Send text
    (on the composer's `change`) → Enter → Pointer.
@@ -182,9 +182,10 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
   home Wi-Fi and via the phone's mobile data. User agent contains `Greatwhite` (Android 14 WebView).
 - **Input as the page sees it:** thumb swipes → `ArrowUp/Down/Left/Right`; an index pinch → a
   pointer tap **at the glasses' pointer position, not on the focused element** (so the app
-  redirects it to the focused control); pinch-drag → pointer events. Middle-finger pinch opens
-  the system web app menu (Restart/Resume/kill) and double middle pinch toggles the display:
-  both reserved. Back (Escape) is not reachable in practice.
+  redirects it to the focused control); pinch-drag → pointer events. Back (middle-finger pinch)
+  calls `history.back()` when the page has a history entry, else opens the system web app menu
+  (Restart/Resume/kill); the session keeps one entry so Back toggles view ↔ controls. Double
+  middle pinch toggles the display (reserved).
 - The voice/handwriting **composer** is a system feature: the page only gets text via
   `input`/`change` on a focused `<textarea>`; it opens on user activation, not `.focus()`.
 - **Caching:** Restart in the web app menu reloads from HTTP cache. The server sends
