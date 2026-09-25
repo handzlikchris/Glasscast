@@ -823,8 +823,8 @@ export function SessionScreen({ onEnded }: Props) {
           onSendText={(text) => send({ type: 'typeText', text })}
           onKey={(key: KeyName) => {
             send({ type: 'key', key });
-            // Enter usually finishes the job: focus Pointer so going back is one pinch.
-            if (key === 'Enter') focusModeButton('pointer');
+            // Enter usually finishes the job: straight back to Pointer mode.
+            if (key === 'Enter') setMode('pointer');
           }}
         />
       )}

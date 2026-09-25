@@ -27,7 +27,7 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
  *
  * Focus is walked along for the glasses, so each step is just another pinch:
  * text box (clicked, to open the composer) when the panel opens → Send text once the composer hands text back
- * (a "change" event) → Enter after sending → Pointer after Enter (SessionScreen).
+ * (a "change" event) → Enter after sending; Enter itself returns to Pointer mode (SessionScreen).
  */
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
