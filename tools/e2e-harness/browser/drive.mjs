@@ -272,7 +272,11 @@ try {
   await page.locator('button[data-mode="pointer"]').click(); // Pointer mode, swipes on the view
   await sleep(200);
   const focusName = () => page.evaluate(() => document.activeElement?.dataset?.mode ?? document.activeElement?.tagName);
-  await page.evaluate(() => history.back());
+  // Like the glasses, reset focus to the first button right after the Back navigation.
+  await page.evaluate(() => {
+    history.back();
+    setTimeout(() => document.querySelector('button[data-mode="overview"]')?.focus(), 30);
+  });
   await sleep(400);
   const afterHistoryBack = await focusName();
   await page.keyboard.press('Escape');
@@ -283,7 +287,7 @@ try {
   await sleep(500);
   const afterDoubleBack = await focusName();
   const stillInSession = await page.$('.stage').then((el) => el !== null);
-  check('Back toggles view ↔ controls, and a doubled Back counts once',
+  check('Back toggles view ↔ controls (focus held on Type through a reset), a doubled Back counts once',
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
 } finally {
