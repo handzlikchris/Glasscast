@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using GlassesRemote.Server.Alerts;
+using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Windows;
 
@@ -23,6 +24,9 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem _status;
     private readonly ToolStripMenuItem _terminate;
     private readonly SessionBanner _banner = new(HotkeyText);
+    private readonly CastArea _castArea;
+    private readonly CastFrame _frame = new();
+    private readonly ToolStripMenuItem _showFrame;
     private readonly AlertThrottle _throttle = new(TimeProvider.System, TimeSpan.FromMinutes(1));
     private readonly System.Windows.Forms.Timer _flushTimer = new() { Interval = 10_000 };
     private readonly TerminateHotkey _hotkey;
@@ -33,10 +37,11 @@ internal sealed class TrayApp : ApplicationContext
     private ApprovePopup? _popup;
     private AlertsForm? _alertsForm;
 
-    public TrayApp(PairingCoordinator coordinator, AlertLog alerts, Action requestShutdown)
+    public TrayApp(PairingCoordinator coordinator, AlertLog alerts, CastArea castArea, Action requestShutdown)
     {
         _coordinator = coordinator;
         _alerts = alerts;
+        _castArea = castArea;
         _requestShutdown = requestShutdown;
         _marshal.CreateControl();
 
@@ -45,12 +50,15 @@ internal sealed class TrayApp : ApplicationContext
         {
             Enabled = false,
         };
+        _showFrame = new ToolStripMenuItem("Show cast area on screen") { Checked = true, CheckOnClick = true };
+        _showFrame.CheckedChanged += (_, _) => UpdateFrame(_castArea.Current);
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
         [
             _status,
             new ToolStripSeparator(),
             _terminate,
+            _showFrame,
             new ToolStripMenuItem("Recent alerts…", null, (_, _) => ShowAlerts()),
             new ToolStripSeparator(),
             new ToolStripMenuItem("Exit", null, (_, _) => _requestShutdown()),
@@ -77,6 +85,7 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.RequestOpened += OnRequestOpened;
         _coordinator.RequestClosed += OnRequestClosed;
         _coordinator.SessionChanged += OnSessionChanged;
+        _castArea.Changed += OnCastAreaChanged;
         _alerts.Raised += OnAlert;
 
         // A pairing request may already be pending if the host started first.
@@ -127,6 +136,20 @@ internal sealed class TrayApp : ApplicationContext
         _terminate.Enabled = true;
         _banner.ShowFor(session.RemoteAddress);
     });
+
+    private void OnCastAreaChanged(CaptureRegion? region) => Ui(() => UpdateFrame(region));
+
+    private void UpdateFrame(CaptureRegion? region)
+    {
+        if (region is null || !_showFrame.Checked)
+        {
+            _frame.Hide();
+        }
+        else
+        {
+            _frame.ShowAround(region);
+        }
+    }
 
     private void OnAlert(Alert alert) => Ui(() =>
     {
@@ -189,12 +212,14 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.RequestOpened -= OnRequestOpened;
         _coordinator.RequestClosed -= OnRequestClosed;
         _coordinator.SessionChanged -= OnSessionChanged;
+        _castArea.Changed -= OnCastAreaChanged;
         _alerts.Raised -= OnAlert;
         _flushTimer.Stop();
         _hotkey.Dispose();
         _popup?.Dismiss();
         _alertsForm?.Close();
         _banner.Close();
+        _frame.Close();
         _tray.Visible = false;
         _tray.Dispose();
         base.ExitThreadCore();

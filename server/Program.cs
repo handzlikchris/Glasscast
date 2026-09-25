@@ -1,4 +1,5 @@
 using GlassesRemote.Server.Alerts;
+using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Hosting;
 using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Ui;
@@ -23,6 +24,7 @@ public static class Program
         using var tray = new TrayApp(
             app.Services.GetRequiredService<PairingCoordinator>(),
             app.Services.GetRequiredService<AlertLog>(),
+            app.Services.GetRequiredService<CastArea>(),
             requestShutdown: lifetime.StopApplication);
         using var stopping = lifetime.ApplicationStopping.Register(tray.RequestExit);
 
