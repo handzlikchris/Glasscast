@@ -556,7 +556,7 @@ export function SessionScreen({ onEnded }: Props) {
     const next = !live.current.panSwipes;
     live.current.panSwipes = next;
     setPanSwipes(next);
-    setLastInput(next ? 'swipes pan the view' : 'swipes: scroll, type, next app');
+    setLastInput(next ? 'pan: swipes and edges move the view' : 'view locked; swipes: scroll, type, next app');
     // In Pointer mode, straight back to swiping so the new meaning takes effect at once.
     if (live.current.mode === 'pointer') setNav('view');
   };
@@ -644,8 +644,10 @@ export function SessionScreen({ onEnded }: Props) {
       setDraft(moved);
     } else if (m === 'pointer' && box) {
       if (event.kind === 'drag') {
+        // Pushing past an edge pans the view only with Pan on; otherwise the view stays locked
+        // where it is and the cursor stops at the edge.
         const room: PanRoom =
-          r && mon
+          r && mon && live.current.panSwipes
             ? { left: r.x > 0, right: r.x + r.width < mon.width, up: r.y > 0, down: r.y + r.height < mon.height }
             : NO_ROOM;
         const { cursor: next, panX, panY } = moveCursorWithEdgePan(
@@ -798,7 +800,7 @@ export function SessionScreen({ onEnded }: Props) {
           </button>
         ))}
         {/* Always shown so the bar doesn't shift between modes; it only changes Pointer-mode swipes. */}
-        <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes pan the view">
+        <button type="button" data-toggle="pan" aria-pressed={panSwipes} onClick={togglePanSwipes} title="Swipes and pushing past an edge pan the view">
           Pan
         </button>
         <button

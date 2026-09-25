@@ -145,17 +145,26 @@ try {
   const mode = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   check('Use region returns to Pointer mode', mode === 'pointer', mode);
 
-  // 7. Edge panning: in Pointer mode, pushing past the right edge slides the region right.
+  // 7. Edge panning: in Pointer mode the view stays put when the cursor is pushed past an edge,
+  //    unless Pan is on; then pushing past the right edge slides the region right.
+  const pushRight = async () => {
+    await page.mouse.move(60, 300);
+    await page.mouse.down();
+    await page.mouse.move(590, 300, { steps: 40 });
+    await page.mouse.up();
+    await sleep(600);
+    return (await fetch(`${BASE}/__harness/region`)).json();
+  };
   const before = await (await fetch(`${BASE}/__harness/region`)).json();
   await tapBar('button[data-mode="pointer"]');
-  await page.mouse.move(60, 300);
-  await page.mouse.down();
-  await page.mouse.move(590, 300, { steps: 40 });
-  await page.mouse.up();
-  await sleep(600);
-  const after = await (await fetch(`${BASE}/__harness/region`)).json();
+  const locked = await pushRight();
+  check('without Pan, pushing past the edge leaves the view where it is', locked && before && locked.x === before.x,
+    `x ${before?.x} -> ${locked?.x}`);
+  await tapBar('button[data-toggle="pan"]'); // Pan on
+  const after = await pushRight();
+  await tapBar('button[data-toggle="pan"]'); // Pan off again
   await shot('6-edge-pan');
-  check('pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
+  check('with Pan on, pushing past the right edge pans the region right', after && before && after.x > before.x && after.y === before.y,
     `x ${before?.x} -> ${after?.x}`);
 
   // 8. Taps don't click in Region mode (nothing new recorded); Cancel returns to Pointer.
