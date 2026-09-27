@@ -50,7 +50,7 @@ public sealed class MfH264Encoder : IFrameEncoder
 
     /// <param name="keyframeIntervalSeconds">The encoder's own keyframe interval (GOP), which also
     /// applies when the frame pump doesn't force one.</param>
-    public MfH264Encoder(int targetKbps, int framesPerSecond, int keyframeIntervalSeconds = 2)
+    public MfH264Encoder(int targetKbps, int framesPerSecond, int keyframeIntervalSeconds = 10)
     {
         _kbps = Math.Max(200, targetKbps);
         _fps = Math.Clamp(framesPerSecond, 1, 60);

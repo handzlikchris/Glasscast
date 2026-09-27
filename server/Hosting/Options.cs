@@ -64,10 +64,11 @@ public sealed class MediaOptions
     public int TargetKbps { get; set; } = 2500;
 
     /// <summary>
-    /// Periodic keyframes let the stream recover quickly from packet loss. Also the H.264 encoder's
-    /// own keyframe interval (GOP).
+    /// Periodic keyframes, a safety net: lost packets are resent on NACK, and a picture that still
+    /// breaks gets a keyframe on request (PLI). Every 2 s they were the main source of loss over
+    /// mobile data (40-90 KB each). Also the H.264 encoder's own keyframe interval (GOP).
     /// </summary>
-    public int KeyframeIntervalSeconds { get; set; } = 2;
+    public int KeyframeIntervalSeconds { get; set; } = 10;
 
     /// <summary>
     /// Keyframes the glasses ask for (PLI/FIR) are sent at once, but no closer together than this:
