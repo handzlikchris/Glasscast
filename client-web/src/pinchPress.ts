@@ -1,7 +1,9 @@
 // On the glasses a pinch arrives as a pointer tap at the glasses' pointer position, not on the
-// focused button, so on its own it only takes the focus away. Outside a session (the pairing and
-// "Session ended" screens) a tap on anything but the focused button presses that button instead.
-// SessionScreen has its own, richer handling for the same problem.
+// focused control, so on its own it only takes the focus away. Here a tap on anything but the
+// focused button or text box presses that control instead: a button is clicked, a text box is
+// focused and clicked inside the pinch, which is what opens the glasses' voice/handwriting
+// composer. Used outside a session (first, pairing and ended screens) and on a phone session's
+// bar and Type panel. SessionScreen has its own, richer handling for the same problem.
 
 import { useEffect } from 'react';
 
@@ -11,15 +13,16 @@ export function usePinchPressesFocused(enabled: boolean): void {
     let pressing: number | null = null;
     let swallowClick = false;
 
-    const focusedButton = (): HTMLButtonElement | null =>
-      document.activeElement instanceof HTMLButtonElement && !document.activeElement.disabled
-        ? document.activeElement
-        : null;
+    const focusedControl = (): HTMLButtonElement | HTMLTextAreaElement | null => {
+      const active = document.activeElement;
+      if (active instanceof HTMLButtonElement && !active.disabled) return active;
+      return active instanceof HTMLTextAreaElement ? active : null;
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       swallowClick = false;
-      const button = focusedButton();
-      if (!button || (e.target instanceof Node && button.contains(e.target))) return;
+      const control = focusedControl();
+      if (!control || (e.target instanceof Node && control.contains(e.target))) return;
       // Keep the focus (and its ring) where it is; press it when the pinch ends.
       e.preventDefault();
       e.stopPropagation();
@@ -30,7 +33,9 @@ export function usePinchPressesFocused(enabled: boolean): void {
       pressing = null;
       e.stopPropagation();
       swallowClick = true;
-      focusedButton()?.click();
+      const control = focusedControl();
+      if (control instanceof HTMLTextAreaElement) control.focus({ preventScroll: true });
+      control?.click();
     };
     const onClick = (e: MouseEvent) => {
       // The browser's own click for that pinch: the button has already been pressed.

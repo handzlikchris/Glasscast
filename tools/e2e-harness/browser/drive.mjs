@@ -649,6 +649,30 @@ try {
   check('End on the bar goes back to the PC/Phone choice, and the bar fits on one row',
     bar.fits && chose && chooseFocus === 'PC' && !(await page.$('main.ended')),
     `bar ${bar.width}px fits ${bar.fits}, choice ${chose}, focus ${chooseFocus}`);
+
+  // 21. Phone session (no phone attached; the page works the same): swipe right opens Type with
+  //     the text box focused, and a pinch that lands beside it (the glasses' pointer is rarely on
+  //     it) keeps the focus there and clicks the box, which is what opens the composer.
+  await sleep(500);
+  await page.focus('.choose button:nth-of-type(2)');
+  await page.mouse.click(300, 560);
+  const phoneStage = await page.waitForSelector('.phone-stage', { timeout: 10_000 }).then(() => true, () => false);
+  await page.keyboard.press('ArrowRight');
+  await page.waitForSelector('.type-panel textarea', { timeout: 3000 }).catch(() => {});
+  const boxClicks = await page.evaluate(() => {
+    const box = document.querySelector('.type-panel textarea');
+    window.__boxClicks = 0;
+    box?.addEventListener('click', () => window.__boxClicks++);
+    return box !== null && document.activeElement === box;
+  });
+  await page.mouse.click(300, 200);
+  const afterPinch = await page.evaluate(() => ({
+    focused: document.activeElement?.tagName,
+    clicks: window.__boxClicks,
+  }));
+  check('phone Type: swipe right opens it, and a pinch beside the focused box clicks the box',
+    phoneStage && boxClicks && afterPinch.focused === 'TEXTAREA' && afterPinch.clicks === 1,
+    `phone ${phoneStage}, box focused ${boxClicks}, after pinch ${afterPinch.focused} clicked ${afterPinch.clicks}`);
 } finally {
   await browser.close();
 }

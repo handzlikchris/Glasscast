@@ -450,8 +450,25 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     const box = textRef.current!;
     if (sendText(box.value)) {
       box.value = '';
-      enterRef.current?.focus();
+      if (enterRef.current) focusHeld(enterRef.current);
     }
+  };
+
+  /**
+   * Moves focus for you and holds it briefly: the glasses reset focus (to the first bar button,
+   * the phone's Back) when the composer closes. A swipe of yours in the meantime lets go.
+   */
+  const focusHeld = (el: HTMLElement) => {
+    el.focus({ preventScroll: true });
+    let swiped = false;
+    const onKey = () => (swiped = true);
+    document.addEventListener('keydown', onKey, true);
+    for (const delay of [50, 150, 300, 500]) {
+      setTimeout(() => {
+        if (!swiped && el.isConnected && document.activeElement !== el) el.focus({ preventScroll: true });
+      }, delay);
+    }
+    setTimeout(() => document.removeEventListener('keydown', onKey, true), 600);
   };
 
   // The native change event (not React's onChange, which is every keystroke): the composer closing.
