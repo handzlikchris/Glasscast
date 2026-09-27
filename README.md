@@ -4,7 +4,10 @@ Proof of concept: control a Windows desktop from a Meta Ray-Ban Display web app.
 The glasses view a region of the primary monitor over low-latency WebRTC video
 (H.264), drive the mouse with Neural Band pinches, and type through the glasses'
 voice or handwriting composer. A single-use pairing, approved in a popup on the
-PC, gates every session.
+PC, gates every session; for 24 h after an approval the same glasses can reconnect
+with a rotating device token.
+
+Per-feature design notes live in [`architecture/`](architecture/README.md).
 
 The shared plan page has the design, decisions, risks and the router/DNS setup.
 This README covers the code.
@@ -31,12 +34,13 @@ glasses / laptop ──HTTPS+WSS :443──► router ──► Caddy :8443 ─�
 
 - **Pairing** (`/ws/pair`): the glasses get a 6-character code; a popup on the PC shows
   the same code, and **Approve** sends a single-use 256-bit token to that socket only.
-- **Session** (`/ws/session`): the first message must be `authenticate` within 3 s.
-  Then: `hello` (monitor size, region), the WebRTC offer, and control messages.
+- **Session** (`/ws/session`): the first message must be `authenticate` (approval token)
+  or `resume` (device token) within 3 s. Then: `authenticated`, `hello` (monitor, region,
+  mode, app shortcuts), the WebRTC offer, and control messages.
 - **Media**: SIPSorcery on the fixed UDP port 50000. The offer advertises the router's
   public IP, so the glasses connect straight through the port forward, with no STUN/TURN.
-- **Modes** give pinch-drag one meaning at a time: Overview (move the region box),
-  View, Pointer (drag moves the cursor, a short pinch clicks), Scroll, Type.
+- **Modes** give pinch-drag one meaning at a time: Region (move the region box),
+  Pointer (the default: drag moves the cursor, a pinch clicks, swipes scroll), Type.
 
 ## Requirements
 
@@ -85,7 +89,7 @@ End a session at any time: the tray menu, or **Ctrl+Alt+Shift+X**.
 ## Tests
 
 ```powershell
-dotnet test                                   # 100 server tests
+dotnet test                                   # ~177 server tests
 cd client-web; npm test                        # client unit tests
 dotnet run --project tools/e2e-harness         # then, in tools/e2e-harness/browser:
 npm run drive                                  # full flow in headless Chrome
@@ -97,7 +101,9 @@ npm run drive                                  # full flow in headless Chrome
   IIS keeps port 443 on this PC for local use. RDP is never exposed.
 - A session exists only after a human approves the matching code on the PC. The token is
   256-bit, single-use, hashed server-side, never in URLs, storage or logs, and it dies with
-  the session. There's no reconnection without a new approval.
+  the session. The approval also remembers that device for 24 h (fixed, never extended): it
+  gets a device token that is swapped on every use; reusing an old one forgets the device.
+  **Forget remembered glasses** in the tray ends that early.
 - Exact Origin check on both sockets; strict CSP; per-IP and global pairing limits;
   per-session message rate limit; strict allowlisted protocol; text is never followed by
   an automatic Enter.
@@ -113,4 +119,4 @@ npm run drive                                  # full flow in headless Chrome
 | M2 | Desktop streaming | Done: GDI capture, overview/region, H.264 (VP8 fallback) |
 | M3 | Input | Done: pointer, click, scroll, Unicode text, allowlisted keys |
 | M4 | Hardening | Done in code: CSP, Origin, limits, log hygiene (brief 10–14). External port scan pending |
-| M5 | Glasses validation | Waiting for the device |
+| M5 | Glasses validation | Largely done (2026-09-25): video, pairing, Pointer, Type and the composer work on the device |
