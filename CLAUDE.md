@@ -73,8 +73,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
                         browser/drive.mjs (headless Chrome, 39 checks)
-spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
-deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
+deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
 .claude/tasks/          task briefs for new sessions
@@ -410,7 +409,7 @@ tight padding, check a screenshot when adding buttons). Model in
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.
 - Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
   toggle (user reported it not working before the always-visible bar; no readout yet).
-- Pending: M0 latency numbers, external port scan, decode cost on the glasses, pinch-drag
+- Pending: external port scan, decode cost on the glasses, pinch-drag
   gain/threshold tuning, maybe removing the pinch-then-hold gesture (Back replaced it; dropping
   it would remove the 350 ms click delay).
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).

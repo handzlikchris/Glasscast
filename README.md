@@ -20,8 +20,7 @@ This README covers the code.
 | `client-web/` | Vite + React + TypeScript glasses client (600×600) |
 | `tests/` | Server tests (xUnit): unit, WebSocket integration, real H.264 encoder |
 | `tools/e2e-harness/` | Dev-only harness + headless-Chrome script that drives the whole flow |
-| `spikes/webrtc/` | M0 spike: unauthenticated test-pattern stream for the network test |
-| `deploy/` | Caddyfiles and the Windows firewall script |
+| `deploy/` | Caddyfile and the Windows firewall script |
 | `scripts/` | `run.ps1`: build the client and start the server |
 
 ## How it fits together
@@ -114,7 +113,7 @@ npm run drive                                  # full flow in headless Chrome
 
 | # | Milestone | State |
 | --- | --- | --- |
-| M0 | WebRTC + network spike | Built; local runs pass (19–24 ms p50). Hotspot run pending router setup |
+| M0 | WebRTC + network spike | Done; the spike was removed once the real stream ran on the glasses |
 | M1 | Pairing + auth | Done: popup, alerts, hotkey; brief tests 1–9, 15 automated |
 | M2 | Desktop streaming | Done: GDI capture, overview/region, H.264 (VP8 fallback) |
 | M3 | Input | Done: pointer, click, scroll, Unicode text, allowlisted keys |
