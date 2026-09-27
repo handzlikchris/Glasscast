@@ -6,6 +6,7 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -27,7 +28,9 @@ class InputService : AccessibilityService() {
         var instance: InputService? = null
             private set
 
-        private const val TAP_MS = 60L
+        private const val TAG = "InputService"
+        /** Long enough for views that only react to a press they can see (a very short one can be missed). */
+        private const val TAP_MS = 100L
         private const val LONG_PRESS_MS = 700L
     }
 
@@ -163,7 +166,14 @@ class InputService : AccessibilityService() {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, ms))
             .build()
-        return dispatchGesture(gesture, null, null)
+        // A cancelled gesture is a missed tap on the glasses: log it (adb logcat -s InputService).
+        val sent = dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.w(TAG, "gesture cancelled ($ms ms)")
+            }
+        }, null)
+        if (!sent) Log.w(TAG, "gesture not dispatched")
+        return sent
     }
 
     private fun pointPath(x: Float, y: Float) = Path().apply { moveTo(x, y) }
