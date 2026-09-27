@@ -97,6 +97,10 @@ export interface PcMediaStats {
   keyframes: number;
   /** Keyframe requests (PLI/FIR) the PC received from the glasses. */
   keyframeRequests: number;
+  /** The PC's sound: capturing and sending, Opus kbit/s sent (payload), packets. */
+  audioOn: boolean;
+  audioKbps: number;
+  audioPackets: number;
   frames: SentFrame[];
 }
 
@@ -109,7 +113,7 @@ export type ServerMessage =
   | { type: 'pairFailed' }
   | { type: 'authFailed' }
   | { type: 'authenticated'; deviceToken?: string; deviceTokenExpiresAt?: number }
-  | { type: 'hello'; monitor: Size; region: Region; mode: ViewMode; codec: string; apps: string[] }
+  | { type: 'hello'; monitor: Size; region: Region; mode: ViewMode; codec: string; apps: string[]; audio: boolean }
   | { type: 'rtcOffer'; sdp: string }
   | { type: 'region'; region: Region }
   | { type: 'pong'; t: number; serverTime: number }
@@ -130,6 +134,7 @@ export type ClientMessage =
   | { type: 'key'; key: KeyName }
   | { type: 'ping'; t: number }
   | { type: 'switchApp'; slot: number }
+  | { type: 'setAudio'; enabled: boolean }
   | ({ type: 'stats' } & StatsReport);
 
 /** The glasses' own figures for the PC's stats log (ControlProtocol.ClientStatsFields). null = not measured. */
@@ -159,6 +164,11 @@ export interface StatsReport {
   iceNetType: number | null;
   downlinkMbps: number | null;
   rttMs: number | null;
+  /** The PC's sound as received (see AudioStats in mediaStats.ts). */
+  audioKbps: number | null;
+  audioLost: number | null;
+  audioConcealedMs: number | null;
+  audioBufferMs: number | null;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
@@ -204,6 +214,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
             mode: toViewMode(data.mode),
             codec: data.codec,
             apps: toApps(data.apps),
+            // Only when the PC offers its sound (older servers never do).
+            audio: data.audio === true,
           }
         : null;
     case 'rtcOffer':
@@ -243,6 +255,9 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         rembKbps: isNumber(data.rembKbps) ? data.rembKbps : null,
         lossPct: isNumber(data.lossPct) ? data.lossPct : null,
         linkTestKbps: isNumber(data.linkTestKbps) ? data.linkTestKbps : 0,
+        audioOn: data.audioOn === true,
+        audioKbps: isNumber(data.audioKbps) ? data.audioKbps : 0,
+        audioPackets: isNumber(data.audioPackets) ? data.audioPackets : 0,
         frames,
       };
     }

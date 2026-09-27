@@ -1,7 +1,19 @@
-// Receive-only WebRTC video from the PC. The server sends the offer; we answer.
+// Receive-only WebRTC video (and the PC's sound) from the PC. The server sends the offer; we answer.
 // No STUN/TURN: the offer already carries the router's public address and the
 // forwarded media port, and our checks go straight there.
-import { mediaPath, networkCode, receiverStats, type InboundSnapshot, type NetworkInfo, type ReceiverStats, type ShownFrame } from './mediaStats';
+import { withStereoOpus } from './audio';
+import {
+  audioStats,
+  mediaPath,
+  networkCode,
+  receiverStats,
+  type AudioSnapshot,
+  type AudioStats,
+  type InboundSnapshot,
+  type NetworkInfo,
+  type ReceiverStats,
+  type ShownFrame,
+} from './mediaStats';
 import type { ClientMessage } from './protocol';
 
 export interface VideoStats {
@@ -12,6 +24,8 @@ export interface VideoStats {
   network: NetworkInfo;
   /** Over the LAN or the internet (the PC's address in the chosen pair), null until known. */
   path: 'local' | 'remote' | null;
+  /** The audio track's figures, null while there's none. */
+  audio: AudioStats | null;
 }
 
 /** navigator.connection, where the browser has it (Chrome on Android does). */
@@ -23,14 +37,28 @@ interface NetworkInformation {
 export class VideoReceiver {
   private readonly pc = new RTCPeerConnection({ iceServers: [] });
   private lastInbound: InboundSnapshot | null = null;
+  private lastAudio: AudioSnapshot | null = null;
 
+  /**
+   * The PC puts video and audio in streams of their own (no lip sync, which would hold the
+   * video back), so each track goes to its own element. `onAudio` is called once the sound's
+   * track is on the audio element, to start playing it.
+   */
   constructor(
     private readonly send: (message: ClientMessage) => void,
     video: HTMLVideoElement,
+    audio: HTMLAudioElement,
     onState: (state: RTCPeerConnectionState) => void,
+    onAudio: () => void = () => {},
   ) {
     this.pc.ontrack = (event) => {
-      video.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      const stream = event.streams[0] ?? new MediaStream([event.track]);
+      if (event.track.kind === 'audio') {
+        audio.srcObject = stream;
+        onAudio();
+      } else {
+        video.srcObject = stream;
+      }
     };
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
@@ -47,7 +75,8 @@ export class VideoReceiver {
 
   async handleOffer(sdp: string): Promise<void> {
     await this.pc.setRemoteDescription({ type: 'offer', sdp });
-    await this.pc.setLocalDescription(await this.pc.createAnswer());
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription({ type: 'answer', sdp: withStereoOpus(answer.sdp ?? '') });
     this.send({ type: 'rtcAnswer', sdp: this.pc.localDescription!.sdp });
   }
 
@@ -55,11 +84,13 @@ export class VideoReceiver {
     const report = await this.pc.getStats();
     const byId = new Map<string, Record<string, unknown>>();
     let inbound: Record<string, unknown> | null = null;
+    let inboundAudio: Record<string, unknown> | null = null;
     let pairId: string | null = null;
 
     report.forEach((s: Record<string, unknown>) => {
       byId.set(s.id as string, s);
       if (s.type === 'inbound-rtp' && s.kind === 'video') inbound = s;
+      if (s.type === 'inbound-rtp' && s.kind === 'audio') inboundAudio = s;
       if (s.type === 'transport' && typeof s.selectedCandidatePairId === 'string') pairId = s.selectedCandidatePairId;
     });
 
@@ -70,6 +101,7 @@ export class VideoReceiver {
       rttMs: null,
       receiver: null,
       path: null,
+      audio: null,
       network: {
         type: networkCode(connection?.type),
         iceType: null,
@@ -100,6 +132,22 @@ export class VideoReceiver {
       };
       result.receiver = receiverStats(this.lastInbound, snapshot);
       this.lastInbound = snapshot;
+    }
+
+    const sound = inboundAudio as Record<string, unknown> | null;
+    if (sound) {
+      const n = (key: string) => Number(sound[key] ?? 0);
+      const snapshot: AudioSnapshot = {
+        at: performance.now(),
+        bytesReceived: n('bytesReceived'),
+        packetsLost: n('packetsLost'),
+        concealedSamples: n('concealedSamples'),
+        silentConcealedSamples: n('silentConcealedSamples'),
+        jitterBufferDelay: n('jitterBufferDelay'),
+        jitterBufferEmittedCount: n('jitterBufferEmittedCount'),
+      };
+      result.audio = audioStats(this.lastAudio, snapshot);
+      this.lastAudio = snapshot;
     }
 
     const pair = pairId ? byId.get(pairId) : null;

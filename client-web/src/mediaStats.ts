@@ -190,6 +190,46 @@ export function receiverStats(prev: InboundSnapshot | null, cur: InboundSnapshot
   };
 }
 
+/** Cumulative inbound-rtp counters of the audio track (samples per channel, times in seconds). */
+export interface AudioSnapshot {
+  at: number;
+  bytesReceived: number;
+  packetsLost: number;
+  /** Samples the decoder made up (lost or late packets); the silent ones are its DTX gaps. */
+  concealedSamples: number;
+  silentConcealedSamples: number;
+  jitterBufferDelay: number;
+  jitterBufferEmittedCount: number;
+}
+
+/** The PC's sound as received since the previous snapshot. */
+export interface AudioStats {
+  /** Opus payload, kbit/s: comparable with the PC's audioKbps. */
+  kbps: number | null;
+  lost: number;
+  /** Sound made up by the decoder, ms in the interval. Not counting silence the PC didn't send. */
+  concealedMs: number | null;
+  /** Average wait in the audio jitter buffer. */
+  bufferMs: number | null;
+}
+
+/** Opus runs at 48 kHz: samples per millisecond. */
+const OPUS_SAMPLES_PER_MS = 48;
+
+export function audioStats(prev: AudioSnapshot | null, cur: AudioSnapshot): AudioStats {
+  if (!prev) return { kbps: null, lost: 0, concealedMs: null, bufferMs: null };
+  const seconds = (cur.at - prev.at) / 1000;
+  const emitted = cur.jitterBufferEmittedCount - prev.jitterBufferEmittedCount;
+  const concealed =
+    cur.concealedSamples - prev.concealedSamples - (cur.silentConcealedSamples - prev.silentConcealedSamples);
+  return {
+    kbps: seconds > 0 ? ((cur.bytesReceived - prev.bytesReceived) * 8) / seconds / 1000 : null,
+    lost: Math.max(0, cur.packetsLost - prev.packetsLost),
+    concealedMs: Math.max(0, concealed) / OPUS_SAMPLES_PER_MS,
+    bufferMs: emitted > 0 ? ((cur.jitterBufferDelay - prev.jitterBufferDelay) / emitted) * 1000 : null,
+  };
+}
+
 /**
  * How this device reaches the network, to tell a slow hop from a slow internet (on the glasses:
  * Wi-Fi, or relayed by the phone over Bluetooth?). Types as number codes, see NETWORK_CODES.
@@ -249,6 +289,7 @@ export function statsLines(
   rx: ReceiverStats | null,
   pc: readonly PcMediaStats[],
   net: NetworkInfo | null = null,
+  audio: AudioStats | null = null,
 ): string[] {
   const lines: string[] = [];
   if (latency) {
@@ -268,6 +309,15 @@ export function statsLines(
     const mbps = rx.kbps === null ? '–' : (rx.kbps / 1000).toFixed(1);
     lines.push(`jitter buf ${ms(rx.jitterBufferMs)} ms · decode ${ms(rx.decodeMs)} ms · ${mbps} Mbps in`);
     lines.push(`lost ${rx.lost} (${rx.lostTotal}) · nack ${rx.nacks} · pli ${rx.plis} · freezes ${rx.freezes} · dropped ${rx.dropped}`);
+  }
+
+  const lastPc = pc.length > 0 ? pc[pc.length - 1] : null;
+  if (audio || lastPc?.audioOn) {
+    lines.push(
+      audio
+        ? `audio ${ms(audio.kbps)} kbps · lost ${audio.lost} · concealed ${ms(audio.concealedMs)} ms · buffer ${ms(audio.bufferMs)} ms · PC ${ms(lastPc?.audioKbps)} kbps`
+        : `audio – (PC ${ms(lastPc?.audioKbps)} kbps)`,
+    );
   }
 
   if (net) {
@@ -310,6 +360,7 @@ export function statsReport(
   fps: number | null,
   framesShown: number,
   net: NetworkInfo | null = null,
+  audio: AudioStats | null = null,
 ): StatsReport {
   const r = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.round(v * 10) / 10);
   return {
@@ -337,5 +388,9 @@ export function statsReport(
     iceNetType: net?.iceType ?? null,
     downlinkMbps: r(net?.downlinkMbps),
     rttMs: r(net?.rttMs),
+    audioKbps: r(audio?.kbps),
+    audioLost: audio?.lost ?? null,
+    audioConcealedMs: r(audio?.concealedMs),
+    audioBufferMs: r(audio?.bufferMs),
   };
 }

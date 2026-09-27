@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockSync, FrameLatency, mediaPath, networkCode, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
+import { audioStats, ClockSync, FrameLatency, mediaPath, networkCode, receiverStats, statsLines, statsReport, type AudioSnapshot, type InboundSnapshot } from './mediaStats';
 
 describe('ClockSync', () => {
   it('uses the ping with the quickest round trip', () => {
@@ -111,8 +111,8 @@ describe('statsLines', () => {
       },
       { jitterBufferMs: 45, decodeMs: 8, kbps: 2400, lost: 0, lostTotal: 3, nacks: 1, plis: 2, freezes: 0, dropped: 1, keyframes: 9 },
       [
-        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, sendMs: 3, sendMaxMs: 80, nacked: 4, resent: 3, rtcpUnreadable: 0, targetKbps: 2500, rembKbps: null, lossPct: null, linkTestKbps: 0, kbps: 2500, keyframes: 1, keyframeRequests: 2, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
-        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, sendMs: 5, sendMaxMs: 6, nacked: 1, resent: 1, rtcpUnreadable: 7, targetKbps: 1800, rembKbps: 1500, lossPct: 12.5, linkTestKbps: 0, kbps: 2400, keyframes: 0, keyframeRequests: 1, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
+        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, sendMs: 3, sendMaxMs: 80, nacked: 4, resent: 3, rtcpUnreadable: 0, targetKbps: 2500, rembKbps: null, lossPct: null, linkTestKbps: 0, kbps: 2500, keyframes: 1, keyframeRequests: 2, audioOn: false, audioKbps: 0, audioPackets: 0, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
+        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, sendMs: 5, sendMaxMs: 6, nacked: 1, resent: 1, rtcpUnreadable: 7, targetKbps: 1800, rembKbps: 1500, lossPct: 12.5, linkTestKbps: 0, kbps: 2400, keyframes: 0, keyframeRequests: 1, audioOn: false, audioKbps: 0, audioPackets: 0, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
       ],
     );
     expect(lines).toEqual([
@@ -131,6 +131,41 @@ describe('statsLines', () => {
   });
 });
 
+describe('audio', () => {
+  const snapshot = (at: number, over: Partial<AudioSnapshot> = {}): AudioSnapshot => ({
+    at,
+    bytesReceived: 0,
+    packetsLost: 0,
+    concealedSamples: 0,
+    silentConcealedSamples: 0,
+    jitterBufferDelay: 0,
+    jitterBufferEmittedCount: 0,
+    ...over,
+  });
+
+  it('turns the audio counters into a rate, loss, concealment and buffer wait', () => {
+    const stats = audioStats(
+      snapshot(1000, { bytesReceived: 10_000, packetsLost: 2, concealedSamples: 4_800, silentConcealedSamples: 2_400, jitterBufferDelay: 10, jitterBufferEmittedCount: 96_000 }),
+      snapshot(2000, { bytesReceived: 15_000, packetsLost: 3, concealedSamples: 12_000, silentConcealedSamples: 7_200, jitterBufferDelay: 2_890, jitterBufferEmittedCount: 144_000 }),
+    );
+    // 5,000 bytes in a second; 7,200 samples made up of which 4,800 were the PC's quiet gaps;
+    // the delay counter sums each sample's wait: 2,880 s over 48,000 samples is 60 ms.
+    expect(stats).toEqual({ kbps: 40, lost: 1, concealedMs: 50, bufferMs: 60 });
+  });
+
+  it('has no rates on the first snapshot', () => {
+    expect(audioStats(null, snapshot(1000))).toEqual({ kbps: null, lost: 0, concealedMs: null, bufferMs: null });
+  });
+
+  it('gets a line in the panel and fields in the report', () => {
+    const audio = { kbps: 41.26, lost: 0, concealedMs: 0, bufferMs: 58 };
+    const pc = { fps: 20, captureMs: 1, captureMaxMs: 1, encodeMs: 1, encodeMaxMs: 1, sendMs: 1, sendMaxMs: 1, nacked: 0, resent: 0, rtcpUnreadable: 0, targetKbps: 1000, rembKbps: null, lossPct: 0, linkTestKbps: 0, kbps: 900, keyframes: 0, keyframeRequests: 0, audioOn: true, audioKbps: 40.2, audioPackets: 50, frames: [] };
+    expect(statsLines(null, null, [pc], null, audio)).toContain('audio 41 kbps · lost 0 · concealed 0 ms · buffer 58 ms · PC 40 kbps');
+    expect(statsLines(null, null, [])).not.toContainEqual(expect.stringContaining('audio'));
+    expect(statsReport(null, null, null, 0, null, audio)).toMatchObject({ audioKbps: 41.3, audioLost: 0, audioConcealedMs: 0, audioBufferMs: 58 });
+  });
+});
+
 describe('mediaPath', () => {
   it('calls private addresses local and the rest remote', () => {
     expect(['192.168.1.114', '10.1.2.3', '172.16.0.9', 'fd00::1'].map(mediaPath)).toEqual(['local', 'local', 'local', 'local']);
@@ -141,7 +176,7 @@ describe('mediaPath', () => {
 
 describe('link test', () => {
   it('heads the panel while the PC runs it', () => {
-    const pc = { fps: 20, captureMs: 1, captureMaxMs: 1, encodeMs: 1, encodeMaxMs: 1, sendMs: 1, sendMaxMs: 1, nacked: 0, resent: 0, rtcpUnreadable: 0, targetKbps: 4000, rembKbps: null, lossPct: 0, linkTestKbps: 4000, kbps: 3900, keyframes: 0, keyframeRequests: 0, frames: [] };
+    const pc = { fps: 20, captureMs: 1, captureMaxMs: 1, encodeMs: 1, encodeMaxMs: 1, sendMs: 1, sendMaxMs: 1, nacked: 0, resent: 0, rtcpUnreadable: 0, targetKbps: 4000, rembKbps: null, lossPct: 0, linkTestKbps: 4000, kbps: 3900, keyframes: 0, keyframeRequests: 0, audioOn: false, audioKbps: 0, audioPackets: 0, frames: [] };
     expect(statsLines(null, null, [pc])[0]).toBe('LINK TEST 4000 kbps');
   });
 });
@@ -159,7 +194,7 @@ describe('network info', () => {
 describe('statsReport', () => {
   it('sends every field, null where nothing was measured', () => {
     const report = statsReport(null, null, null, 0);
-    expect(Object.keys(report)).toHaveLength(24);
+    expect(Object.keys(report)).toHaveLength(28);
     expect(report).toMatchObject({ e2eMs: null, framesShown: 0, plis: null });
   });
 

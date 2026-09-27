@@ -39,6 +39,7 @@ import {
   type NavTarget,
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
+import { audioButtonLabel, bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
 import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines, statsReport } from './mediaStats';
 import {
@@ -99,10 +100,14 @@ interface Status {
   codec: string | null;
   /** The video over the LAN or the internet (shown next to "live"). */
   path: 'local' | 'remote' | null;
+  /** Received kbit/s (payload), for the status bar. */
+  videoKbps: number | null;
+  audioKbps: number | null;
 }
 
 export function SessionScreen({ onEnded }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
@@ -158,7 +163,20 @@ export function SessionScreen({ onEnded }: Props) {
   const [look, setLook] = useState<Look>('lifted');
   const [brightness, setBrightness] = useState<Brightness>(loadBrightness);
   const [panEdge, setPanEdge] = useState<Point | null>(null);
-  const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null, path: null });
+  const [status, setStatus] = useState<Status>({
+    media: 'waiting',
+    fps: null,
+    rttMs: null,
+    codec: null,
+    path: null,
+    videoKbps: null,
+    audioKbps: null,
+  });
+  /** The PC's sound: whether the PC offers it, the ♪ setting (remembered), and whether the browser is waiting for a tap. */
+  const [audioOffered, setAudioOffered] = useState(false);
+  const [audioOn, setAudioOn] = useState(loadAudioOn);
+  const audioOnRef = useRef(audioOn);
+  const [audioBlocked, setAudioBlocked] = useState(false);
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
   const [lastInput, setLastInput] = useState('');
   /** App shortcut names configured on the PC; button N switches to app N. */
@@ -192,6 +210,46 @@ export function SessionScreen({ onEnded }: Props) {
 
   const send = useCallback((message: ClientMessage) => sessionRef.current?.send(message), []);
 
+  /**
+   * Plays the PC's sound if ♪ is on. Browsers only start sound after a user gesture: after Pair
+   * or Reconnect it plays at once; after a page reload it may wait for the next pinch or swipe.
+   */
+  const playAudio = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || !el.srcObject || !audioOnRef.current) return;
+    el.muted = false;
+    el.play().then(
+      () => setAudioBlocked(false),
+      () => setAudioBlocked(true),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!audioBlocked) return;
+    // Any gesture counts as the user's permission to play: retry on the next one.
+    const retry = () => playAudio();
+    window.addEventListener('pointerdown', retry, true);
+    window.addEventListener('keydown', retry, true);
+    return () => {
+      window.removeEventListener('pointerdown', retry, true);
+      window.removeEventListener('keydown', retry, true);
+    };
+  }, [audioBlocked, playAudio]);
+
+  const toggleAudio = () => {
+    const next = !audioOnRef.current;
+    audioOnRef.current = next;
+    setAudioOn(next);
+    saveAudioOn(next);
+    const el = audioRef.current;
+    if (el) el.muted = !next;
+    if (next) playAudio();
+    else setAudioBlocked(false);
+    // Off stops the PC capturing and sending too: the bandwidth goes to the video.
+    send({ type: 'setAudio', enabled: next });
+    setLastInput(next ? 'sound on' : 'sound off');
+  };
+
   // ---- connection lifecycle ----
   useEffect(() => {
     let receiver: VideoReceiver | null = null;
@@ -215,6 +273,9 @@ export function SessionScreen({ onEnded }: Props) {
           live.current.mode = message.mode;
           setNavRef.current(navAfterMode(message.mode));
           if (message.mode === 'pointer') setCursor(centreOf(contentRect(message.region)));
+          setAudioOffered(message.audio);
+          // The PC starts with its sound off and waits for the ♪ setting.
+          if (message.audio) sessionRef.current?.send({ type: 'setAudio', enabled: audioOnRef.current });
           break;
         case 'rtcOffer':
           receiver?.handleOffer(message.sdp).catch(() => end('Could not start the video stream.'));
@@ -261,10 +322,16 @@ export function SessionScreen({ onEnded }: Props) {
       return;
     }
     sessionRef.current = session;
-    receiver = new VideoReceiver(session.send.bind(session), videoRef.current!, (media) => {
-      setStatus((s) => ({ ...s, media }));
-      if (media === 'failed') end('The video connection failed.');
-    });
+    receiver = new VideoReceiver(
+      session.send.bind(session),
+      videoRef.current!,
+      audioRef.current!,
+      (media) => {
+        setStatus((s) => ({ ...s, media }));
+        if (media === 'failed') end('The video connection failed.');
+      },
+      playAudio,
+    );
 
     const stopWatchingFrames = watchFrames(videoRef.current!, (frame) => latency.current.addShown(frame));
     // Ping at once too: the clock offset for the latency figures comes from pongs.
@@ -272,13 +339,20 @@ export function SessionScreen({ onEnded }: Props) {
     const ping = setInterval(() => session.send({ type: 'ping', t: Date.now() }), PING_MS);
     const stats = setInterval(async () => {
       const s = await receiver!.stats();
-      setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec, path: s.path }));
+      setStatus((prev) => ({
+        ...prev,
+        fps: s.fps,
+        codec: s.codec,
+        path: s.path,
+        videoKbps: s.receiver?.kbps ?? null,
+        audioKbps: s.audio?.kbps ?? null,
+      }));
       const now = performance.timeOrigin + performance.now();
       const summary = latency.current.summary(now);
-      setStatsText(statsLines(summary, s.receiver, pcStats.current, s.network));
+      setStatsText(statsLines(summary, s.receiver, pcStats.current, s.network, s.audio));
       // Also to the PC's stats log, so a session can be read back there afterwards. Only once the
       // PC has sent mediaStats: an older server would reject the message and end the session.
-      if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount, s.network) });
+      if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount, s.network, s.audio) });
     }, 1000);
     let hiddenTimer: ReturnType<typeof setTimeout> | null = null;
     const onVisibility = () => {
@@ -882,6 +956,7 @@ export function SessionScreen({ onEnded }: Props) {
   const mediaOk = status.media === 'connected';
   const barHidden = nav === 'view' && VIEW_NAV_MODES.includes(mode);
   const shownScrollLevel = levelFor(scrollLevels, apps[activeApp - 1] ?? NO_APP);
+  const audioState: AudioState = !audioOffered ? 'none' : !audioOn ? 'off' : audioBlocked ? 'blocked' : 'on';
 
   return (
     <div
@@ -890,6 +965,8 @@ export function SessionScreen({ onEnded }: Props) {
       style={{ '--brightness': brightness } as React.CSSProperties}
     >
       <video ref={videoRef} autoPlay playsInline muted />
+      {/* The PC's sound: its own element, started by playAudio (autoplay may be refused). */}
+      <audio ref={audioRef} />
       <canvas ref={canvasRef} width={600} height={600} />
       <div
         className="gesture-layer"
@@ -939,6 +1016,11 @@ export function SessionScreen({ onEnded }: Props) {
         >
           ☀ {Math.round(brightness * 100)}%
         </button>
+        {audioOffered && (
+          <button type="button" data-toggle="audio" aria-pressed={audioOn} onClick={toggleAudio} title="The PC's sound">
+            {audioButtonLabel(audioState)}
+          </button>
+        )}
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
         </button>
@@ -998,7 +1080,9 @@ export function SessionScreen({ onEnded }: Props) {
         <span>{mediaOk ? (status.path ? `live (${status.path})` : 'live') : status.media === 'waiting' ? 'starting video…' : status.media}</span>
         <span>{status.fps !== null ? `${status.fps.toFixed(0)} fps` : '– fps'}</span>
         <span>{status.rttMs !== null ? `${status.rttMs} ms` : '– ms'}</span>
-        <span>{status.codec ?? ''}</span>
+        <span data-bandwidth>{bandwidthLabel(status.videoKbps, status.audioKbps, audioState)}</span>
+        {/* H.264 is the norm; only a fallback is worth the room. */}
+        <span>{status.codec && status.codec !== 'H264' ? status.codec : ''}</span>
         <span className="input-trace">{lastInput}</span>
         <span style={{ marginLeft: 'auto' }}>{mode}</span>
       </footer>

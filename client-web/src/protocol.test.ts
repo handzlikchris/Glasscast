@@ -54,6 +54,14 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage('{"type":"appSwitch","slot":1,"result":"launched"}')).toBeNull();
   });
 
+  it('says whether the PC offers its sound, only when hello says so', () => {
+    const hello = (extra: string) =>
+      `{"type":"hello","monitor":{"width":2560,"height":1440},"region":{"x":0,"y":0,"width":600,"height":600},"mode":"pointer","codec":"H264"${extra}}`;
+    expect(parseServerMessage(hello(',"audio":true'))).toMatchObject({ audio: true });
+    expect(parseServerMessage(hello(''))).toMatchObject({ audio: false });
+    expect(parseServerMessage(hello(',"audio":"yes"'))).toMatchObject({ audio: false });
+  });
+
   it('takes the starting mode from hello, falling back to view', () => {
     const hello = (mode: string) =>
       `{"type":"hello","monitor":{"width":2560,"height":1440},"region":{"x":0,"y":0,"width":600,"height":600},"mode":"${mode}","codec":"H264"}`;
@@ -89,6 +97,12 @@ describe('parseServerMessage', () => {
       nacked: 6,
       resent: 5,
       rtcpUnreadable: 2,
+    });
+    expect(parseServerMessage(stats('[]'))).toMatchObject({ audioOn: false, audioKbps: 0, audioPackets: 0 });
+    expect(parseServerMessage(stats('[]').replace('"frames"', '"audioOn":true,"audioKbps":39.5,"audioPackets":50,"frames"'))).toMatchObject({
+      audioOn: true,
+      audioKbps: 39.5,
+      audioPackets: 50,
     });
     expect(parseServerMessage(stats('[[4500,1790000000000]]'))).toBeNull();
     expect(parseServerMessage(stats('[["a",1,2]]'))).toBeNull();
