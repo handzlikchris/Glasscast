@@ -277,7 +277,11 @@ export function statsLines(
     lines.push(
       `PC frame ${ms(frameKb)} KB (max ${ms(maxKb)}) · ${ms(pc[pc.length - 1].fps)} fps · ${ms(pc[pc.length - 1].kbps)} kbps · keyframes ${keyframes} (asked ${asked})`,
     );
-    lines.push(`PC resent ${resent} of ${nacked} NACKed`);
+    const last = pc[pc.length - 1];
+    lines.push(
+      `PC target ${ms(last.targetKbps)} kbps · REMB ${ms(last.rembKbps)} · loss ${ms(last.lossPct)}% · resent ${resent} of ${nacked}`,
+    );
+    if (last.linkTestKbps > 0) lines.unshift(`LINK TEST ${last.linkTestKbps} kbps`);
   }
   return lines;
 }
