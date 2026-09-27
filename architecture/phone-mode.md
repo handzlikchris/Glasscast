@@ -1,7 +1,8 @@
 # Phone mode: controlling the Android phone from the glasses
 
 Status (2026-09-27, branch `feat/phone-mode`): **P1 and P2 built and tested; P3 builds and is
-installed on the S25** (Android 16, One UI 8.0), not yet used for a session. The research notes below
+installed on the S25** (Android 16, One UI 8.0). First sessions from the glasses work, over the
+LAN too. **P4 started:** Region (a square chosen on the glasses) and Fit (follow a pop-up window). The research notes below
 come from docs and web sources, not from the device.
 
 The first screen of the glasses app asks **PC or Phone**. PC is everything that exists today.
@@ -86,9 +87,11 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
 - Glasses → phone: `tap{x,y}`, `longPress{x,y}`, `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
   flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`
-  (0..1 of the phone screen), `ping{t}`.
-- Phone → glasses: `screen{width, height, region{x,y,width,height}}` (on connect and on every
-  change), `result{of, ok}` for text and keys, `pong{t}`.
+  (0..1 of the phone screen; stops following a window, kept for the next session),
+  `fitWindow{}` (crop to the top-most app window that doesn't fill the screen, e.g. a Samsung
+  pop-up view window, and follow it), `ping{t}`.
+- Phone → glasses: `screen{width, height, region{x,y,width,height}, follow}` (on connect and on
+  every change), `result{of, ok}` for text and keys, `pong{t}`.
 - The companion parses these as strictly as `ControlProtocol` does.
 
 ## Security (additions to the invariants in CLAUDE.md)
@@ -111,7 +114,7 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
 | P1 | PC: companion pairing, `/ws/companion`, `PhoneRelay`, `target` in auth; tests with a fake companion | no |
 | P2 | Glasses: PC/Phone chooser, phone session screen (video, cursor, tap, swipe to scroll, Back/Home/Recents, Type) | no (fake companion in the harness) |
 | P3 | Companion app: pairing, foreground service, consent, capture → WebRTC, DataChannel → accessibility | build: no; run: yes |
-| P4 | Region: fit to the top app window (accessibility window bounds), Samsung pop-up view helper, the PC-style Region mode | yes |
+| P4 | Region: fit to the top app window (accessibility window bounds), Samsung pop-up view helper, the PC-style Region mode. **Region and Fit built** (2026-09-27); rotation and opening apps in pop-up view still to do | yes |
 | P5 | On the go: keep the screen on while live, lock handling, approval on the phone instead of the PC after the 24 h device token runs out, reconnect | yes |
 | P6 | Later: the phone's sound (`AudioPlaybackCapture`), stats panel figures, app shortcuts configured on the phone | yes |
 
@@ -178,8 +181,9 @@ has no phone path yet.
    (`live (local|remote)`) and `adb logcat -s ScreenSession CompanionService`.
 3. A fake phone for the e2e harness (SIPSorcery offering a test pattern and a DataChannel,
    recording input), so the phone path is tested end to end without the phone.
-4. P4: send `setRegion` from the glasses (a Region mode, and "fit to the app's window" from
-   accessibility window bounds); rotation.
+4. P4 on the device: does Fit find Samsung's pop-up window (the top-most app window that doesn't
+   fill the screen) and follow it while it's dragged? Does One UI remember a pop-up's size per
+   app? Then rotation, and opening an app in pop-up view from the glasses.
 
 ## Questions for the user
 
