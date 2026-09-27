@@ -24,3 +24,14 @@ Thumbs.db
 *.log
 appsettings.Local.json
 server/data/
+
+# Android companion (android-companion/)
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+.kotlin/
+android-companion/gradle/wrapper/gradle-wrapper.jar
+android-companion/gradlew
+android-companion/gradlew.bat
