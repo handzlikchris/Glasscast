@@ -2,8 +2,9 @@
 // here, and input sent straight to the phone on the DataChannel. The PC only relays signalling.
 //
 // Controls, kept close to the PC session's:
-// - On the view: pinch-drag moves the cursor, a pinch taps there (any pinch shorter than a long
-//   press), a longer pinch (held still) long-presses. Swipes (swipes.ts, shared with PC sessions):
+// - On the view: pinch-drag moves the cursor; a pinch taps there, two quick ones double-tap; a
+//   pinch held still 0.4 s puts a finger down at the cursor, which then follows the drag until
+//   release (drag and drop, selecting, a long press when held without moving). Swipes (swipes.ts, shared with PC sessions):
 //   up/down scroll around the cursor, left/right page (after a 0.3 s wait for a second swipe),
 //   right twice opens Type, left twice presses the phone's Back.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
@@ -14,7 +15,7 @@
 //   window made square) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Session } from './connection';
-import { DEFAULT_GESTURES, GestureTracker } from './gestures';
+import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, type GestureEvent } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
   FULL_REGION,
@@ -56,8 +57,8 @@ const ZOOM_STEP = 1.25;
 const PING_MS = 2000;
 /** Hidden this long (the app left), the session ends, as in a PC session. */
 const HIDDEN_MS = 5000;
-/** A press held this still and this long is a long press. */
-const LONG_PRESS_MS = 600;
+/** How often a held finger's position goes to the phone while dragging (ms). */
+const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
 /** Composer text that came as input events with no change event is sent after this quiet time. */
 const INPUT_SETTLE_MS = 1500;
@@ -90,8 +91,12 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const sessionRef = useRef<Session | null>(null);
   const frame = useRef<Rect>({ x: 0, y: 0, width: 600, height: 600 });
   const cursor = useRef<Point>({ x: 300, y: 300 });
-  // Any pinch that isn't a drag or a long press is a tap: no gap between the two where it's lost.
-  const tracker = useRef(new GestureTracker({ ...DEFAULT_GESTURES, tapMaxMs: LONG_PRESS_MS }));
+  // A pinch released before the hold (HOLD_DRAG_MS) is a tap; after it, the hold has taken over.
+  const tracker = useRef(new GestureTracker(DEFAULT_GESTURES));
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
+  const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const touchSentAt = useRef(0);
   const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
   const swipes = useRef(
     new SwipeReader(
@@ -101,7 +106,6 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   );
   /** Text sent to the phone and not yet confirmed: it goes back in the box if the phone had no field. */
   const pendingText = useRef<string | null>(null);
-  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
   const onLeaveRef = useRef(onLeave);
@@ -390,8 +394,85 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   };
 
   // ---- gestures on the view ----
-  const cancelLongPress = () => {
-    if (longPress.current) clearTimeout(longPress.current.timer);
+  // A pinch taps at the cursor; a second within DOUBLE_TAP_MS makes it a double tap (so a single
+  // tap goes that much later, as a click does in a PC session). A pinch held still HOLD_DRAG_MS puts
+  // the finger down at the cursor; it follows the drag and lifts on release (drag, long press).
+  const clearPendingTap = () => {
+    if (pendingTap.current) clearTimeout(pendingTap.current.timer);
+    pendingTap.current = null;
+  };
+
+  /** Sends a tap held back for a possible second one now (a hold or a drag followed it). */
+  const flushTap = () => {
+    const tap = pendingTap.current;
+    if (!tap) return;
+    clearPendingTap();
+    send({ type: 'tap', ...tap.at }, 'tap');
+  };
+
+  const touch = (phase: 'down' | 'move' | 'up') => {
+    touchSentAt.current = performance.now();
+    send({ type: 'touch', phase, ...atCursor() }, phase === 'down' ? 'finger down: move to drag' : phase === 'up' ? 'finger up' : 'drag');
+  };
+
+  const handleGesture = (event: GestureEvent) => {
+    if (focusRef.current === 'region') {
+      if (event.kind === 'drag' && choosing.current) {
+        const f = frame.current;
+        choosing.current.box = moveRegion(choosing.current.box, event.dx / f.width, event.dy / f.height);
+        drawBox();
+      } else if (event.kind === 'tap' || event.kind === 'holdEnd') {
+        finishRegion(true);
+      }
+      return;
+    }
+    if (focusRef.current !== 'view') return;
+
+    switch (event.kind) {
+      case 'tap':
+        if (pendingTap.current) {
+          const at = pendingTap.current.at;
+          clearPendingTap();
+          send({ type: 'doubleTap', ...at }, 'double tap');
+        } else {
+          const at = atCursor();
+          pendingTap.current = {
+            at,
+            timer: setTimeout(() => {
+              pendingTap.current = null;
+              send({ type: 'tap', ...at }, 'tap');
+            }, DOUBLE_TAP_MS),
+          };
+        }
+        break;
+      case 'hold':
+        flushTap();
+        touch('down');
+        break;
+      case 'dragStart':
+        if (!event.held) flushTap();
+        break;
+      case 'drag':
+        cursor.current = clampToFrame({
+          x: cursor.current.x + event.dx * POINTER_GAIN,
+          y: cursor.current.y + event.dy * POINTER_GAIN,
+        });
+        drawCursor();
+        // The finger follows, a few times a second is plenty (the phone smooths between).
+        if (tracker.current.holding && performance.now() - touchSentAt.current >= TOUCH_MOVE_MS) touch('move');
+        break;
+      case 'dragEnd':
+        if (event.held) touch('up');
+        break;
+      case 'holdEnd':
+        touch('up');
+        break;
+    }
+  };
+
+  const clearHoldTimer = () => {
+    if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -399,48 +480,31 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     if (current !== 'view' && current !== 'region') return;
     e.currentTarget.setPointerCapture(e.pointerId);
     tracker.current.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
-    cancelLongPress();
+    clearHoldTimer();
     if (current === 'region') return;
-    const state = { fired: false, timer: setTimeout(() => {
-      state.fired = true;
-      send({ type: 'longPress', ...atCursor() }, 'long press');
-    }, LONG_PRESS_MS) };
-    longPress.current = state;
+    const id = e.pointerId;
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null;
+      tracker.current.hold(id).forEach(handleGestureRef.current);
+    }, HOLD_DRAG_MS);
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
-    for (const event of tracker.current.move(e.pointerId, e.clientX, e.clientY)) {
-      if (event.kind === 'dragStart') cancelLongPress();
-      if (event.kind === 'drag' && choosing.current) {
-        const f = frame.current;
-        choosing.current.box = moveRegion(choosing.current.box, event.dx / f.width, event.dy / f.height);
-        drawBox();
-      } else if (event.kind === 'drag') {
-        cursor.current = clampToFrame({
-          x: cursor.current.x + event.dx * POINTER_GAIN,
-          y: cursor.current.y + event.dy * POINTER_GAIN,
-        });
-        drawCursor();
-      }
-    }
+    tracker.current.move(e.pointerId, e.clientX, e.clientY).forEach(handleGesture);
   };
 
   const onPointerUp = (e: ReactPointerEvent) => {
-    cancelLongPress();
-    const fired = longPress.current?.fired ?? false;
-    longPress.current = null;
-    for (const event of tracker.current.up(e.pointerId, e.clientX, e.clientY, e.timeStamp)) {
-      if (event.kind !== 'tap' || fired) continue;
-      if (focusRef.current === 'region') finishRegion(true);
-      else send({ type: 'tap', ...atCursor() }, 'tap');
-    }
+    clearHoldTimer();
+    tracker.current.up(e.pointerId, e.clientX, e.clientY, e.timeStamp).forEach(handleGesture);
   };
 
   const onPointerCancel = (e: ReactPointerEvent) => {
-    cancelLongPress();
-    longPress.current = null;
-    tracker.current.cancel(e.pointerId);
+    clearHoldTimer();
+    tracker.current.cancel(e.pointerId).forEach(handleGesture);
   };
+
+  const handleGestureRef = useRef(handleGesture);
+  handleGestureRef.current = handleGesture;
 
   // ---- bar and type ----
   const nav = (action: PhoneNav) => {

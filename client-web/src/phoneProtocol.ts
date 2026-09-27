@@ -12,7 +12,12 @@ export type PhoneKey = 'Enter' | 'Backspace';
 
 export type ToPhone =
   | { type: 'tap'; x: number; y: number }
-  | { type: 'longPress'; x: number; y: number }
+  | { type: 'doubleTap'; x: number; y: number }
+  /**
+   * A finger held on the phone: down where a pinch was held still, moves with the drag, up on
+   * release. Held without moving it is Android's own long press.
+   */
+  | { type: 'touch'; phase: 'down' | 'move' | 'up'; x: number; y: number }
   | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; ms: number }
   | { type: 'nav'; action: PhoneNav }
   | { type: 'typeText'; text: string }
