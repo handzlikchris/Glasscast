@@ -72,6 +72,7 @@ public sealed class DeviceGrantTests : IDisposable
         var resumed = (await Resume(first))!;
         var second = resumed.TakeDeviceToken()!;
         Assert.NotEqual(first, second);
+        resumed.ConfirmDeviceToken(); // the glasses answered the offer: they have the second token
         resumed.Dispose();
 
         // Someone replays the first token: refused, the device is forgotten, even the new token dies.
@@ -79,6 +80,52 @@ public sealed class DeviceGrantTests : IDisposable
         Assert.Contains(_alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
         Assert.Null(_coordinator.RememberedDeviceExpiresAt);
         Assert.Null(await Resume(second));
+    }
+
+    [Fact]
+    public async Task A_new_token_that_never_arrived_lets_the_previous_one_resume_without_an_alarm()
+    {
+        var (lease, first) = await ApprovedSessionAsync();
+        lease.ConfirmDeviceToken();
+        lease.Dispose();
+
+        // The connection drops after the swap, before "authenticated" (and so the answer) arrives.
+        var dropped = (await Resume(first))!;
+        var lost = dropped.TakeDeviceToken()!;
+        dropped.Dispose();
+
+        var retried = (await Resume(first))!;
+        var third = retried.TakeDeviceToken()!;
+        Assert.DoesNotContain(_alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
+        Assert.NotNull(_coordinator.RememberedDeviceExpiresAt);
+        retried.ConfirmDeviceToken();
+        retried.Dispose();
+
+        // The token that never arrived is dead; once the third is confirmed, the first is reuse again.
+        Assert.Null(await Resume(lost));
+        Assert.NotNull(_coordinator.RememberedDeviceExpiresAt);
+        Assert.Null(await Resume(first, Stranger));
+        Assert.Contains(_alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
+        Assert.Null(await Resume(third));
+    }
+
+    [Fact]
+    public async Task A_late_confirmation_from_an_older_session_does_not_confirm_a_newer_token()
+    {
+        var (lease, first) = await ApprovedSessionAsync();
+        lease.ConfirmDeviceToken();
+        lease.Dispose();
+
+        var dropped = (await Resume(first))!;
+        dropped.Dispose();
+        using var retried = (await Resume(first))!;
+
+        dropped.ConfirmDeviceToken(); // its token was replaced by the retry's
+        retried.Dispose();
+
+        using var again = await Resume(first);
+        Assert.NotNull(again);
+        Assert.DoesNotContain(_alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
     }
 
     [Fact]

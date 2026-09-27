@@ -192,6 +192,9 @@ public sealed class ControlSession
                     {
                         return "bad answer";
                     }
+                    // The answer follows "authenticated" on this socket, so the glasses have the
+                    // device token it carried: their previous one now counts as reuse.
+                    _lease.ConfirmDeviceToken();
                     break;
 
                 case IceCandidateMessage candidate:

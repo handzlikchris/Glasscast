@@ -49,8 +49,14 @@ Who may start a session, and how. Nothing reaches the desktop without a human cl
 - Every successful `TryResumeAsync` swaps the token: `PreviousHash ← CurrentHash`,
   `CurrentHash ← hash(new)`. The new token goes to the glasses once, in `authenticated`
   (`SessionLease.TakeDeviceToken` hands it out and drops it).
-- Presenting the **previous** token = a copy exists somewhere: the grant is cleared,
-  `DeviceTokenReused` is raised and the active session is terminated.
+- Presenting the **previous** token after the glasses confirmed the new one = a copy exists
+  somewhere: the grant is cleared, `DeviceTokenReused` is raised and the active session is
+  terminated. Confirmed means the session's first `rtcAnswer` arrived (`ControlSession` →
+  `SessionLease.ConfirmDeviceToken`): the answer follows `authenticated` on the same socket, so
+  the glasses have the new token. Until then (`DeviceGrant.Unconfirmed`) the previous token still
+  resumes: `authenticated` may have been lost when the connection dropped. That retry drops the
+  undelivered token and keeps the previous one as the token to catch. The cost: a stolen copy
+  could also resume in that window, which lasts about a round trip.
 - Takeover: if the same grant already owns the active session (a dropped connection the
   server hasn't noticed), the old lease is `Signal()`ed and marked `Superseded`; the resume
   waits up to `TakeoverTimeout` (5 s) for it to release, then retries once. It never takes
@@ -67,7 +73,8 @@ Who may start a session, and how. Nothing reaches the desktop without a human cl
 - `Session.open` sends `authenticate` with `heldToken` (then drops it), else `resume` with
   the stored device token, else throws "Not paired".
 - On `authenticated` with a device token → `saveDevice` (localStorage key
-  `glassesRemote.device`, with `expiresAt`). On `authFailed` while resuming → `forgetDevice`.
+  `glassesRemote.device`, with `expiresAt`). On `authFailed` while resuming the token is
+  **kept** (the PC may only have been busy); it goes on expiry.
   On close reasons `invalid message` / `rate limit` / `bad answer` → `forgetDevice` (the PC
   forgot the device too).
 - `App` starts in a session when `isDeviceRemembered()`; the ended screen shows
@@ -86,12 +93,9 @@ Who may start a session, and how. Nothing reaches the desktop without a human cl
 
 ## Known gaps
 
-- If the connection drops after the server swapped the device token but before
-  `authenticated` arrives, the glasses retry with the old token and are treated as a stolen
-  copy (device forgotten, alert raised). See the code review.
-- A resume refused because the server is momentarily busy (a pairing pending, a takeover
-  timing out) comes back as `authFailed`, and the client then deletes a device token that
-  is still valid.
+- A token the PC really forgot (reuse, tray Forget) stays on the glasses until it expires,
+  because the client can't tell that `authFailed` from "busy" (review finding F2, fixed
+  2026-09-27). Each Reconnect then fails with a generic alert on the PC; Pair again fixes it.
 
 ## Tests
 

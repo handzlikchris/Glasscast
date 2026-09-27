@@ -251,7 +251,9 @@ tight padding, check a screenshot when adding buttons). Model in
   256-bit, sent once on the session socket, **swapped for a new one on every use**, only SHA-256
   hashes kept (also in `%LOCALAPPDATA%\GlassesRemote\device-grant.json`). The expiry is fixed at
   approval, never extended. One device remembered at a time; a new approval replaces it.
-  Reusing a swapped-out token forgets the device, ends any session and raises `DeviceTokenReused`.
+  Reusing a swapped-out token forgets the device, ends any session and raises `DeviceTokenReused`,
+  once the glasses have confirmed the new token (their `rtcAnswer`, which follows `authenticated`);
+  until then the old token still resumes, since the connection may have dropped before it arrived.
   A protocol violation or **Forget remembered glasses** in the tray forget it too. Ending a
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**

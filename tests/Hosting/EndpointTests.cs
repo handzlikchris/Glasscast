@@ -429,6 +429,50 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_device_token_counts_as_delivered_once_the_glasses_answer_the_offer()
+    {
+        var token = await _host.PairAsync();
+        string first;
+        using (var session = await _host.ConnectAsync("/ws/session"))
+        {
+            await session.SendAsync(new { type = "authenticate", token });
+            first = (await session.ReceiveAsync()).GetProperty("deviceToken").GetString()!;
+            await session.ReceiveAsync("rtcOffer");
+            await session.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+            await session.SendAsync(new { type = "ping", t = 1 });
+            await session.ReceiveAsync("pong");
+        }
+        await WaitUntil(() => _host.Coordinator.ActiveSession is null);
+
+        // The swap happens, but the glasses never answer (as if "authenticated" was lost on the way).
+        using (var dropped = await _host.ConnectAsync("/ws/session"))
+        {
+            await dropped.SendAsync(new { type = "resume", token = first });
+            Assert.Equal("authenticated", (await dropped.ReceiveAsync()).GetProperty("type").GetString());
+        }
+        await WaitUntil(() => _host.Coordinator.ActiveSession is null);
+
+        // So the first token still resumes; this time the glasses answer the offer.
+        using (var retried = await _host.ConnectAsync("/ws/session"))
+        {
+            await retried.SendAsync(new { type = "resume", token = first });
+            Assert.Equal("authenticated", (await retried.ReceiveAsync()).GetProperty("type").GetString());
+            await retried.ReceiveAsync("rtcOffer");
+            await retried.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+            await retried.SendAsync(new { type = "ping", t = 1 });
+            await retried.ReceiveAsync("pong");
+        }
+        await WaitUntil(() => _host.Coordinator.ActiveSession is null);
+        Assert.DoesNotContain(_host.Alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
+
+        // Now the first token is a copy in someone else's hands.
+        using var replay = await _host.ConnectAsync("/ws/session");
+        await replay.SendAsync(new { type = "resume", token = first });
+        Assert.Equal("authFailed", (await replay.ReceiveAsync()).GetProperty("type").GetString());
+        Assert.Contains(_host.Alerts.Recent(), a => a.Kind == AlertKind.DeviceTokenReused);
+    }
+
+    [Fact]
     public async Task A_made_up_device_token_gets_the_generic_failure()
     {
         using var session = await _host.ConnectAsync("/ws/session");

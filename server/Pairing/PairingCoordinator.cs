@@ -55,6 +55,7 @@ public sealed class SessionLease : IDisposable
     private readonly CancellationTokenSource _ended = new();
     private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private string? _deviceToken;
+    private readonly byte[]? _deviceTokenHash;
 
     internal SessionLease(PairingCoordinator owner, string id, IPAddress remoteAddress, DateTimeOffset startedAt,
         string? grantId = null, bool resumed = false, string? deviceToken = null, DateTimeOffset? deviceTokenExpiresAt = null)
@@ -66,6 +67,7 @@ public sealed class SessionLease : IDisposable
         GrantId = grantId;
         Resumed = resumed;
         _deviceToken = deviceToken;
+        _deviceTokenHash = deviceToken is null ? null : Secrets.HashToken(deviceToken);
         DeviceTokenExpiresAt = deviceTokenExpiresAt;
     }
 
@@ -96,6 +98,13 @@ public sealed class SessionLease : IDisposable
     /// then dropped here; the coordinator keeps only its hash.
     /// </summary>
     public string? TakeDeviceToken() => Interlocked.Exchange(ref _deviceToken, null);
+
+    /// <summary>
+    /// The glasses have shown they got this session's device token (they answered the offer, which
+    /// comes after "authenticated" on the same socket). From now on the token before it counts as
+    /// reuse. Does nothing if a newer token has been issued since.
+    /// </summary>
+    public void ConfirmDeviceToken() => _owner.ConfirmDeviceToken(GrantId, _deviceTokenHash);
 
     /// <summary>The session broke the rules: stop remembering its device.</summary>
     public void ForgetDevice(string reason) => _owner.ForgetDevice(GrantId, reason);
@@ -129,7 +138,9 @@ public sealed class SessionLease : IDisposable
 /// The first session after an approval also remembers the device (a <see cref="DeviceGrant"/>):
 /// it gets a device token to start later sessions without the popup, until a fixed time after
 /// the approval. Each use swaps it for a new one; presenting a swapped-out token forgets the
-/// device. Still one session at a time: only the same device may take over its own session.
+/// device, once the glasses have confirmed they got the new one (until then the connection may
+/// have dropped before it arrived, so the old token still resumes). Still one session at a time:
+/// only the same device may take over its own session.
 /// </summary>
 public sealed class PairingCoordinator : IDisposable
 {
@@ -355,7 +366,8 @@ public sealed class PairingCoordinator : IDisposable
             {
                 // A fresh approval remembers this device, replacing any other.
                 deviceToken = Secrets.NewToken();
-                _grant = new DeviceGrant(Secrets.NewId(), Secrets.HashToken(deviceToken), null, now + _options.DeviceGrantLifetime);
+                _grant = new DeviceGrant(Secrets.NewId(), Secrets.HashToken(deviceToken), null, now + _options.DeviceGrantLifetime,
+                    Unconfirmed: true);
                 _grantStore.Save(_grant);
             }
 
@@ -389,19 +401,21 @@ public sealed class PairingCoordinator : IDisposable
             lock (_gate)
             {
                 var grant = CurrentGrant();
-                if (grant?.PreviousHash is { } previous && Secrets.TokenMatches(presentedToken, previous))
+                var current = grant is not null && Secrets.TokenMatches(presentedToken, grant.CurrentHash);
+                var previous = !current && grant?.PreviousHash is { } previousHash && Secrets.TokenMatches(presentedToken, previousHash);
+                if (previous && !grant!.Unconfirmed)
                 {
-                    // Already swapped for a newer token: a copy is in someone else's hands.
+                    // Already swapped for a newer token the glasses confirmed: a copy is in someone else's hands.
                     _alerts.Raise(AlertKind.DeviceTokenReused, remote, "An old device token was presented; the device was forgotten");
                     ClearGrant();
                     reused = true;
                 }
-                else if (grant is null || !Secrets.TokenMatches(presentedToken, grant.CurrentHash))
+                else if (!current && !previous)
                 {
                     _alerts.Raise(AlertKind.AuthenticationFailed, remote, "Session authentication failed");
                     return null;
                 }
-                else if (_state == State.ActiveSession && _active?.GrantId == grant.Id && attempt == 0)
+                else if (_state == State.ActiveSession && _active?.GrantId == grant!.Id && attempt == 0)
                 {
                     stale = _active;
                     stale.Superseded = true;
@@ -413,8 +427,16 @@ public sealed class PairingCoordinator : IDisposable
                 }
                 else
                 {
+                    // With the previous token, the one issued after it never reached the glasses (the
+                    // connection dropped before "authenticated"): that one is dropped unused, and the
+                    // previous token stays the one whose reuse is caught.
                     var deviceToken = Secrets.NewToken();
-                    _grant = grant with { PreviousHash = grant.CurrentHash, CurrentHash = Secrets.HashToken(deviceToken) };
+                    _grant = grant! with
+                    {
+                        PreviousHash = current ? grant.CurrentHash : grant.PreviousHash,
+                        CurrentHash = Secrets.HashToken(deviceToken),
+                        Unconfirmed = true,
+                    };
                     _grantStore.Save(_grant);
                     lease = new SessionLease(this, Secrets.NewId(), remote, _time.GetUtcNow(), grant.Id, resumed: true,
                         deviceToken, grant.ExpiresAt);
@@ -447,6 +469,21 @@ public sealed class PairingCoordinator : IDisposable
             {
                 return null;
             }
+        }
+    }
+
+    internal void ConfirmDeviceToken(string? grantId, byte[]? issuedHash)
+    {
+        lock (_gate)
+        {
+            if (grantId is null || issuedHash is null || _grant is not { Unconfirmed: true } grant || grant.Id != grantId
+                || !grant.CurrentHash.AsSpan().SequenceEqual(issuedHash))
+            {
+                return;
+            }
+
+            _grant = grant with { Unconfirmed = false };
+            _grantStore.Save(_grant);
         }
     }
 

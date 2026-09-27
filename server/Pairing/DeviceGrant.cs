@@ -7,8 +7,12 @@ namespace GlassesRemote.Server.Pairing;
 /// device token instead of a fresh approval, until <see cref="ExpiresAt"/> (a fixed time after
 /// the approval, never extended). The token changes on every use; only hashes are kept. A token
 /// that was already swapped for a newer one is remembered so its reuse can be caught.
+/// <see cref="Unconfirmed"/>: the current token was sent but the glasses haven't shown yet that
+/// they got it (the connection can drop right after the swap). Until they do, the previous token
+/// still resumes instead of counting as reuse.
 /// </summary>
-public sealed record DeviceGrant(string Id, byte[] CurrentHash, byte[]? PreviousHash, DateTimeOffset ExpiresAt);
+public sealed record DeviceGrant(string Id, byte[] CurrentHash, byte[]? PreviousHash, DateTimeOffset ExpiresAt,
+    bool Unconfirmed = false);
 
 /// <summary>
 /// Keeps the one device grant across server restarts, as hashes in a small JSON file (a hash
@@ -16,7 +20,8 @@ public sealed record DeviceGrant(string Id, byte[] CurrentHash, byte[]? Previous
 /// </summary>
 public sealed class DeviceGrantStore(string? path, ILogger logger)
 {
-    private sealed record Stored(string Id, string CurrentHash, string? PreviousHash, DateTimeOffset ExpiresAt);
+    private sealed record Stored(string Id, string CurrentHash, string? PreviousHash, DateTimeOffset ExpiresAt,
+        bool Unconfirmed = false);
 
     public DeviceGrant? Load()
     {
@@ -31,7 +36,8 @@ public sealed class DeviceGrantStore(string? path, ILogger logger)
             return stored is null
                 ? null
                 : new DeviceGrant(stored.Id, Convert.FromBase64String(stored.CurrentHash),
-                    stored.PreviousHash is null ? null : Convert.FromBase64String(stored.PreviousHash), stored.ExpiresAt);
+                    stored.PreviousHash is null ? null : Convert.FromBase64String(stored.PreviousHash), stored.ExpiresAt,
+                    stored.Unconfirmed);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or FormatException)
         {
@@ -57,7 +63,8 @@ public sealed class DeviceGrantStore(string? path, ILogger logger)
 
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var stored = new Stored(grant.Id, Convert.ToBase64String(grant.CurrentHash),
-                grant.PreviousHash is null ? null : Convert.ToBase64String(grant.PreviousHash), grant.ExpiresAt);
+                grant.PreviousHash is null ? null : Convert.ToBase64String(grant.PreviousHash), grant.ExpiresAt,
+                grant.Unconfirmed);
             File.WriteAllText(path, JsonSerializer.Serialize(stored));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
