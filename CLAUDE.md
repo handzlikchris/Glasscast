@@ -1,6 +1,10 @@
 # CLAUDE.md — Glasses Remote Desktop
 
 Guide for AI agents (and humans) picking up this repo. Read this first, then `README.md`.
+Before changing a feature, read its doc in **`architecture/`** (index: `architecture/README.md`):
+pairing and auth, session and protocol, media pipeline, stats, input and desktop, glasses
+client, PC UI, deployment, testing. Each names its files, flows, rules and tests; keep the doc
+current in the same piece of work.
 
 ## What this is
 
@@ -37,7 +41,8 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Hosting/              ServerApp.Create (DI + pipeline, shared with tests), GlassesEndpoints
                         (/health, /ws/pair, /ws/session, OriginPolicy), SecurityHeaders,
                         ClientCaching (no-cache page, immutable assets), Options
-  Pairing/              PairingCoordinator (state machine), Secrets (tokens/codes), SlidingWindowLimiter
+  Pairing/              PairingCoordinator (state machine), DeviceGrant (+ store), Secrets (tokens/codes),
+                        SlidingWindowLimiter, PairingOptions
   Sessions/             ControlSession (one authenticated session), InputController (mode gating),
                         SocketIO (capped WS reads/writes), TokenBucket
   Protocol/             ControlMessages + ControlProtocol (strict allowlist parser)
@@ -63,7 +68,8 @@ client-web/             glasses client (600×600)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
   src/mediaStats.ts     Stats panel: capture-to-display latency (RTP timestamp matching, clock offset
                         from ping/pong), receiver counters, PC pump figures (pure, tested)
-  src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
+  src/{protocol,geometry,gestures,controls,display,scrollPrefs}.ts  pure logic with *.test.ts
+  src/overlay.ts        canvas: cursor, region box, pan-edge glow
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
                         browser/drive.mjs (headless Chrome, 37 checks)
@@ -72,6 +78,7 @@ deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
 .claude/tasks/          task briefs for new sessions
+architecture/           one doc per feature area (files, flows, rules, tests); start at README.md
 ```
 
 ## Commands
@@ -98,6 +105,8 @@ Don't stop the user's server without asking. Run the harness on another media po
 real session may be live: `Media__MediaPort=50002 ./tools/e2e-harness/bin/isolated/E2eHarness.exe`.
 The isolated folders get a copy of the real `appsettings.Local.json`; delete it there before
 running (its app shortcuts break `App_shortcuts_come_from_the_pc_config…`, its bind address the harness).
+`dotnet test <csproj>` rebuilds and copies it back, so after deleting run the built dll instead:
+`dotnet test tests/bin/isolated/GlassesRemote.Server.Tests.dll`.
 
 **When the user asks Claude to run the server** (as on 2026-09-25): stop the old process, then
 `dotnet build server` and `dotnet run --project server --launch-profile server --no-build` as a
@@ -239,7 +248,7 @@ tight padding, check a screenshot when adding buttons). Model in
   approval, never extended. One device remembered at a time; a new approval replaces it.
   Reusing a swapped-out token forgets the device, ends any session and raises `DeviceTokenReused`.
   A protocol violation or **Forget remembered glasses** in the tray forget it too. Ending a
-  session on the PC (tray or Ctrl+Shift+X) does **not** (user's choice, 2026-09-27): the
+  session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
 - The client stores only the brightness level, scroll strengths per app name, and the device token (`connection.ts`, localStorage;
@@ -417,7 +426,13 @@ tight padding, check a screenshot when adding buttons). Model in
   479 kbit/s. Not seen in the harness. Next: log each raw SRTCP index (trailer, in the clear) to
   see duplicates/corruption/jumps, then recover (reset SIPSorcery's SRTCP replay state, or
   renegotiate) instead of staying blind. The morning's link test logged "no RTCP activity for
-  30 s" too, so it may have hit this as well.
+  30 s" too, so it may have hit this as well. Checked in SIPSorcery v10.0.16's source
+  (`SrtpContext.UnprotectRtcp`): HMAC is verified before the replay check and the window only
+  advances after authentication, so one corrupt packet can't poison it. Something that
+  *authenticated* moved the window far ahead, or a second sender shares the SSRC. Suspects:
+  our `OnNack` copy-decrypt path, which updates the same replay state as SIPSorcery's own
+  decrypt; a stale browser peer (after Reconnect) still sending to port 50000 (the STUN
+  integrity failures fit that). Log the SSRC and index of each failure first.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
   phone-friendly layout; hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN
   over TLS for UDP-blocking networks; remote approval flow; Claude-specific controls; a tray
