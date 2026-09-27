@@ -117,13 +117,18 @@ try {
     }
     return best;
   };
-  const audioElement = () => page.$eval('audio', (a) => ({ playing: !!a.srcObject && !a.paused, muted: a.muted }));
+  // The element only keeps the stream flowing (muted); Web Audio plays it (audioOutput.ts).
+  const audioElement = () =>
+    page.$eval('audio', (a) => ({
+      playing: !!a.srcObject && !a.paused,
+      output: document.querySelector('button[data-toggle="audio"]')?.getAttribute('data-output'),
+    }));
   const soundOn = await audioKbps();
   const elementOn = await audioElement();
   const pcOn = statsLog().findLast((l) => l.kind === 'pc' && l.audioOn === 1);
   const glassesAudio = statsLog().findLast((l) => l.kind === 'glasses' && l.audioKbps > 0);
   check("the PC's sound plays by default and its bandwidth shows in the status bar",
-    soundOn >= 10 && elementOn.playing && !elementOn.muted && pcOn?.audioKbps > 0 && glassesAudio !== undefined,
+    soundOn >= 10 && elementOn.playing && elementOn.output === 'running' && pcOn?.audioKbps > 0 && glassesAudio !== undefined,
     `A ${soundOn} kbps, element ${JSON.stringify(elementOn)}, PC ${pcOn?.audioKbps} kbps, glasses logged ${glassesAudio?.audioKbps}`);
   await tapBar('button[data-toggle="audio"]');
   await sleep(2500);
@@ -132,7 +137,7 @@ try {
   const pcOff = statsLog().findLast((l) => l.kind === 'pc');
   const elementOff = await audioElement();
   check('♪ off stops the PC capturing and sending, and the status bar says so',
-    offText.includes('A off') && offButton === '♪ off' && pcOff?.audioOn === 0 && pcOff?.audioKbps === 0 && elementOff.muted,
+    offText.includes('A off') && offButton === '♪ off' && pcOff?.audioOn === 0 && pcOff?.audioKbps === 0 && elementOff.playing,
     `${offText}, button ${offButton}, PC on ${pcOff?.audioOn} at ${pcOff?.audioKbps} kbps`);
   await tapBar('button[data-toggle="audio"]');
   const soundAgain = await audioKbps();

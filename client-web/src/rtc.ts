@@ -41,21 +41,18 @@ export class VideoReceiver {
 
   /**
    * The PC puts video and audio in streams of their own (no lip sync, which would hold the
-   * video back), so each track goes to its own element. `onAudio` is called once the sound's
-   * track is on the audio element, to start playing it.
+   * video back): the video goes to its element, the sound's stream to `onAudio` (AudioOutput).
    */
   constructor(
     private readonly send: (message: ClientMessage) => void,
     video: HTMLVideoElement,
-    audio: HTMLAudioElement,
     onState: (state: RTCPeerConnectionState) => void,
-    onAudio: () => void = () => {},
+    onAudio: (stream: MediaStream) => void = () => {},
   ) {
     this.pc.ontrack = (event) => {
       const stream = event.streams[0] ?? new MediaStream([event.track]);
       if (event.track.kind === 'audio') {
-        audio.srcObject = stream;
-        onAudio();
+        onAudio(stream);
       } else {
         video.srcObject = stream;
       }

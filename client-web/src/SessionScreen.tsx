@@ -40,6 +40,7 @@ import {
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { audioButtonLabel, bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
+import { AudioOutput, type OutputState } from './audioOutput';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
 import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines, statsReport } from './mediaStats';
 import {
@@ -177,6 +178,9 @@ export function SessionScreen({ onEnded }: Props) {
   const [audioOn, setAudioOn] = useState(loadAudioOn);
   const audioOnRef = useRef(audioOn);
   const [audioBlocked, setAudioBlocked] = useState(false);
+  /** Plays the sound through Web Audio (see audioOutput.ts); its state shows on the ♪ button. */
+  const audioOut = useRef<AudioOutput | null>(null);
+  const [outputState, setOutputState] = useState<OutputState>('none');
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
   const [lastInput, setLastInput] = useState('');
   /** App shortcut names configured on the PC; button N switches to app N. */
@@ -210,19 +214,21 @@ export function SessionScreen({ onEnded }: Props) {
 
   const send = useCallback((message: ClientMessage) => sessionRef.current?.send(message), []);
 
+  const output = useCallback(() => (audioOut.current ??= new AudioOutput(audioRef.current!)), []);
+
   /**
-   * Plays the PC's sound if ♪ is on. Browsers only start sound after a user gesture: after Pair
-   * or Reconnect it plays at once; after a page reload it may wait for the next pinch or swipe.
+   * Plays the PC's sound if ♪ is on (silences it if off). Browsers only start sound after a user
+   * gesture: after Pair or Reconnect it plays at once; after a page reload it may wait for the
+   * next pinch or swipe.
    */
   const playAudio = useCallback(() => {
-    const el = audioRef.current;
-    if (!el || !el.srcObject || !audioOnRef.current) return;
-    el.muted = false;
-    el.play().then(
-      () => setAudioBlocked(false),
-      () => setAudioBlocked(true),
-    );
-  }, []);
+    const out = output();
+    const on = audioOnRef.current;
+    void out.play(on).then((running) => {
+      setAudioBlocked(on && !running);
+      setOutputState(out.state);
+    });
+  }, [output]);
 
   useEffect(() => {
     if (!audioBlocked) return;
@@ -241,13 +247,17 @@ export function SessionScreen({ onEnded }: Props) {
     audioOnRef.current = next;
     setAudioOn(next);
     saveAudioOn(next);
-    const el = audioRef.current;
-    if (el) el.muted = !next;
-    if (next) playAudio();
-    else setAudioBlocked(false);
+    const out = output();
+    // Called inside the pinch, so the browser lets the sound start.
+    void out.play(next).then((running) => {
+      setAudioBlocked(next && !running);
+      setOutputState(out.state);
+      // Test beep (diagnostic): heard = the glasses can play sound from a web app at all.
+      if (next) out.beep();
+      setLastInput(next ? `sound on + beep (web audio ${out.state})` : 'sound off');
+    });
     // Off stops the PC capturing and sending too: the bandwidth goes to the video.
     send({ type: 'setAudio', enabled: next });
-    setLastInput(next ? 'sound on' : 'sound off');
   };
 
   // ---- connection lifecycle ----
@@ -325,12 +335,14 @@ export function SessionScreen({ onEnded }: Props) {
     receiver = new VideoReceiver(
       session.send.bind(session),
       videoRef.current!,
-      audioRef.current!,
       (media) => {
         setStatus((s) => ({ ...s, media }));
         if (media === 'failed') end('The video connection failed.');
       },
-      playAudio,
+      (stream) => {
+        output().attach(stream);
+        playAudio();
+      },
     );
 
     const stopWatchingFrames = watchFrames(videoRef.current!, (frame) => latency.current.addShown(frame));
@@ -382,6 +394,8 @@ export function SessionScreen({ onEnded }: Props) {
       if (regionTimer.current !== null) clearTimeout(regionTimer.current);
       if (glowTimer.current !== null) clearTimeout(glowTimer.current);
       receiver?.close();
+      audioOut.current?.close();
+      audioOut.current = null;
       session.close();
       sessionRef.current = null;
     };
@@ -965,7 +979,7 @@ export function SessionScreen({ onEnded }: Props) {
       style={{ '--brightness': brightness } as React.CSSProperties}
     >
       <video ref={videoRef} autoPlay playsInline muted />
-      {/* The PC's sound: its own element, started by playAudio (autoplay may be refused). */}
+      {/* The PC's sound: kept playing (muted) so Web Audio gets the stream; see audioOutput.ts. */}
       <audio ref={audioRef} />
       <canvas ref={canvasRef} width={600} height={600} />
       <div
@@ -1017,7 +1031,7 @@ export function SessionScreen({ onEnded }: Props) {
           ☀ {Math.round(brightness * 100)}%
         </button>
         {audioOffered && (
-          <button type="button" data-toggle="audio" aria-pressed={audioOn} onClick={toggleAudio} title="The PC's sound">
+          <button type="button" data-toggle="audio" data-output={outputState} aria-pressed={audioOn} onClick={toggleAudio} title="The PC's sound">
             {audioButtonLabel(audioState)}
           </button>
         )}
