@@ -300,8 +300,14 @@ tight padding, check a screenshot when adding buttons). Model in
 - **Bitrate adaptation:** `BitrateController` acts on the glasses' RTCP loss only (>10% cut by
   half the loss, <2% +8% while busy). REMB is logged, not used: Chrome caps it at ~1.5x what it
   receives and raises it ~8%/s, so it lags far below what a link carries after a still screen.
-  Requested keyframes are at least 1.5 s apart (500 ms fed a keyframe storm on a weak link) and
-  NACKed packets are resent up to 3 s back (1 s missed NACKs on a queued-up link).
+  It starts at `Media:StartKbps` (1000). Requested keyframes are at least 1.5 s apart (500 ms fed
+  a keyframe storm on a weak link) and NACKed packets are resent up to 3 s back (1 s missed NACKs
+  on a queued-up link).
+- **SRTP rollover (SIPSorcery):** its sender moves the rollover counter on when it *encrypts*
+  sequence 65535, not when the numbers wrap. Resending 65535 moved it on twice and the glasses
+  dropped every later packet (video frozen for good, ICE fine). `SentPackets` only resends
+  packets of the current epoch; every packet 65535 must be encrypted exactly once, so never skip
+  a sequence number without sending it. The e2e harness starts streams at 65495 to cross a wrap.
 - **Keyframes:** `FramePump` forces them when the source size changes, on request (PLI) and
   every `KeyframeIntervalSeconds` (10 s; 2 s before NACK), not when the region moves; edge
   panning would otherwise send a keyframe every 100 ms. The encoder's own GOP follows the same
@@ -393,7 +399,10 @@ tight padding, check a screenshot when adding buttons). Model in
   carried only ~0.8 Mbit/s (the phone measures ~50 Mbit/s on 5G): video queued up to 1.4 s,
   resends missed, keyframe storm. Suspect: the phone-to-glasses hop (Bluetooth?) when the phone
   isn't on Wi-Fi. Added: network type logging, a link test, loss-based bitrate adaptation,
-  1.5 s keyframe gap, 3 s resend window; not yet confirmed on the glasses. Still open: a delay
+  1.5 s keyframe gap, 3 s resend window. First link test on the glasses (5G): ~0.9 Mbit/s
+  delivered, delay growing from the 2000 step, `netType` 8 (none) and `iceNetType` 0: the
+  glasses' WebView sees no network of its own (traffic relayed by the phone). That run froze
+  for good through the SRTP rollover bug (fixed). Phone-browser comparison still to do. Still open: a delay
   signal for the controller (the glasses' arrivalMs, or RTT), gradual intra refresh or a
   keyframe size cap, and as a last resort a TCP path (WebSocket + WebCodecs), like RDP.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
