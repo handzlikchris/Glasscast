@@ -29,9 +29,10 @@ glasses.example.com {
 		-Server
 	}
 
-	# Allowlist: only the web client, health check and the two WebSockets reach the app.
+	# Allowlist: only the web client, health check and the WebSockets (glasses pair/session,
+	# the phone companion app) reach the app.
 	# The CSP header is set by the app itself.
-	@allowed path / /index.html /favicon.svg /assets/* /health /ws/pair /ws/session
+	@allowed path / /index.html /favicon.svg /assets/* /health /ws/pair /ws/session /ws/companion
 	handle @allowed {
 		reverse_proxy 127.0.0.1:5080
 	}
