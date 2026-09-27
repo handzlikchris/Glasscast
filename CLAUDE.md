@@ -88,7 +88,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 47 checks)
+                        browser/drive.mjs (headless Chrome, 48 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -192,6 +192,11 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   single left/right waits 0.3 s for a second, then does its plain action (nothing in Pointer
   mode, pan with Pan on, page on the phone). Up/down drops a waiting left (the band reads some
   down-swipes as left).
+- **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**
+  pinch = click / tap (after 350 ms: two quick ones = double-click / double tap); pinch and move =
+  cursor; **pinch, hold still 0.4 s, then move = drag with the button / finger down** (select
+  text, move windows, drag on the phone), released with the pinch. PC: `mouseButton` message,
+  released by the PC itself on mode change or session end.
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes: **up/down scroll** 3 notches (default), the doubles above
   (next app: 1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to

@@ -85,7 +85,9 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
 
 ### Glasses ⇄ phone (DataChannel `input`, JSON)
 
-- Glasses → phone: `tap{x,y}`, `longPress{x,y}`, `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
+- Glasses → phone: `tap{x,y}`, `doubleTap{x,y}`, `touch{phase,x,y}` (`down`/`move`/`up`: a finger
+  held down, moved in pieces as the glasses send it, ~25 a second; lifted when the session ends),
+  `longPress{x,y}` (still parsed, no longer sent), `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
   flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`
   (0..1 of the phone screen; stops following a window, kept for the next session),

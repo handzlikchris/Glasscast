@@ -21,7 +21,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
 | `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
 | `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)). |
-| `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. |
+| `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms; `hold()` after `HOLD_DRAG_MS` 400 turns a still press into a hold, and moving after it into a held drag), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. See "Pinches" below. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
 | `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |
 | `src/display.ts`, `src/scrollPrefs.ts` | Brightness levels and per-app scroll strength, in localStorage. |
@@ -59,6 +59,25 @@ Effects:
 - The glasses reset focus after a Back and when the composer closes. Focus the app moves on
   purpose goes through `focusPinned`, which restores it for 600 ms (re-checked at 50/150/300/500 ms);
   any swipe or pinch ends the pin.
+
+## Pinches (interface decision, 2026-09-27)
+
+The same meaning on the PC and the phone; `GestureTracker` decides, the screens act.
+
+| Pinch on the view | PC session (Pointer mode) | Phone session |
+| --- | --- | --- |
+| pinch | click (after 0.35 s, in case a second follows) | tap (after 0.35 s, likewise) |
+| two quick pinches | double-click | double tap (`doubleTap`: two taps 150 ms apart on the phone) |
+| pinch and move | moves the cursor | moves the cursor |
+| pinch, hold still 0.4 s, then move | drag with the left button down (select text, move a window): `mouseButton` down, moves, up | a finger down at the cursor that follows the drag (`touch` down / move / up) |
+| pinch, hold still, let go | click (a slow pinch) | the finger was down all along: Android's long press (or a tap if let go soon after 0.4 s) |
+| pinch, then pinch and hold 0.5 s | opens the controls (`TapThenHold`) | (nothing special) |
+
+- Why a still hold: moving at once must stay "move the cursor", as it always was; holding still
+  first is the deliberate "press here" (like a finger on a touchscreen). 0.4 s is short enough
+  not to feel slow and longer than a normal pinch.
+- Nothing stays pressed by accident: the PC releases a held button on a mode change or when the
+  session ends; the phone lifts a held finger when the session ends.
 
 ## Swipes (interface decision, 2026-09-27)
 
