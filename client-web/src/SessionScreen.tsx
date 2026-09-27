@@ -54,7 +54,7 @@ import {
 import { drawOverlay, type Look } from './overlay';
 import { textChunks, type ClientMessage, type KeyName, type PcMediaStats, type Region, type ServerMessage, type Size, type ViewMode } from './protocol';
 import { VideoReceiver, watchFrames } from './rtc';
-import { TypePanel } from './TypePanel';
+import { PC_KEYS, TypePanel } from './TypePanel';
 
 /** View pixels of cursor travel per pixel of pinch-drag. Tune on the device. */
 const POINTER_GAIN = 1.0;
@@ -1133,6 +1133,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
 
       {mode === 'type' && (
         <TypePanel
+          keys={PC_KEYS}
           focusPinned={focusPinned}
           onSendText={(text) => {
             // Any length: in order, in pieces the PC accepts (500 characters each).

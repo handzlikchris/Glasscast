@@ -1,14 +1,21 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { PhoneKey } from './phoneProtocol';
 import type { KeyName } from './protocol';
 
-interface Props {
-  /** Moves focus for the user and holds it against the glasses resetting it (SessionScreen). */
+interface Props<K extends string> {
+  /** Moves focus for the user and holds it against the glasses resetting it. */
   focusPinned(el: HTMLElement): void;
   onSendText(text: string): void;
-  onKey(key: KeyName): void;
+  onKey(key: K): void;
+  /** The key buttons under the text box; the one for 'Enter' gets focus after Send text. */
+  keys: readonly { key: K; label: string }[];
+  placeholder?: string;
+  /** Text the target couldn't take, put back in the (empty) box; a new object each time. */
+  refill?: { text: string } | null;
 }
 
-const SHORTCUTS: { key: KeyName; label: string }[] = [
+/** A PC session's keys. */
+export const PC_KEYS: readonly { key: KeyName; label: string }[] = [
   { key: 'Enter', label: 'Enter' },
   { key: 'Escape', label: 'Esc' },
   { key: 'Tab', label: 'Tab' },
@@ -20,6 +27,12 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
   { key: 'Win+Shift+Right', label: 'Win⇧→' },
 ];
 
+/** A phone session's keys (sent as a keyboard's key presses). */
+export const PHONE_KEYS: readonly { key: PhoneKey; label: string }[] = [
+  { key: 'Enter', label: 'Enter' },
+  { key: 'Backspace', label: '⌫' },
+];
+
 /**
  * A plain textarea, so the glasses open their voice/handwriting composer.
  * Sending text never presses Enter: that's always a separate, deliberate tap,
@@ -27,12 +40,16 @@ const SHORTCUTS: { key: KeyName; label: string }[] = [
  *
  * Focus is walked along for the glasses, so each step is just another pinch:
  * text box (clicked, to open the composer) when the panel opens → Send text once the composer hands text back
- * (a "change" event) → Enter after sending; Enter itself returns to Pointer mode (SessionScreen).
+ * (a "change" event) → Enter after sending; Enter itself returns to the view (Pointer mode on the
+ * PC). The same panel, and the same steps, in PC and phone sessions; only the keys differ.
  */
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
-export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
+export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, keys, placeholder, refill }: Props<K>) {
   const [text, setText] = useState('');
+  useEffect(() => {
+    if (refill && !textRef.current) setText(refill.text);
+  }, [refill]);
   const trimmed = text.trim();
   const textRef = useRef(text);
   textRef.current = text;
@@ -86,7 +103,7 @@ export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
         ref={boxRef}
         value={text}
         // No length limit: long text goes to the PC in several typeText messages (textChunks).
-        placeholder="Speak or write, then Send text"
+        placeholder={placeholder ?? 'Speak or write, then Send text'}
         onChange={(e) => setText(e.target.value)}
         // Enter in the box inserts a newline (flattened to a space by the PC); it never submits.
         onPointerDown={(e) => e.stopPropagation()}
@@ -103,7 +120,7 @@ export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
         </span>
       </div>
       <div className="row keys">
-        {SHORTCUTS.map((s) => (
+        {keys.map((s) => (
           <button key={s.key} ref={s.key === 'Enter' ? enterRef : undefined} type="button" onClick={() => onKey(s.key)}>
             {s.label}
           </button>

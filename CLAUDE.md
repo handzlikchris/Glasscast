@@ -88,7 +88,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 46 checks)
+                        browser/drive.mjs (headless Chrome, 47 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -213,7 +213,7 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   pinch-and-hold no longer opens the controls: it's the tap-and-a-half drag.)
 - **Mode bar is hidden** (opacity 0, click-through) while on the view; shown when focused, in Type
   and in Region.
-- **Type flow:** entering Type focuses and clicks the text box (tries to open the composer at
+- **Type flow (PC and phone, one `TypePanel`):** entering Type focuses and clicks the text box (tries to open the composer at
   once) → when the composer hands text back (`change`), **Send text** → **Enter** → Enter itself
   returns to Pointer mode. Only a swipe of the user's stops the chain. No length limit: long
   text goes as several ≤500-character `typeText` messages (`textChunks`).

@@ -17,7 +17,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/rtc.ts` | Receive-only `RTCPeerConnection` (video to `<video>`, the audio stream to `AudioOutput`), stats snapshot, `watchFrames`. |
 | `src/audioOutput.ts` | Plays the PC's sound through Web Audio (a muted `<audio>` keeps the stream flowing); see [audio.md](audio.md). |
 | `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
-| `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
+| `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, key buttons, the focus chain. **Shared by PC and phone sessions** (same steps; the keys are a prop: `PC_KEYS`, `PHONE_KEYS` Enter and ⌫). |
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
 | `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
 | `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)). |

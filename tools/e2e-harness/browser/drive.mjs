@@ -682,6 +682,20 @@ try {
   check('phone Type: swipe right twice opens it, and a pinch beside the focused box clicks the box',
     phoneStage && boxClicks && afterPinch.focused === 'TEXTAREA' && afterPinch.clicks === 1,
     `phone ${phoneStage}, box focused ${boxClicks}, after pinch ${afterPinch.focused} clicked ${afterPinch.clicks}`);
+
+  // 22. Then the same steps as a PC session: the composer's text waits in the box with focus on
+  //     Send text (the glasses jump focus to the first bar button when the composer closes), a
+  //     pinch sends it and moves focus to Enter.
+  await page.keyboard.type('hello phone');
+  await page.focus('.toolbar.top button'); // the glasses' focus jump when the composer closes
+  await sleep(700);
+  const phoneAfterComposer = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  await page.mouse.click(300, 200);
+  await sleep(700);
+  const phoneAfterSend = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  check('phone Type: composer text waits for Send text, then focus moves to Enter (as on the PC)',
+    phoneAfterComposer === 'Send text' && phoneAfterSend === 'Enter',
+    `after composer ${phoneAfterComposer}, after Send ${phoneAfterSend}`);
 } finally {
   await browser.close();
 }

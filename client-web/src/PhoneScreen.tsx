@@ -10,7 +10,8 @@
 //   right twice opens Type, left twice presses the phone's Back.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
-// - Type: the composer's text goes into the phone's focused text field; Enter is separate.
+// - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
+//   the text goes to whatever has keyboard input on the phone. Enter is separate.
 // - Region: the whole phone screen with a square box; drag moves it, swipe up/down zooms, a pinch
 //   uses it, Back cancels. Fit: the phone crops to its top app window (a Samsung pop-up view
 //   window made square) and follows it.
@@ -35,6 +36,7 @@ import {
 } from './phoneProtocol';
 import { PhoneLink } from './phoneRtc';
 import { usePinchPressesFocused } from './pinchPress';
+import { PHONE_KEYS, TypePanel } from './TypePanel';
 import type { PhoneState, ServerMessage, Size } from './protocol';
 import { SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
@@ -61,9 +63,6 @@ const HIDDEN_MS = 5000;
 /** How often a held finger's position goes to the phone while dragging (ms). */
 const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
-/** Composer text that came as input events with no change event is sent after this quiet time. */
-const INPUT_SETTLE_MS = 1500;
-
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
   asking: 'on the phone, tap Start to share',
@@ -86,8 +85,6 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const following = useRef(false);
   const choosing = useRef<Choosing | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLTextAreaElement>(null);
-  const enterRef = useRef<HTMLButtonElement>(null);
   const linkRef = useRef<PhoneLink | null>(null);
   const sessionRef = useRef<Session | null>(null);
   const frame = useRef<Rect>({ x: 0, y: 0, width: 600, height: 600 });
@@ -125,6 +122,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
   const [follow, setFollow] = useState(false);
+  /** Text the phone had no field for, handed back to the Type panel. */
+  const [refill, setRefill] = useState<{ text: string } | null>(null);
 
   // On the bar and in Type a pinch presses the focused button, wherever the glasses' pointer is.
   usePinchPressesFocused(focus === 'bar' || focus === 'type');
@@ -329,12 +328,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   useLayoutEffect(() => {
     if (focus === 'bar') {
       barRef.current?.querySelector('button')?.focus();
-    } else if (focus === 'type') {
-      const box = textRef.current!;
-      box.focus();
-      // Inside the pinch that opened Type, so the composer may open at once (as in a PC session).
-      box.click();
-    } else if (document.activeElement instanceof HTMLElement) {
+    } else if (focus !== 'type' && document.activeElement instanceof HTMLElement) {
+      // (Type: the panel focuses and clicks its box itself, inside the pinch that opened it.)
       document.activeElement.blur();
     }
   }, [focus]);
@@ -535,15 +530,6 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     const pieces = phoneText(text);
     if (pieces.length > 0) pendingText.current = text;
     for (const piece of pieces) send({ type: 'typeText', text: piece }, 'text → phone');
-    return pieces.length > 0;
-  };
-
-  /** Sends what's in the box (the composer's text) and offers Enter. */
-  const sendBox = () => {
-    const box = textRef.current;
-    if (!box || !sendText(box.value)) return;
-    box.value = '';
-    if (enterRef.current) focusHeld(enterRef.current);
   };
 
   const onResult = (of: 'typeText' | 'key', ok: boolean) => {
@@ -559,8 +545,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     }
     // Nothing on the phone to type into: keep the text rather than lose it.
     setLastInput('no text field on the phone: tap one, then Send text');
-    const box = textRef.current;
-    if (box && text && !box.value) box.value = text;
+    if (text) setRefill({ text });
   };
 
   /**
@@ -579,33 +564,6 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     }
     setTimeout(() => document.removeEventListener('keydown', onKey, true), 600);
   };
-
-  // The composer hands its text back with input events and then, usually, a change event (the
-  // native one, not React's onChange). Send on change; if only input came, send once it has been
-  // quiet for INPUT_SETTLE_MS. Typing on a laptop keyboard counts the same way.
-  const sendBoxRef = useRef(sendBox);
-  sendBoxRef.current = sendBox;
-  useEffect(() => {
-    if (focus !== 'type') return;
-    const box = textRef.current!;
-    let settle: ReturnType<typeof setTimeout> | null = null;
-    const onChange = () => {
-      if (settle !== null) clearTimeout(settle);
-      settle = null;
-      sendBoxRef.current();
-    };
-    const onInput = () => {
-      if (settle !== null) clearTimeout(settle);
-      settle = setTimeout(onChange, INPUT_SETTLE_MS);
-    };
-    box.addEventListener('change', onChange);
-    box.addEventListener('input', onInput);
-    return () => {
-      if (settle !== null) clearTimeout(settle);
-      box.removeEventListener('change', onChange);
-      box.removeEventListener('input', onInput);
-    };
-  }, [focus]);
 
   const endSession = () => {
     sessionRef.current?.close();
@@ -648,23 +606,18 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       </div>
 
       {focus === 'type' && (
-        <div className="type-panel">
-          <textarea ref={textRef} rows={3} placeholder="Speak or write; it goes into the phone's text field" />
-          <div className="row keys">
-            <button type="button" onClick={sendBox}>
-              Send text
-            </button>
-            <button ref={enterRef} type="button" onClick={() => { send({ type: 'key', key: 'Enter' }, 'Enter'); setFocus('view'); }}>
-              Enter
-            </button>
-            <button type="button" onClick={() => send({ type: 'key', key: 'Backspace' }, '⌫')}>
-              ⌫
-            </button>
-            <button type="button" onClick={() => setFocus('view')}>
-              Done
-            </button>
-          </div>
-        </div>
+        <TypePanel
+          keys={PHONE_KEYS}
+          placeholder="Speak or write, then Send text: it goes into the phone"
+          focusPinned={focusHeld}
+          onSendText={sendText}
+          onKey={(key) => {
+            send({ type: 'key', key }, key);
+            // Enter usually finishes the job: straight back to the view.
+            if (key === 'Enter') setFocus('view');
+          }}
+          refill={refill}
+        />
       )}
 
       <div className="status">
