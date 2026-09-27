@@ -429,10 +429,11 @@ tight padding, check a screenshot when adding buttons). Model in
   30 s" too, so it may have hit this as well. Checked in SIPSorcery v10.0.16's source
   (`SrtpContext.UnprotectRtcp`): HMAC is verified before the replay check and the window only
   advances after authentication, so one corrupt packet can't poison it. Something that
-  *authenticated* moved the window far ahead, or a second sender shares the SSRC. Suspects:
-  our `OnNack` copy-decrypt path, which updates the same replay state as SIPSorcery's own
-  decrypt; a stale browser peer (after Reconnect) still sending to port 50000 (the STUN
-  integrity failures fit that). Log the SSRC and index of each failure first.
+  authenticated with the live keys moved the window ahead (or the glasses' index went back).
+  Suspects: our `OnNack` copy-decrypt path, which updates the same replay state as
+  SIPSorcery's own decrypt; an index jump in the WebView. The STUN integrity failures hint at
+  a stale peer also sending to 50000 (fits the one -3, can't move the window). Log source,
+  SSRC and index of each failure first.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
   phone-friendly layout; hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN
   over TLS for UDP-blocking networks; remote approval flow; Claude-specific controls; a tray
