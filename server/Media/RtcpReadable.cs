@@ -7,7 +7,8 @@ namespace GlassesRemote.Server.Media;
 /// buffer after SIPSorcery has had its go: it decrypts that buffer in place (it subscribed before
 /// us), and leaves it encrypted when unprotect fails (HMAC, replay). SRTCP leaves the first 8
 /// bytes (header, sender SSRC) in the clear and encrypts the rest, so a field after them that must
-/// name our video stream tells the two apart (a random match is a 1 in 2^32 chance).
+/// name one of our streams (video, or audio: the glasses report on each) tells the two apart (a
+/// random match is a 1 in 2^32 chance per stream).
 /// </summary>
 public static class RtcpReadable
 {
@@ -22,9 +23,9 @@ public static class RtcpReadable
 
     /// <summary>
     /// True when decrypted, false when still encrypted, null when the packet's first item has no
-    /// field that must name <paramref name="mediaSsrc"/> (e.g. REMB, FIR, an empty report).
+    /// field that must name one of <paramref name="ourSsrcs"/> (e.g. REMB, FIR, an empty report).
     /// </summary>
-    public static bool? Decrypted(ReadOnlySpan<byte> packet, uint mediaSsrc)
+    public static bool? Decrypted(ReadOnlySpan<byte> packet, params ReadOnlySpan<uint> ourSsrcs)
     {
         if (!IsRtcp(packet) || packet.Length < 12)
         {
@@ -39,6 +40,6 @@ public static class RtcpReadable
             PayloadFeedback => count == Pli,     // PLI names the media source; REMB and FIR put 0 there
             _ => false,
         };
-        return namesOurStream ? BinaryPrimitives.ReadUInt32BigEndian(packet[8..]) == mediaSsrc : null;
+        return namesOurStream ? ourSsrcs.Contains(BinaryPrimitives.ReadUInt32BigEndian(packet[8..])) : null;
     }
 }

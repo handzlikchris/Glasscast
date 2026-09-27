@@ -58,6 +58,15 @@ public interface IMediaPeer : IDisposable
 
     /// <summary>Pacing delay and retransmissions since the last call.</summary>
     SendStats TakeSendStats();
+
+    /// <summary>Whether the offer carries an audio track (<c>Audio:Enabled</c>).</summary>
+    bool CarriesAudio { get; }
+
+    /// <summary>
+    /// Sends one Opus packet on the audio track, at once (audio never waits behind video).
+    /// <paramref name="rtpTimestamp"/> is at 48 kHz; <paramref name="marker"/> starts a talkspurt.
+    /// </summary>
+    void SendAudio(byte[] opus, uint rtpTimestamp, bool marker);
 }
 
 /// <summary>

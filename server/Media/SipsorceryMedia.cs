@@ -53,9 +53,9 @@ public sealed class FrameEncoderFactory(IOptions<MediaOptions> options, ILogger<
 }
 
 /// <summary>
-/// Send-only video peer on the fixed media port. The offer advertises the router's
-/// public IP as a host candidate, so the glasses connect straight through the port
-/// forward; SIPSorcery learns their address from the incoming checks.
+/// Send-only video (and, with <c>Audio:Enabled</c>, audio) peer on the fixed media port. The
+/// offer advertises the router's public IP as a host candidate, so the glasses connect straight
+/// through the port forward; SIPSorcery learns their address from the incoming checks.
 /// </summary>
 public sealed class SipsorceryMediaPeer : IMediaPeer
 {
@@ -65,6 +65,12 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private readonly bool _h264;
     private readonly RtpPacer _pacer;
     private readonly SentPackets _sent = new();
+    /// <summary>
+    /// Video (pacer thread) and audio (audio pump thread) packets are encrypted one at a time:
+    /// both go through the connection's one SRTP transport.
+    /// </summary>
+    private readonly Lock _sendLock = new();
+    private int _audioPayloadType = -1;
     private uint? _rtpTimestamp;
     private int _payloadType = -1;
     private int _closed;
@@ -97,7 +103,15 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     }
 
 
-    public SipsorceryMediaPeer(MediaOptions options, string codec, ILogger logger)
+    /// <summary>
+    /// Opus as WebRTC expects it: always "opus/48000/2" in SDP. In-band FEC and DTX (see
+    /// OpusAudioEncoder); stereo=1 asks the glasses to decode both channels.
+    /// </summary>
+    internal const string OpusParameters = "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;usedtx=1";
+
+    internal const int OpusPayloadType = 111;
+
+    public SipsorceryMediaPeer(MediaOptions options, string codec, ILogger logger, bool audio = false)
     {
         _options = options;
         _logger = logger;
@@ -114,6 +128,13 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             ? new VideoFormat(VideoCodecsEnum.H264, 102, 90000, "packetization-mode=1;profile-level-id=42e01f")
             : new VideoFormat(VideoCodecsEnum.VP8, 96);
         _peer.addTrack(new MediaStreamTrack(format, MediaStreamStatusEnum.SendOnly));
+        if (audio)
+        {
+            // SIPSorcery puts the audio section first in the offer, whatever the order here.
+            var opus = new AudioFormat(AudioCodecsEnum.OPUS, OpusPayloadType, 48_000, 2, OpusParameters);
+            _peer.addTrack(new MediaStreamTrack(opus, MediaStreamStatusEnum.SendOnly));
+        }
+        CarriesAudio = audio;
         _pacer = new RtpPacer(SendPacket, options.PacingKbps, TimeSpan.FromMilliseconds(options.MaxPacingDelayMs), logger);
 
         // A lost packet the glasses NACK is sent again (OnNack). When that doesn't do (VP8, or too
@@ -213,8 +234,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             _logger.LogWarning("No Media:PublicIp configured and LAN candidates are off: the glasses have no address to reach");
         }
         var lanIp = offerLan && IPAddress.TryParse(_options.BindAddress, out var bound) ? bound : null;
-        return SdpFeedback.AddFeedback(
-            SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates, lanIp));
+        return SdpStreams.Separate(SdpFeedback.AddFeedback(
+            SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates, lanIp)));
     }
 
     public bool ApplyAnswer(string sdp)
@@ -257,7 +278,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             {
                 return vp8Timestamp; // dev/test only, see DropFirstFrames
             }
-            _peer.SendVideo(durationRtpUnits, encoded);
+            lock (_sendLock)
+            {
+                _peer.SendVideo(durationRtpUnits, encoded);
+            }
             return vp8Timestamp;
         }
 
@@ -288,7 +312,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     /// </summary>
     private void WatchRtcp(IPEndPoint remote, byte[] packet)
     {
-        if (_peer.VideoLocalTrack?.Ssrc is not { } ssrc || RtcpReadable.Decrypted(packet, ssrc) != false)
+        if (_peer.VideoLocalTrack?.Ssrc is not { } ssrc
+            || RtcpReadable.Decrypted(packet, ssrc, _peer.AudioLocalTrack?.Ssrc ?? ssrc) != false)
         {
             return;
         }
@@ -377,11 +402,46 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
                 return; // dev/test only, see LoseOnePacket
             }
         }
-        stream.SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
-        stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType, seq);
+        lock (_sendLock)
+        {
+            stream.SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
+            stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType, seq);
+        }
         if (packet.ResendSeq is null && seq == ushort.MaxValue)
         {
             Interlocked.Increment(ref _epoch); // the next packet starts a new rollover epoch
+        }
+    }
+
+    public bool CarriesAudio { get; }
+
+    /// <summary>
+    /// On the audio pump's thread. Every packet takes the next sequence number and is encrypted
+    /// exactly once (never resent), which is what SIPSorcery's SRTP rollover counting needs; the
+    /// audio stream has its own SSRC, so its own rollover.
+    /// </summary>
+    public void SendAudio(byte[] opus, uint rtpTimestamp, bool marker)
+    {
+        if (Volatile.Read(ref _closed) == 1 || _peer.AudioStream is not { LocalTrack: { } track } stream)
+        {
+            return;
+        }
+        if (_audioPayloadType < 0)
+        {
+            // The payload type the glasses accepted for Opus in their answer.
+            _audioPayloadType = stream.GetSendingFormat().ID;
+        }
+        if (Interlocked.Exchange(ref _audioStartNearWrap, 0) == 1)
+        {
+            // dev/test only, see StartNearSequenceWrap: a few seconds of sound before the wrap.
+            while (track.SeqNum < ushort.MaxValue - 300)
+            {
+                track.GetNextSeqNum();
+            }
+        }
+        lock (_sendLock)
+        {
+            stream.SendRtpRaw(opus, rtpTimestamp, marker ? 1 : 0, _audioPayloadType, track.GetNextSeqNum());
         }
     }
 
@@ -407,9 +467,16 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
     /// <summary>
     /// DEV/TEST ONLY (e2e harness): the stream's sequence numbers start just below 65535, so they
-    /// wrap (and SRTP's rollover counter moves on) within the first couple of seconds.
+    /// wrap (and SRTP's rollover counter moves on) within the first couple of seconds. The audio
+    /// stream's wrap comes a few seconds of sound later, so the two rollovers happen apart.
     /// </summary>
-    internal void StartNearSequenceWrap() => _startNearWrap = 1;
+    internal void StartNearSequenceWrap()
+    {
+        _startNearWrap = 1;
+        _audioStartNearWrap = 1;
+    }
+
+    private int _audioStartNearWrap;
 
     private void RaiseClosed()
     {
@@ -427,8 +494,9 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     }
 }
 
-public sealed class MediaPeerFactory(IOptions<MediaOptions> options, ILoggerFactory loggers) : IMediaPeerFactory
+public sealed class MediaPeerFactory(IOptions<MediaOptions> options, IOptions<AudioOptions> audio, ILoggerFactory loggers)
+    : IMediaPeerFactory
 {
     public IMediaPeer Create(string codec) =>
-        new SipsorceryMediaPeer(options.Value, codec, loggers.CreateLogger<SipsorceryMediaPeer>());
+        new SipsorceryMediaPeer(options.Value, codec, loggers.CreateLogger<SipsorceryMediaPeer>(), audio.Value.Enabled);
 }

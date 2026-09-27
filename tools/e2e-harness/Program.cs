@@ -43,6 +43,8 @@ var app = ServerApp.Create(args, builder =>
     builder.Services.AddSingleton<IWindowSwitcher>(new RecordingSwitcher(recorder));
     builder.Services.AddSingleton<IKeepAwake, NoKeepAwake>();
     builder.Services.AddSingleton<HarnessPeers>();
+    // A steady tone instead of the PC's real sound: the checks need audio that's always there.
+    builder.Services.AddSingleton<IAudioCaptureFactory, ToneCaptureFactory>();
     builder.Services.AddSingleton<IMediaPeerFactory>(sp => sp.GetRequiredService<HarnessPeers>());
 });
 
@@ -94,9 +96,9 @@ sealed class RecordingInput : IInputInjector
 }
 
 /// <summary>The real media peers; can make the next one lose the start of its stream.</summary>
-sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers) : IMediaPeerFactory
+sealed class HarnessPeers(IOptions<MediaOptions> options, IOptions<AudioOptions> audio, ILoggerFactory loggers) : IMediaPeerFactory
 {
-    private readonly MediaPeerFactory _real = new(options, loggers);
+    private readonly MediaPeerFactory _real = new(options, audio, loggers);
 
     private SipsorceryMediaPeer? _latest;
 
@@ -117,6 +119,42 @@ sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers
             real.DropFirstFrames(5);
         }
         return peer;
+    }
+}
+
+/// <summary>A 440 Hz tone, beeping on and off each second (so DTX gets exercised), at wall-clock pace like WASAPI.</summary>
+sealed class ToneCaptureFactory : IAudioCaptureFactory
+{
+    public IAudioCapture? Start() => new Tone();
+
+    private sealed class Tone : IAudioCapture
+    {
+        private const int Piece = AudioFormat48k.SampleRate / 100;
+        private readonly long _start = System.Diagnostics.Stopwatch.GetTimestamp();
+        private readonly float[] _buffer = new float[Piece * 2];
+        private long _delivered;
+
+        public bool IsStale => false;
+
+        public void ReadInto(AudioFifo fifo)
+        {
+            var due = System.Diagnostics.Stopwatch.GetElapsedTime(_start).Ticks * AudioFormat48k.SampleRate / TimeSpan.TicksPerSecond;
+            while (_delivered + Piece <= due)
+            {
+                var on = _delivered / AudioFormat48k.SampleRate % 2 == 0;
+                for (var i = 0; i < Piece; i++)
+                {
+                    var t = (_delivered + i) / (float)AudioFormat48k.SampleRate;
+                    _buffer[2 * i] = _buffer[2 * i + 1] = on ? 0.2f * MathF.Sin(2 * MathF.PI * 440 * t) : 0f;
+                }
+                fifo.Write(_buffer);
+                _delivered += Piece;
+            }
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }
 

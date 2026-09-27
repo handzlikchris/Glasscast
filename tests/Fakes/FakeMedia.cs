@@ -58,6 +58,30 @@ public sealed class FakePeer : IMediaPeer
 
     public SendStats TakeSendStats() => new(1, 2, 3, 2);
 
+    public bool CarriesAudio { get; init; } = true;
+
+    /// <summary>Opus packets sent: payload, RTP timestamp, marker.</summary>
+    public List<(byte[] Opus, uint Timestamp, bool Marker)> AudioSent { get; } = new();
+
+    public int AudioPacketsSent
+    {
+        get
+        {
+            lock (AudioSent)
+            {
+                return AudioSent.Count;
+            }
+        }
+    }
+
+    public void SendAudio(byte[] opus, uint rtpTimestamp, bool marker)
+    {
+        lock (AudioSent)
+        {
+            AudioSent.Add((opus, rtpTimestamp, marker));
+        }
+    }
+
     public void Dispose()
     {
         Disposed = true;
@@ -105,6 +129,68 @@ public sealed class FakeEncoder : IFrameEncoder
 public sealed class FakeEncoderFactory : IFrameEncoderFactory
 {
     public IFrameEncoder Create() => new FakeEncoder();
+}
+
+/// <summary>
+/// Pretends to capture the PC's sound: a steady 440 Hz tone, delivered in 10 ms pieces as the
+/// wall clock passes (like WASAPI), or nothing while <see cref="Silent"/> (nothing playing).
+/// </summary>
+public sealed class FakeAudioCaptureFactory : IAudioCaptureFactory
+{
+    private int _started;
+
+    public int Started => Volatile.Read(ref _started);
+
+    /// <summary>Currently open captures (0 or 1).</summary>
+    public int Open => Volatile.Read(ref _open);
+
+    private int _open;
+
+    public bool Silent { get; set; }
+
+    /// <summary>Like a PC without any output device.</summary>
+    public bool NoDevice { get; set; }
+
+    public IAudioCapture? Start()
+    {
+        if (NoDevice)
+        {
+            return null;
+        }
+        Interlocked.Increment(ref _started);
+        Interlocked.Increment(ref _open);
+        return new Capture(this);
+    }
+
+    private sealed class Capture(FakeAudioCaptureFactory owner) : IAudioCapture
+    {
+        private const int Piece = AudioFormat48k.SampleRate / 100;
+        private readonly long _start = System.Diagnostics.Stopwatch.GetTimestamp();
+        private long _delivered;
+
+        public bool IsStale => false;
+
+        public void ReadInto(AudioFifo fifo)
+        {
+            var due = System.Diagnostics.Stopwatch.GetElapsedTime(_start).Ticks * AudioFormat48k.SampleRate / TimeSpan.TicksPerSecond;
+            var buffer = new float[Piece * 2];
+            while (_delivered + Piece <= due)
+            {
+                for (var i = 0; i < Piece; i++)
+                {
+                    var v = owner.Silent ? 0f : 0.3f * MathF.Sin(2 * MathF.PI * 440 * (_delivered + i) / AudioFormat48k.SampleRate);
+                    buffer[2 * i] = buffer[2 * i + 1] = v;
+                }
+                if (!owner.Silent)
+                {
+                    fifo.Write(buffer);
+                }
+                _delivered += Piece;
+            }
+        }
+
+        public void Dispose() => Interlocked.Decrement(ref owner._open);
+    }
 }
 
 public sealed class FakeCapture : ICaptureSource

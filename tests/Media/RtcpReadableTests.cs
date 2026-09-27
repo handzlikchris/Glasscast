@@ -31,6 +31,14 @@ public sealed class RtcpReadableTests
         Assert.False(RtcpReadable.Decrypted(Item(type, count, 0x5EC12E7), Ours));
     }
 
+    [Fact]
+    public void Reports_on_our_audio_stream_count_as_ours_too()
+    {
+        const uint audio = 0xA0D10;
+        Assert.True(RtcpReadable.Decrypted(Item(201, 1, audio), Ours, audio));
+        Assert.False(RtcpReadable.Decrypted(Item(201, 1, 0x5EC12E7), Ours, audio));
+    }
+
     [Theory]
     [InlineData(201, 0)] // an empty receiver report
     [InlineData(206, 15)] // REMB: 0 in the media SSRC field

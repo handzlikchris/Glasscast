@@ -132,6 +132,27 @@ public sealed class MediaOptions
     public int FrameHeight { get; set; } = 600;
 }
 
+/// <summary>
+/// The PC's sound on the glasses (Opus over the video's WebRTC connection). The glasses turn it
+/// on and off (their ♪ button); this only says whether it's on offer and how it's encoded.
+/// </summary>
+public sealed class AudioOptions
+{
+    public const string SectionName = "Audio";
+
+    /// <summary>Offer audio at all. Off: no audio track in the offer, no ♪ button on the glasses.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Opus bitrate, stereo. About 1.4x that on the wire with packet headers (50 packets a second);
+    /// during silence Opus sends next to nothing (DTX).
+    /// </summary>
+    public int Kbps { get; set; } = 40;
+
+    /// <summary>Audio per packet: 10, 20, 40 or 60 ms. Longer saves header bytes and adds that much delay.</summary>
+    public int FrameMs { get; set; } = 20;
+}
+
 /// <summary>Which sessions are offered the PC's LAN address for the video (<see cref="MediaOptions.OfferLan"/>).</summary>
 public enum LanOffer
 {
