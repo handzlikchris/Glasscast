@@ -111,8 +111,16 @@ public sealed class FakeCapture : ICaptureSource
 {
     public List<PixelRect> Sources { get; } = new();
 
+    /// <summary>Thrown from the next capture, like a failing capture or encoder.</summary>
+    public Exception? Failure { get; set; }
+
     public bool TryCapture(PixelRect source, PixelSize frame, byte[] bgra)
     {
+        if (Failure is { } failure)
+        {
+            throw failure;
+        }
+
         lock (Sources)
         {
             Sources.Add(source);

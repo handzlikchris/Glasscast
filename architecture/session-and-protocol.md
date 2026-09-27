@@ -83,7 +83,9 @@ Server → client (validated by `parseServerMessage`, unknown or malformed → d
 
 | Reason | Cause | Device remembered? |
 | --- | --- | --- |
-| `session ended` | client left, media failed, pump ended | yes |
+| `session ended` | client left, WebRTC peer failed or closed | yes |
+| `media error` | capture, encoder or send threw (`StreamAsync` logs it with the session) | yes |
+| `server error` | any other unexpected exception in the session (logged, InternalServerError status) | yes |
 | `terminated` | tray End session / hotkey | yes |
 | `replaced` | same device resumed elsewhere | yes |
 | `idle`, `no heartbeat` | watchdog | yes |

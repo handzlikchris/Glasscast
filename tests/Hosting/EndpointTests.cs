@@ -473,6 +473,25 @@ public sealed class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_failing_video_pipeline_ends_the_session_as_a_media_error()
+    {
+        var token = await _host.PairAsync();
+        using var session = await _host.StartSessionAsync(token);
+        _host.Capture.Failure = new System.Runtime.InteropServices.COMException("encoder gone");
+
+        await session.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+
+        while (await session.ReceiveTextAsync() is not null)
+        {
+            // stats and the like, until the server closes
+        }
+        Assert.Equal("media error", session.Socket.CloseStatusDescription);
+        Assert.Contains(_host.Logs, line => line.Contains("video pipeline failed", StringComparison.Ordinal));
+        await WaitUntil(() => _host.Coordinator.ActiveSession is null);
+        Assert.NotNull(_host.Coordinator.RememberedDeviceExpiresAt); // not the glasses' fault
+    }
+
+    [Fact]
     public async Task A_made_up_device_token_gets_the_generic_failure()
     {
         using var session = await _host.ConnectAsync("/ws/session");

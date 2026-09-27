@@ -106,7 +106,7 @@ public sealed class ControlSession
 
             _lastInputTimestamp = _lastMessageTimestamp = _s.Time.GetTimestamp();
             var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
-            var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
+            var streaming = StreamAsync(peer, encoder, controller, ct);
             var watching = IdleWatchAsync(ct);
 
             var finished = await Task.WhenAny(receiving, streaming, watching);
@@ -121,6 +121,10 @@ public sealed class ControlSession
             {
                 closeReason = await watching;
             }
+            else if (finished == streaming && await ResultOrNull(streaming) is { } mediaError)
+            {
+                closeReason = mediaError;
+            }
 
             SafeCancel(cts);
             await Task.WhenAll(Swallow(receiving), Swallow(streaming), Swallow(watching));
@@ -128,6 +132,13 @@ public sealed class ControlSession
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
         {
             // Disconnect, terminate or limit: fall through to close.
+        }
+        catch (Exception ex)
+        {
+            // A bug, not the glasses: say so in the log with the session, and close cleanly.
+            _s.Logger.LogError(ex, "Session {Session} failed", _lease.Id);
+            closeStatus = WebSocketCloseStatus.InternalServerError;
+            closeReason = "server error";
         }
         finally
         {
@@ -140,6 +151,26 @@ public sealed class ControlSession
             _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?> { ["event"] = "end", ["reason"] = closeReason });
             await _io.CloseQuietlyAsync(closeStatus, closeReason);
             _s.Logger.LogInformation("Session {Session} closed: {Reason}", _lease.Id, closeReason);
+        }
+    }
+
+    /// <summary>
+    /// The frame pump. Returns "media error" (logged with the session) when capture, encoding or
+    /// sending throws, e.g. a Media Foundation failure, so the session ends with a reason the
+    /// glasses and the stats log can show instead of looking like a dropped connection.
+    /// </summary>
+    private async Task<string?> StreamAsync(IMediaPeer peer, IFrameEncoder encoder, InputController controller,
+        CancellationToken ct)
+    {
+        try
+        {
+            await _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
+            return null;
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or WebSocketException or ObjectDisposedException))
+        {
+            _s.Logger.LogError(ex, "Session {Session}: the video pipeline failed; closing", _lease.Id);
+            return "media error";
         }
     }
 

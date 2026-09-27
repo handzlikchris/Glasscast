@@ -96,8 +96,8 @@ public sealed class MfH264Encoder : IFrameEncoder
 
         if (_keyFrameRequested && _codecApi is not null)
         {
-            object one = 1u;
-            _codecApi.SetValue(ForceKeyFrameApi, ref one);
+            // Like the other settings, never fatal: without it the GOP still brings a keyframe.
+            TrySet(ForceKeyFrameApi, 1u);
             _keyFrameRequested = false;
         }
 
