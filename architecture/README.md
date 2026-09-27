@@ -30,7 +30,7 @@ client-web (React)       --HTTPS/WSS :443-->  Caddy :8443 (TLS, path allowlist)
     rtc.ts (receive-only video + audio)                  InputController -> SendInput
          ^                                               FramePump -> GDI capture -> H.264
          |                                                 -> H264Rtp -> RtpPacer -> SIPSorcery
-         |                                               AudioPump -> WASAPI loopback -> Opus -> SIPSorcery
+         |                                               AudioPump -> process loopback -> Opus -> SIPSorcery
          +------------- UDP 50000 (SRTP, port forward) <------------------------+
                                                      WinForms UI thread: TrayApp, ApprovePopup,
                                                      SessionBanner, CastFrame

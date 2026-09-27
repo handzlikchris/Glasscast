@@ -29,7 +29,7 @@ or (for 24 h after such an approval) the **device token** of the glasses that we
 | Server | .NET 10 (`net10.0-windows`, SDK pinned in `global.json`), ASP.NET Core + WinForms, one process as the logged-in user |
 | WebRTC | SIPSorcery 10.0.16, send-only video, fixed UDP port, no STUN/TURN |
 | Video | H.264 via Windows Media Foundation software encoder (Vortice.MediaFoundation 3.8.3); VP8 (libvpx via SIPSorceryMedia.Encoders) fallback |
-| Audio | WASAPI loopback (NAudio.Wasapi 2.2.1) → Opus (Concentus, via SIPSorcery) on a second track, same port |
+| Audio | WASAPI process loopback (before the PC's volume; endpoint loopback fallback, NAudio.Wasapi 2.2.1) → Opus (Concentus, via SIPSorcery) on a second track, same port; Web Audio playback on the glasses |
 | Capture / input | GDI `CopyFromScreen`; `SendInput` (P/Invoke); window switching via EnumWindows/SetWindowPos |
 | Client | React 19, Vite 8 (Rolldown), TypeScript 7 (native `tsc`), Vitest 4 |
 | Proxy | Caddy 2.11 (stock) terminates TLS, Let's Encrypt via TLS-ALPN |
@@ -56,7 +56,7 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
                         StatsLog (daily JSONL of glasses + PC media figures); audio: AudioPump,
                         AudioTimeline, OpusAudioEncoder, SdpStreams (separate msids)
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
-                        LoopbackAudioCapture (WASAPI), NativeMethods
+                        ProcessLoopbackCapture + LoopbackAudioCapture (WASAPI), NativeMethods
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
                         around the cast area on the PC monitor), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
@@ -65,6 +65,7 @@ client-web/             glasses client (600×600)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
   src/rtc.ts            receive-only RTCPeerConnection (video + audio elements) + stats
   src/audio.ts          ♪ setting (localStorage), stereo=1 answer fix-up, V/A bandwidth label
+  src/audioOutput.ts    plays the PC's sound through Web Audio (a muted <audio> keeps it flowing)
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
@@ -158,8 +159,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    Frames are always 600×600 with the source letterboxed.
 7. **Audio** (`architecture/audio.md`): with `Audio:Enabled` (default) the offer also carries a
    send-only Opus track (stereo, FEC, 40 kbit/s), bundled on port 50000. `AudioPump` (own thread)
-   captures the default output device by WASAPI loopback and sends 20 ms packets straight out
-   (not through the pacer). Off until the glasses' `setAudio`; off = nothing captured or sent.
+   captures every app's sound by WASAPI **process loopback** (before the PC's volume and mute:
+   loudness is set on the glasses) and sends 20 ms packets straight out (not through the pacer). Off until the glasses' `setAudio`; off = nothing captured or sent.
 8. App shortcuts: `Apps:Shortcuts` in `appsettings.Local.json` (name + process and/or window-title
    text). `switchApp` brings that app's most recent window to the front and fits its visible frame
    to the cast area (`Win32WindowSwitcher`, compensating for invisible resize borders).
@@ -195,8 +196,10 @@ tight padding, check a screenshot when adding buttons). Model in
   `lifted` is the default look.
 - **♪ the PC's sound** (only when `hello.audio`): on by default, kept in localStorage. Off mutes
   at once and stops the PC capturing and sending (bandwidth back to the video); never turned
-  off automatically (user's choice, 2026-09-27). `♪ tap`: the browser refused to start sound
-  without a gesture (after a reload); the next pinch or swipe starts it.
+  off automatically (user's choice, 2026-09-27). The label is always just `♪` (a wider one
+  broke the bar): off = no highlight; warning colour = the browser waits for a gesture before
+  playing (after a reload), and the next pinch or swipe starts it. Full level whatever the PC's
+  volume; set the loudness on the glasses.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
   `live (local)` / `live (remote)` says whether the video comes over the LAN or the internet;
   `V n · A n kbps` what video and audio use (payload received; `A off` with ♪ off).
@@ -351,6 +354,9 @@ tight padding, check a screenshot when adding buttons). Model in
   dropped every later packet (video frozen for good, ICE fine). `SentPackets` only resends
   packets of the current epoch; every packet 65535 must be encrypted exactly once, so never skip
   a sequence number without sending it. The e2e harness starts streams at 65495 to cross a wrap.
+- **Audio capture follows the PC's volume** with endpoint (default-device) loopback, so the
+  glasses heard next to nothing at 22 %: use process loopback (`ProcessLoopbackCapture`), which
+  records before the master volume and mute. NAudio implements it internally only.
 - **Audio (Opus/WebRTC):** Concentus has no DTX in general-audio (CELT) mode, and plain gaps
   in silence were concealed as loss by Chrome (~400 ms/s "concealed"); the pump sends a 1-byte
   header-only packet when silence starts and every 400 ms instead, as WebRTC does. Chrome decodes
@@ -434,9 +440,10 @@ tight padding, check a screenshot when adding buttons). Model in
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.
-- **Audio (2026-09-27):** built and passing in the harness (tone, toggle, wrap, remembered
-  setting) and loopback checked on this PC. **Not yet tried on the glasses**: whether the WebView
-  plays WebRTC audio and through which speakers, `♪ tap` after a reload.
+- **Audio (2026-09-27):** works on the glasses: the PC's sound plays through their speakers
+  (Web Audio), with their own volume. The first try sounded silent because endpoint loopback
+  followed the PC's low volume; process loopback fixed that. Unverified: the gesture fallback
+  after a reload.
 - Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
   toggle (user reported it not working before the always-visible bar; no readout yet).
 - Pending: external port scan, decode cost on the glasses, pinch-drag
