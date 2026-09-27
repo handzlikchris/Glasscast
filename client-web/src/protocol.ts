@@ -50,6 +50,9 @@ export interface PcMediaStats {
   captureMaxMs: number;
   encodeMs: number;
   encodeMaxMs: number;
+  /** Wait in the PC's pacer until a frame's last packet went out. */
+  sendMs: number;
+  sendMaxMs: number;
   kbps: number;
   keyframes: number;
   /** Keyframe requests (PLI/FIR) the PC received from the glasses. */
@@ -186,6 +189,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         keyframes: n('keyframes'),
         // Older servers don't send it.
         keyframeRequests: isNumber(data.keyframeRequests) ? data.keyframeRequests : 0,
+        sendMs: isNumber(data.sendMs) ? data.sendMs : 0,
+        sendMaxMs: isNumber(data.sendMaxMs) ? data.sendMaxMs : 0,
         frames,
       };
     }
