@@ -41,6 +41,9 @@ public interface IMediaPeer : IDisposable
     /// Returns the RTP timestamp the frame went out with, so the glasses can match it to its capture time.
     /// </summary>
     uint SendFrame(byte[] encoded, uint durationRtpUnits);
+
+    /// <summary>How long frames waited to go out (pacing) since the last call.</summary>
+    SendDelay TakeSendDelay();
 }
 
 public interface IMediaPeerFactory

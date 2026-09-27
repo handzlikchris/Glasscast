@@ -57,6 +57,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private readonly RTCPeerConnection _peer;
     private readonly MediaOptions _options;
     private readonly ILogger _logger;
+    private readonly bool _h264;
+    private readonly RtpPacer _pacer;
+    private uint? _rtpTimestamp;
+    private int _payloadType = -1;
     private int _closed;
     private int _compoundRequests;
     private int _standaloneRequests;
@@ -94,10 +98,12 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         }
         _peer = new RTCPeerConnection(config, bindPort: options.MediaPort);
 
-        var format = codec == "H264"
+        _h264 = codec == "H264";
+        var format = _h264
             ? new VideoFormat(VideoCodecsEnum.H264, 102, 90000, "packetization-mode=1;profile-level-id=42e01f")
             : new VideoFormat(VideoCodecsEnum.VP8, 96);
         _peer.addTrack(new MediaStreamTrack(format, MediaStreamStatusEnum.SendOnly));
+        _pacer = new RtpPacer(SendPacket, options.PacingKbps, TimeSpan.FromMilliseconds(options.MaxPacingDelayMs), logger);
 
         // Lost packets aren't resent, so a keyframe is the only way the glasses recover a broken
         // picture; they ask with PLI (or FIR) and we answer on the next frame. The request arrives
@@ -192,14 +198,48 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
     public uint SendFrame(byte[] encoded, uint durationRtpUnits)
     {
-        // SendVideo stamps the frame with the track's current timestamp, then advances it.
-        var rtpTimestamp = _peer.VideoLocalTrack?.Timestamp ?? 0;
+        if (!_h264)
+        {
+            // VP8 (fallback only) goes through SIPSorcery unpaced. SendVideo stamps the frame with
+            // the track's current timestamp, then advances it.
+            var vp8Timestamp = _peer.VideoLocalTrack?.Timestamp ?? 0;
+            if (_framesToDrop > 0 && Interlocked.Decrement(ref _framesToDrop) >= 0)
+            {
+                return vp8Timestamp; // dev/test only, see DropFirstFrames
+            }
+            _peer.SendVideo(durationRtpUnits, encoded);
+            return vp8Timestamp;
+        }
+
+        // H.264 is packetized here and paced (RtpPacer). The RTP clock starts where SIPSorcery's
+        // track would have (a random value) and advances by each frame's duration.
+        var rtpTimestamp = _rtpTimestamp ??= _peer.VideoLocalTrack?.Timestamp ?? 0;
+        _rtpTimestamp = rtpTimestamp + durationRtpUnits;
         if (_framesToDrop > 0 && Interlocked.Decrement(ref _framesToDrop) >= 0)
         {
             return rtpTimestamp; // dev/test only, see DropFirstFrames
         }
-        _peer.SendVideo(durationRtpUnits, encoded);
+        _pacer.Enqueue(H264Rtp.Packetize(encoded, rtpTimestamp));
         return rtpTimestamp;
+    }
+
+    public SendDelay TakeSendDelay() => _pacer.TakeSendDelay();
+
+    /// <summary>On the pacer's thread: one packet out through SRTP, like SIPSorcery's SendVideo.</summary>
+    private void SendPacket(RtpPacket packet)
+    {
+        var stream = _peer.VideoStream;
+        if (stream is null || Volatile.Read(ref _closed) == 1)
+        {
+            return;
+        }
+        if (_payloadType < 0)
+        {
+            // The payload type the glasses accepted for H.264 in their answer.
+            _payloadType = stream.GetSendingFormat().ID;
+        }
+        stream.SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
+        stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType);
     }
 
     private int _framesToDrop;
@@ -221,6 +261,7 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
     public void Dispose()
     {
+        _pacer.Dispose();
         _peer.close();
         RaiseClosed();
     }

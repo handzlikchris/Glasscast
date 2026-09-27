@@ -8,8 +8,9 @@ namespace GlassesRemote.Server.Media;
 public readonly record struct FrameTiming(uint Rtp, long CapturedAtUnixMs, int Bytes);
 
 /// <summary>
-/// What the pump sent over about a second. Capture and encode times are per frame; the frame
-/// list lets the glasses work out capture-to-display latency for each frame they show.
+/// What the pump sent over about a second. Capture and encode times are per frame, as is send:
+/// the wait in the pacer until the frame's last packet went out. The frame list lets the
+/// glasses work out capture-to-display latency for each frame they show.
 /// </summary>
 public sealed record MediaStats(
     double Fps,
@@ -17,6 +18,8 @@ public sealed record MediaStats(
     double CaptureMaxMs,
     double EncodeMs,
     double EncodeMaxMs,
+    double SendMs,
+    double SendMaxMs,
     double Kbps,
     int Keyframes,
     int KeyframeRequests,
@@ -118,6 +121,7 @@ public sealed class FramePump
                 if (_time.GetElapsedTime(window.Started, now) >= TimeSpan.FromSeconds(1))
                 {
                     window.KeyframeRequests = Interlocked.Exchange(ref requests, 0);
+                    window.Send = peer.TakeSendDelay();
                     onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
                     window = new StatsWindow(now);
                 }
@@ -144,6 +148,8 @@ public sealed class FramePump
 
         public int KeyframeRequests { get; set; }
 
+        public SendDelay Send { get; set; }
+
         public void Add(FrameTiming frame, double captureMs, double encodeMs)
         {
             _frames.Add(frame);
@@ -163,6 +169,8 @@ public sealed class FramePump
                 CaptureMaxMs: _captureMaxMs,
                 EncodeMs: _encodeMs / count,
                 EncodeMaxMs: _encodeMaxMs,
+                SendMs: Send.AvgMs,
+                SendMaxMs: Send.MaxMs,
                 Kbps: bytes * 8 / elapsed.TotalSeconds / 1000,
                 Keyframes: Keyframes,
                 KeyframeRequests: KeyframeRequests,

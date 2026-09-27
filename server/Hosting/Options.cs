@@ -72,6 +72,15 @@ public sealed class MediaOptions
     /// </summary>
     public int RequestedKeyframeMinGapMs { get; set; } = 500;
 
+    /// <summary>
+    /// H.264 packets go out at this rate at least instead of a frame at a time (see RtpPacer):
+    /// bursts of a keyframe's 35-75 packets get dropped on mobile links. 0 = no pacing.
+    /// </summary>
+    public int PacingKbps { get; set; } = 6000;
+
+    /// <summary>Pacing speeds up so nothing waits longer than this to be sent.</summary>
+    public int MaxPacingDelayMs { get; set; } = 150;
+
     public int FrameWidth { get; set; } = 600;
 
     public int FrameHeight { get; set; } = 600;
