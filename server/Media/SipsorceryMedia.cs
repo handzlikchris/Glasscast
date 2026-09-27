@@ -39,7 +39,7 @@ public sealed class FrameEncoderFactory(IOptions<MediaOptions> options, ILogger<
         {
             if (_h264Available.Value)
             {
-                return new MfH264Encoder(media.TargetKbps, media.FramesPerSecond);
+                return new MfH264Encoder(media.TargetKbps, media.FramesPerSecond, media.KeyframeIntervalSeconds);
             }
             logger.LogWarning("No H.264 encoder on this PC (Windows N edition?); falling back to VP8");
         }

@@ -37,6 +37,7 @@ public sealed class MfH264Encoder : IFrameEncoder
 
     private readonly int _fps;
     private readonly int _kbps;
+    private readonly int _gopFrames;
     private readonly long _frameDuration;
     private IMFTransform? _transform;
     private ICodecAPI? _codecApi;
@@ -47,10 +48,13 @@ public sealed class MfH264Encoder : IFrameEncoder
     private long _frameIndex;
     private bool _keyFrameRequested = true;
 
-    public MfH264Encoder(int targetKbps, int framesPerSecond)
+    /// <param name="keyframeIntervalSeconds">The encoder's own keyframe interval (GOP), which also
+    /// applies when the frame pump doesn't force one.</param>
+    public MfH264Encoder(int targetKbps, int framesPerSecond, int keyframeIntervalSeconds = 2)
     {
         _kbps = Math.Max(200, targetKbps);
         _fps = Math.Clamp(framesPerSecond, 1, 60);
+        _gopFrames = _fps * Math.Max(1, keyframeIntervalSeconds);
         _frameDuration = 10_000_000L / _fps; // 100 ns units
         _ = MediaFoundationStarted.Value;
     }
@@ -178,7 +182,7 @@ public sealed class MfH264Encoder : IFrameEncoder
             TrySet(LowLatencyMode, true);
             TrySet(RateControlMode, RateControlCbr);
             TrySet(MeanBitRate, (uint)(_kbps * 1000));
-            TrySet(GopSize, (uint)(_fps * 2));
+            TrySet(GopSize, (uint)_gopFrames);
             TrySet(BPictureCount, 0u);
         }
 

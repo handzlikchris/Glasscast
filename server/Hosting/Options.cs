@@ -63,7 +63,10 @@ public sealed class MediaOptions
 
     public int TargetKbps { get; set; } = 2500;
 
-    /// <summary>Periodic keyframes let the stream recover quickly from packet loss.</summary>
+    /// <summary>
+    /// Periodic keyframes let the stream recover quickly from packet loss. Also the H.264 encoder's
+    /// own keyframe interval (GOP).
+    /// </summary>
     public int KeyframeIntervalSeconds { get; set; } = 2;
 
     /// <summary>
