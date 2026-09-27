@@ -3,7 +3,8 @@
 //   1. pairing requests are approved automatically;
 //   2. input and app switches are recorded, never applied to the real desktop.
 // It can also lose the start of the next session's video stream (POST /__harness/lose-stream-start)
-// or one packet of the current one (POST /__harness/lose-packet).
+// or one packet of the current one (POST /__harness/lose-packet, resent when NACKed;
+// /__harness/lose-packet-for-good, never resent).
 // It listens on 127.0.0.1:5081 only and must never be deployed.
 using System.Collections.Concurrent;
 using GlassesRemote.Server.Desktop;
@@ -60,8 +61,10 @@ app.MapGet("/__harness/region", () => app.Services.GetRequiredService<RegionStor
 app.MapPost("/__harness/terminate", () => coordinator.TerminateActiveSession());
 // The next session's first frames (its first keyframe included) never reach the browser.
 app.MapPost("/__harness/lose-stream-start", () => app.Services.GetRequiredService<HarnessPeers>().DropStartOfNext = true);
-// One packet of the current stream's next frame never reaches the browser.
-app.MapPost("/__harness/lose-packet", () => app.Services.GetRequiredService<HarnessPeers>().LoseOnePacket());
+// The current stream's next packet doesn't reach the browser (but is resent if NACKed).
+app.MapPost("/__harness/lose-packet", () => app.Services.GetRequiredService<HarnessPeers>().LoseOnePacket(forGood: false));
+// The current stream's next packet is lost for good: only a keyframe repairs the picture.
+app.MapPost("/__harness/lose-packet-for-good", () => app.Services.GetRequiredService<HarnessPeers>().LoseOnePacket(forGood: true));
 
 app.Run();
 
@@ -99,7 +102,7 @@ sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers
 
     public bool DropStartOfNext { get; set; }
 
-    public void LoseOnePacket() => _latest?.LoseOnePacket();
+    public void LoseOnePacket(bool forGood) => _latest?.LoseOnePacket(forGood);
 
     public IMediaPeer Create(string codec)
     {

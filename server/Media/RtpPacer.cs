@@ -29,6 +29,7 @@ public sealed class RtpPacer : IDisposable
     private readonly double _minBitsPerSecond;
     private readonly double _maxDelaySeconds;
     private readonly Queue<Entry> _queue = new();
+    private readonly Queue<Entry> _urgent = new();
     private readonly Lock _lock = new();
     private readonly SemaphoreSlim _available = new(0);
     private readonly Thread? _thread;
@@ -85,6 +86,39 @@ public sealed class RtpPacer : IDisposable
         _available.Release(frame.Count);
     }
 
+    /// <summary>
+    /// Queues packets ahead of any frame not yet sent (retransmissions: the glasses are waiting
+    /// for them). Paced like the rest; without pacing they go out at once.
+    /// </summary>
+    public void EnqueueUrgent(IReadOnlyList<RtpPacket> packets)
+    {
+        if (packets.Count == 0 || _stopped)
+        {
+            return;
+        }
+
+        if (_thread is null)
+        {
+            foreach (var packet in packets)
+            {
+                SendSafely(packet);
+            }
+            return;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        lock (_lock)
+        {
+            _queuedBytes += packets.Sum(p => (long)p.Payload.Length);
+            _bitsPerSecond = Math.Max(_minBitsPerSecond, _queuedBytes * 8 / _maxDelaySeconds);
+            foreach (var packet in packets)
+            {
+                _urgent.Enqueue(new Entry(packet, now, EndsFrame: false));
+            }
+        }
+        _available.Release(packets.Count);
+    }
+
     /// <summary>Frame delays since the last call.</summary>
     public SendDelay TakeSendDelay()
     {
@@ -110,18 +144,19 @@ public sealed class RtpPacer : IDisposable
                 return;
             }
 
-            Entry entry;
-            double bitsPerSecond;
-            lock (_lock)
-            {
-                entry = _queue.Dequeue();
-                bitsPerSecond = _bitsPerSecond;
-            }
-
+            // Wait for the slot first, then pick the packet: an urgent one queued meanwhile goes next.
             var wait = Stopwatch.GetElapsedTime(Stopwatch.GetTimestamp(), nextAt);
             if (wait >= MinSleep)
             {
                 sleep.Sleep(wait);
+            }
+
+            Entry entry;
+            double bitsPerSecond;
+            lock (_lock)
+            {
+                entry = _urgent.Count > 0 ? _urgent.Dequeue() : _queue.Dequeue();
+                bitsPerSecond = _bitsPerSecond;
             }
 
             SendSafely(entry.Packet);

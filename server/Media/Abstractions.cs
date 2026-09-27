@@ -42,9 +42,15 @@ public interface IMediaPeer : IDisposable
     /// </summary>
     uint SendFrame(byte[] encoded, uint durationRtpUnits);
 
-    /// <summary>How long frames waited to go out (pacing) since the last call.</summary>
-    SendDelay TakeSendDelay();
+    /// <summary>Pacing delay and retransmissions since the last call.</summary>
+    SendStats TakeSendStats();
 }
+
+/// <summary>
+/// Since the last call: how long frames waited in the pacer (handed over → last packet sent),
+/// how many packets the glasses NACKed, and how many of those were sent again.
+/// </summary>
+public readonly record struct SendStats(double AvgMs, double MaxMs, int Nacked, int Resent);
 
 public interface IMediaPeerFactory
 {

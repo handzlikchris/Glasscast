@@ -9,7 +9,8 @@ public readonly record struct FrameTiming(uint Rtp, long CapturedAtUnixMs, int B
 
 /// <summary>
 /// What the pump sent over about a second. Capture and encode times are per frame, as is send:
-/// the wait in the pacer until the frame's last packet went out. The frame list lets the
+/// the wait in the pacer until the frame's last packet went out; Nacked/Resent count packets the
+/// glasses reported lost and those sent again. The frame list lets the
 /// glasses work out capture-to-display latency for each frame they show.
 /// </summary>
 public sealed record MediaStats(
@@ -20,6 +21,8 @@ public sealed record MediaStats(
     double EncodeMaxMs,
     double SendMs,
     double SendMaxMs,
+    int Nacked,
+    int Resent,
     double Kbps,
     int Keyframes,
     int KeyframeRequests,
@@ -121,7 +124,7 @@ public sealed class FramePump
                 if (_time.GetElapsedTime(window.Started, now) >= TimeSpan.FromSeconds(1))
                 {
                     window.KeyframeRequests = Interlocked.Exchange(ref requests, 0);
-                    window.Send = peer.TakeSendDelay();
+                    window.Send = peer.TakeSendStats();
                     onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
                     window = new StatsWindow(now);
                 }
@@ -148,7 +151,7 @@ public sealed class FramePump
 
         public int KeyframeRequests { get; set; }
 
-        public SendDelay Send { get; set; }
+        public SendStats Send { get; set; }
 
         public void Add(FrameTiming frame, double captureMs, double encodeMs)
         {
@@ -171,6 +174,8 @@ public sealed class FramePump
                 EncodeMaxMs: _encodeMaxMs,
                 SendMs: Send.AvgMs,
                 SendMaxMs: Send.MaxMs,
+                Nacked: Send.Nacked,
+                Resent: Send.Resent,
                 Kbps: bytes * 8 / elapsed.TotalSeconds / 1000,
                 Keyframes: Keyframes,
                 KeyframeRequests: KeyframeRequests,

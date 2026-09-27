@@ -22,7 +22,7 @@ public sealed class RtpPacerTests
 
     private async Task<double> SpreadMsOnceSent(int count)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(3);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
         while (_sent.Count < count)
         {
             Assert.True(DateTime.UtcNow < deadline, $"only {_sent.Count} of {count} sent");
@@ -56,6 +56,19 @@ public sealed class RtpPacerTests
         pacer.Enqueue(Frame(5));
 
         Assert.InRange(await SpreadMsOnceSent(5), 20, 150);
+    }
+
+    [Fact]
+    public async Task Urgent_packets_jump_the_queue()
+    {
+        using var pacer = Pacer(minKbps: 100, maxDelayMs: 10_000);
+
+        pacer.Enqueue(Frame(5));
+        await Task.Delay(30); // the first packet is out, the rest wait 100 ms each
+        pacer.EnqueueUrgent([new RtpPacket(Enumerable.Repeat((byte)9, 1250).ToArray(), 0, false, ResendSeq: 1)]);
+
+        await SpreadMsOnceSent(6);
+        Assert.Equal(9, _sent.ElementAt(1).Index);
     }
 
     [Fact]

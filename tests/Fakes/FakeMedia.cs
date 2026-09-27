@@ -42,7 +42,7 @@ public sealed class FakePeer : IMediaPeer
     public uint SendFrame(byte[] encoded, uint durationRtpUnits) =>
         (uint)(Interlocked.Increment(ref _frames) - 1) * durationRtpUnits;
 
-    public SendDelay TakeSendDelay() => new(1, 2);
+    public SendStats TakeSendStats() => new(1, 2, 3, 2);
 
     public void Dispose()
     {

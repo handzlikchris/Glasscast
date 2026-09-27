@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using GlassesRemote.Server.Hosting;
 using Microsoft.Extensions.Options;
@@ -59,11 +60,15 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private readonly ILogger _logger;
     private readonly bool _h264;
     private readonly RtpPacer _pacer;
+    private readonly SentPackets _sent = new();
     private uint? _rtpTimestamp;
     private int _payloadType = -1;
     private int _closed;
     private int _compoundRequests;
     private int _standaloneRequests;
+    private int _nacked;
+    private int _resent;
+    private int _nackReadLogged;
 
     /// <summary>
     /// An RTCP packet whose first part is a payload-specific feedback (PT 206) PLI (FMT 1) or FIR
@@ -105,9 +110,9 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         _peer.addTrack(new MediaStreamTrack(format, MediaStreamStatusEnum.SendOnly));
         _pacer = new RtpPacer(SendPacket, options.PacingKbps, TimeSpan.FromMilliseconds(options.MaxPacingDelayMs), logger);
 
-        // Lost packets aren't resent, so a keyframe is the only way the glasses recover a broken
-        // picture; they ask with PLI (or FIR) and we answer on the next frame. The request arrives
-        // in one of two shapes:
+        // A lost packet the glasses NACK is sent again (OnNack). When that doesn't do (VP8, or too
+        // late), they ask for a keyframe with PLI (or FIR) and we answer on the next frame. The
+        // request arrives in one of two shapes:
         // - inside a compound report (receiver report first): SIPSorcery decrypts and parses it and
         //   raises OnReceiveReport. It keeps only the report's last feedback item, so a PLI followed
         //   by a REMB is lost; with rtcp-rsize offered (SdpFeedback) Chrome no longer sends PLIs this way;
@@ -130,6 +135,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             if (IsStandaloneKeyframeRequest(packet))
             {
                 OnKeyframeRequest("on its own", ref _standaloneRequests);
+            }
+            else if (RtcpNack.IsStandalone(packet))
+            {
+                OnNack(packet);
             }
         };
 
@@ -164,7 +173,7 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             _logger.LogWarning("No Media:PublicIp configured and LAN candidates are off: the glasses have no address to reach");
         }
-        return SdpFeedback.AddKeyframeRequests(
+        return SdpFeedback.AddFeedback(
             SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates));
     }
 
@@ -220,17 +229,55 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             return rtpTimestamp; // dev/test only, see DropFirstFrames
         }
-        var packets = H264Rtp.Packetize(encoded, rtpTimestamp);
-        if (packets.Count > 0 && Interlocked.Exchange(ref _losePacket, 0) == 1)
-        {
-            var lost = Math.Min(1, packets.Count - 1);
-            packets[lost] = packets[lost] with { Payload = [] }; // dev/test only, see LoseOnePacket
-        }
-        _pacer.Enqueue(packets);
+        _pacer.Enqueue(H264Rtp.Packetize(encoded, rtpTimestamp));
         return rtpTimestamp;
     }
 
-    public SendDelay TakeSendDelay() => _pacer.TakeSendDelay();
+    public SendStats TakeSendStats()
+    {
+        var delay = _pacer.TakeSendDelay();
+        return new SendStats(delay.AvgMs, delay.MaxMs, Interlocked.Exchange(ref _nacked, 0), Interlocked.Exchange(ref _resent, 0));
+    }
+
+    /// <summary>
+    /// On a network thread: the glasses list packets they're missing; the ones still in
+    /// <see cref="_sent"/> go out again ahead of new frames. The list (NACK FCI) is encrypted
+    /// (SRTCP). SIPSorcery has already decrypted the channel's buffer in place by the time this
+    /// handler runs (it subscribed first); should that ever change, a copy is decrypted here.
+    /// </summary>
+    private void OnNack(byte[] packet)
+    {
+        var stream = _peer.VideoStream;
+        if (!_h264 || stream?.LocalTrack is not { } track)
+        {
+            return;
+        }
+
+        var readable = packet;
+        var decrypted = RtcpNack.IsReadable(packet, track.Ssrc);
+        if (Interlocked.Exchange(ref _nackReadLogged, 1) == 0)
+        {
+            _logger.LogInformation("NACKs from the glasses: {How}", decrypted ? "already decrypted" : "decrypting a copy");
+        }
+        if (!decrypted)
+        {
+            var copy = packet.ToArray();
+            var unprotect = stream.GetSecurityContext()?.UnprotectRtcpPacket;
+            if (unprotect is null || unprotect(copy, copy.Length, out var length) != 0)
+            {
+                _logger.LogDebug("Couldn't decrypt a NACK from the glasses");
+                return;
+            }
+            readable = copy.AsSpan(0, length).ToArray();
+        }
+
+        var lost = new List<ushort>();
+        RtcpNack.ReadLost(readable, track.Ssrc, lost);
+        var resend = _sent.TakeForResend(lost, Stopwatch.GetTimestamp());
+        Interlocked.Add(ref _nacked, lost.Count);
+        Interlocked.Add(ref _resent, resend.Count);
+        _pacer.EnqueueUrgent(resend);
+    }
 
     /// <summary>On the pacer's thread: one packet out through SRTP, like SIPSorcery's SendVideo.</summary>
     private void SendPacket(RtpPacket packet)
@@ -240,10 +287,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             return;
         }
-        if (packet.Payload.Length == 0)
+        if (stream is not { LocalTrack: { } track })
         {
-            // Lost on purpose (LoseOnePacket): its sequence number is used up, so the glasses see a gap.
-            stream.LocalTrack?.GetNextSeqNum();
             return;
         }
         if (_payloadType < 0)
@@ -251,8 +296,24 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             // The payload type the glasses accepted for H.264 in their answer.
             _payloadType = stream.GetSendingFormat().ID;
         }
+
+        // A resend keeps the packet's sequence number (plain NACK, no RTX stream); a new packet
+        // takes the next one and is kept for a while in case it's NACKed.
+        var seq = packet.ResendSeq ?? track.GetNextSeqNum();
+        if (packet.ResendSeq is null)
+        {
+            var lose = Interlocked.Exchange(ref _losePacket, 0);
+            if (lose != 2)
+            {
+                _sent.Add(seq, packet, Stopwatch.GetTimestamp());
+            }
+            if (lose != 0)
+            {
+                return; // dev/test only, see LoseOnePacket
+            }
+        }
         stream.SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
-        stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType);
+        stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType, seq);
     }
 
     private int _framesToDrop;
@@ -267,11 +328,11 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private int _losePacket;
 
     /// <summary>
-    /// DEV/TEST ONLY (e2e harness): the next H.264 frame loses a packet (its second, if it has more
-    /// than one), like a packet dropped on the way mid-stream. The glasses can't decode the frame,
-    /// or those after it, and ask for a keyframe.
+    /// DEV/TEST ONLY (e2e harness): the next H.264 packet isn't sent, like one dropped on the way
+    /// mid-stream; its sequence number is used, so the glasses see the gap and NACK it. With
+    /// <paramref name="forGood"/> it can't be resent either, so they end up asking for a keyframe.
     /// </summary>
-    internal void LoseOnePacket() => _losePacket = 1;
+    internal void LoseOnePacket(bool forGood) => _losePacket = forGood ? 2 : 1;
 
     private void RaiseClosed()
     {

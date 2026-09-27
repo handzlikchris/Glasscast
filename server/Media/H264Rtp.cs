@@ -2,8 +2,11 @@ using SIPSorcery.Net;
 
 namespace GlassesRemote.Server.Media;
 
-/// <summary>One RTP packet of a video frame, before SRTP: payload, frame timestamp, marker bit.</summary>
-public readonly record struct RtpPacket(byte[] Payload, uint Timestamp, bool Marker);
+/// <summary>
+/// One RTP packet of a video frame, before SRTP: payload, frame timestamp, marker bit. A packet
+/// sent again because the glasses NACKed it carries its original sequence number.
+/// </summary>
+public readonly record struct RtpPacket(byte[] Payload, uint Timestamp, bool Marker, ushort? ResendSeq = null);
 
 /// <summary>
 /// Splits an H.264 access unit (Annex B) into RTP payloads (RFC 6184, packetization-mode 1)
