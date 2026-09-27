@@ -136,9 +136,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names),
    then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
    `Media:PublicIp`:`MediaPort` as a host candidate; the browser's checks come in through the port
-   forward and SIPSorcery learns it as peer-reflexive. Glasses at home (their control socket
-   comes from `PublicIp`) also get `BindAddress`, ranked first, so the video can stay on the LAN
-   (`Media:LanWhenHome`, `MediaPaths`).
+   forward and SIPSorcery learns it as peer-reflexive. The offer also carries `BindAddress`,
+   ranked first, so the video stays on the LAN when the glasses can reach it (`Media:OfferLan`,
+   `Always` by default: the phone relaying the glasses may use mobile data even at home).
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
    (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`

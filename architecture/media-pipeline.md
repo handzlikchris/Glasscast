@@ -71,13 +71,14 @@ own decrypt, so it matters which one sees a packet first (see the review's SRTCP
 - The offer carries one host candidate: the router's public IP and port 50000
   (`Media:PublicIp`, `MediaPort`, must be even). The browser's checks come in through the port
   forward and SIPSorcery learns the browser as peer-reflexive. No STUN/TURN.
-- **LAN path at home** (`Media:LanWhenHome`, on): glasses whose control socket comes from
-  `PublicIp` itself are behind this router, so their offer also carries `BindAddress:MediaPort`
-  (`lan1`, priority 2130706431) above the public one (`pub1`, 2130706175). The browser checks
+- **LAN path** (`Media:OfferLan`: `Always` by default, `Home`, `Never`): the offer also carries
+  `BindAddress:MediaPort` (`lan1`, priority 2130706431) above the public one (`pub1`,
+  2130706175). `Always` because the glasses' public address says little: they go out through
+  the phone, which used mobile data (187.15.x) while the glasses sat on the home Wi-Fi, so a
+  "home only" rule (session from `PublicIp`) never offered it. `Home` keeps that stricter rule. The browser checks
   the LAN address first; SIPSorcery (controlling) nominates the first pair that succeeds, so
   the video skips the router hairpin when it can and falls back to the public path when it
-  can't (glasses relayed by a phone on mobile data, a guest network). Away from home the LAN
-  address is never offered. `MediaPaths` holds the home and private-address checks; the
+  can't (glasses relayed by a phone on mobile data, a guest network). `MediaPaths` holds the home and private-address checks; the
   chosen path is logged ("Media path: … (LAN|internet)") and written as a `mediaPath` event.
 - `Media:BindAddress` pins the socket to the Ethernet adapter the router forwards to;
   without it, replies may leave through Wi-Fi and never connect (`ServerApp.WarnIfMultiHomed`).
@@ -92,7 +93,7 @@ own decrypt, so it matters which one sees a packet first (see the review's SRTCP
 `StartKbps` 1000, `KeyframeIntervalSeconds` 10, `RequestedKeyframeMinGapMs` 1500,
 `PacingKbps` 6000 (0 = no pacing), `MaxPacingDelayMs` 150, `FrameWidth/Height` 600,
 `LinkTestOnStart` + steps, `PublicIp`, `BindAddress`, `MediaPort`, `IncludeLanCandidates`,
-`LanWhenHome`.
+`OfferLan`.
 
 ## History worth knowing (why it is like this)
 

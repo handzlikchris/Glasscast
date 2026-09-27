@@ -355,19 +355,20 @@ public sealed class EndpointTests : IAsyncLifetime
         await WaitUntil(() => host.Coordinator.ActiveSession is null && host.CastArea.Current is null);
     }
 
-    // Glasses behind the router (at home) get the PC's LAN address in their offer; others don't.
-    // TestServer connections carry no remote address (IPAddress.None), so configuring that as the
-    // public IP stands in for glasses connecting from the router's own address.
+    // Media:OfferLan: Always offers the PC's LAN address to every session, Home only to glasses
+    // behind the router, Never to none. TestServer connections carry no remote address
+    // (IPAddress.None), so configuring that as the public IP stands in for glasses at home.
     [Theory]
-    [InlineData("255.255.255.255", true, true)]
-    [InlineData("203.0.113.45", true, false)]
-    [InlineData("255.255.255.255", false, false)]
-    public async Task Only_glasses_at_home_are_offered_the_lan_path(string publicIp, bool lanWhenHome, bool offered)
+    [InlineData("203.0.113.45", "Always", true)]
+    [InlineData("255.255.255.255", "Home", true)]
+    [InlineData("203.0.113.45", "Home", false)]
+    [InlineData("255.255.255.255", "Never", false)]
+    public async Task The_lan_path_is_offered_as_configured(string publicIp, string offerLan, bool offered)
     {
         await using var host = new TestServerHost(new()
         {
             ["Media:PublicIp"] = publicIp,
-            ["Media:LanWhenHome"] = lanWhenHome.ToString(),
+            ["Media:OfferLan"] = offerLan,
         });
         var token = await host.PairAsync();
         using var session = await host.StartSessionAsync(token);

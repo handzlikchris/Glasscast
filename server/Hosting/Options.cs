@@ -64,12 +64,17 @@ public sealed class MediaOptions
     public bool IncludeLanCandidates { get; set; }
 
     /// <summary>
-    /// Glasses connecting from <see cref="PublicIp"/> itself are behind this router (at home):
-    /// their offer also carries <see cref="BindAddress"/>:<see cref="MediaPort"/>, ranked above
-    /// the public address, so the video goes straight over the LAN when it can. Away from home
-    /// only the public address is offered, so the LAN address never leaves the house.
+    /// When the offer also carries <see cref="BindAddress"/>:<see cref="MediaPort"/>, ranked
+    /// above the public address, so the video goes straight over the LAN when the glasses can
+    /// reach it (and over the internet when they can't):
+    /// <see cref="LanOffer.Always"/> (default): every session. The glasses reach the internet
+    /// through the phone, which may use mobile data while sitting on the home Wi-Fi, so their
+    /// public address doesn't say whether the LAN is reachable; trying costs nothing.
+    /// <see cref="LanOffer.Home"/>: only sessions from <see cref="PublicIp"/> itself (behind
+    /// this router), so the LAN address never goes to devices elsewhere.
+    /// <see cref="LanOffer.Never"/>: internet only.
     /// </summary>
-    public bool LanWhenHome { get; set; } = true;
+    public LanOffer OfferLan { get; set; } = LanOffer.Always;
 
     /// <summary>"H264" (Windows Media Foundation, falls back to VP8 if unavailable) or "VP8".</summary>
     public string Codec { get; set; } = "H264";
@@ -125,4 +130,12 @@ public sealed class MediaOptions
     public int FrameWidth { get; set; } = 600;
 
     public int FrameHeight { get; set; } = 600;
+}
+
+/// <summary>Which sessions are offered the PC's LAN address for the video (<see cref="MediaOptions.OfferLan"/>).</summary>
+public enum LanOffer
+{
+    Always,
+    Home,
+    Never,
 }

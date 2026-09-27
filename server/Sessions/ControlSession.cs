@@ -84,10 +84,14 @@ public sealed class ControlSession
                 codec = encoder.Codec,
             }, ct);
 
-            // Glasses behind this router (at home) may reach the PC's LAN address: offer it first.
+            // The PC's LAN address first, if the glasses may reach it (Media:OfferLan).
             var media = _s.Media.Value;
-            var home = media.LanWhenHome
-                && MediaPaths.IsHome(_lease.RemoteAddress, IPAddress.TryParse(media.PublicIp, out var publicIp) ? publicIp : null);
+            var home = media.OfferLan switch
+            {
+                LanOffer.Always => true,
+                LanOffer.Home => MediaPaths.IsHome(_lease.RemoteAddress, IPAddress.TryParse(media.PublicIp, out var publicIp) ? publicIp : null),
+                _ => false,
+            };
             await _io.SendAsync(new { type = "rtcOffer", sdp = await peer.CreateOfferAsync(offerLan: home) }, ct);
 
             _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
