@@ -32,6 +32,8 @@ class InputService : AccessibilityService() {
         /** Long enough for views that only react to a press they can see (a very short one can be missed). */
         private const val TAP_MS = 100L
         private const val LONG_PRESS_MS = 700L
+        /** Nodes searched for a text field when none has input focus (a screen has a few hundred). */
+        private const val MAX_NODES = 1500
     }
 
     private var keepAwake: View? = null
@@ -107,15 +109,26 @@ class InputService : AccessibilityService() {
      * False when nothing editable has focus.
      */
     fun typeText(text: String): Boolean {
-        val node = focusedEditable() ?: return false
+        val node = editableTarget()
+        if (node == null) {
+            Log.i(TAG, "typeText: no text field on screen")
+            return false
+        }
         val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
         val (start, end) = selection(node, current.length)
         val updated = current.substring(0, start) + text + current.substring(end)
-        return setText(node, updated, start + text.length)
+        val ok = setText(node, updated, start + text.length)
+        // Lengths only: typed text never goes into the log.
+        Log.i(TAG, "typeText: ${text.length} chars into ${node.className} -> $ok")
+        return ok
     }
 
     fun key(key: KeyName): Boolean {
-        val node = focusedEditable() ?: return false
+        val node = editableTarget()
+        if (node == null) {
+            Log.i(TAG, "key $key: no text field on screen")
+            return false
+        }
         return when (key) {
             KeyName.ENTER -> node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
             KeyName.BACKSPACE -> {
@@ -178,8 +191,30 @@ class InputService : AccessibilityService() {
 
     private fun pointPath(x: Float, y: Float) = Path().apply { moveTo(x, y) }
 
-    private fun focusedEditable(): AccessibilityNodeInfo? =
-        findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
+    /**
+     * Where typed text goes: the field with input focus, or else (focus went elsewhere, e.g. Enter
+     * sent a message and the field let go) the text field on screen in the active window, which
+     * gets focus first. The focused one of several, else the only or first visible one.
+     */
+    private fun editableTarget(): AccessibilityNodeInfo? {
+        findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
+        val root = rootInActiveWindow ?: return null
+        val fields = ArrayList<AccessibilityNodeInfo>()
+        collectEditable(root, fields, budget = intArrayOf(MAX_NODES))
+        val field = fields.firstOrNull { it.isFocused } ?: fields.firstOrNull() ?: return null
+        val focused = field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        Log.i(TAG, "text field had no input focus; using ${field.className} of ${fields.size} (focus $focused)")
+        return field
+    }
+
+    private fun collectEditable(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, budget: IntArray) {
+        if (--budget[0] < 0) return
+        if (node.isEditable && node.isVisibleToUser && node.isEnabled) into.add(node)
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectEditable(child, into, budget)
+        }
+    }
 
     private fun selection(node: AccessibilityNodeInfo, length: Int): Pair<Int, Int> {
         val a = node.textSelectionStart
