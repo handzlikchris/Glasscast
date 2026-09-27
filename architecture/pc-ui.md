@@ -12,7 +12,7 @@ coordinator, alert log and cast area are marshalled onto the UI thread with `Beg
 | `server/Program.cs` | DPI init, start the web host, run the tray; either side exiting stops both. |
 | `server/Ui/TrayApp.cs` | `ApplicationContext`: tray icon (grey idle, amber pairing, green session), menu, popup lifecycle, banner, frame, notifications; `TerminateHotkey`; `TrayIcons`. |
 | `server/Ui/ApprovePopup.cs` | Code, source IP, countdown; Reject is focused and the Cancel button, no AcceptButton; closing = reject. |
-| `server/Ui/SessionBanner.cs` | Top-centre bar "Glasses in control from … – Ctrl+Alt+Shift+X to end"; no-activate, excluded from capture. |
+| `server/Ui/SessionBanner.cs` | Top-centre bar "Glasses in control from … – Ctrl+Alt+Shift+X to end", plus "· ♪ sound on" while the PC's sound goes to the glasses (`CastArea.AudioChanged`); widens to fit; no-activate, excluded from capture. |
 | `server/Ui/CastFrame.cs` | Orange 3 px frame just outside the cast area; click-through, no-activate, transparency key, excluded from capture. |
 | `server/Ui/AlertsForm.cs` | Recent alerts list (newest first, 200 kept). |
 | `server/Alerts/AlertThrottle.cs` | At most one balloon per minute; the rest are counted into the next one (flushed every 10 s). |

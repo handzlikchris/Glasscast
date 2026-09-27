@@ -25,7 +25,8 @@ glasses                                  server
   │── WS upgrade /ws/session ───────────►│ Origin allowlist (403 before accept)
   │── authenticate{token} | resume{token}►│ ≤ 3 s (Session:AuthTimeout) or AuthenticationTimedOut alert
   │◄────────── authenticated{deviceToken?, deviceTokenExpiresAt?}
-  │◄────────── hello{monitor, region, mode:"pointer", apps[], codec}
+  │◄────────── hello{monitor, region, mode:"pointer", apps[], codec, audio}
+  │── setAudio{enabled} (the ♪ setting, right after hello and on each toggle)
   │◄────────── rtcOffer{sdp}
   │── rtcAnswer{sdp}, iceCandidate{…} ──►│ peer.ApplyAnswer / AddRemoteCandidate
   │── ping{t} every 2 s ────────────────►│◄─ pong{t, serverTime}
@@ -57,6 +58,7 @@ Client → server (`ControlProtocol.TryParse`, anything else is a violation):
 | `typeText` | `text` ≤500 (the client splits longer text, `textChunks`) | Type mode; newlines/tabs → spaces, control chars dropped, trimmed, never Enter |
 | `key` | allowlisted name | Type mode; `Enter`, `Escape`, `Tab`, `Backspace`, `Ctrl+C/V`, `Alt+Tab`, `Win+Shift+Left/Right` |
 | `switchApp` | `slot` 1..9 | slots beyond the configured list → `failed` |
+| `setAudio` | `enabled` true/false only | starts/stops the PC's sound (`AudioPump`); counts as input; `setAudio` event when it changes |
 | `ping` | `t` | answered with `pong`; any message counts as a heartbeat |
 | `stats` | only `ClientStatsFields`, numbers or null | logged, not input (doesn't reset idle) |
 

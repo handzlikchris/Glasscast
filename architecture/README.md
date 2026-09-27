@@ -10,6 +10,7 @@ status) and these go one level deeper.
 | [pairing-and-auth.md](pairing-and-auth.md) | `/ws/pair`, approval tokens, device tokens (resume), `PairingCoordinator`, alerts, rate limits |
 | [session-and-protocol.md](session-and-protocol.md) | `/ws/session`, `ControlSession`, message types (`ControlProtocol.cs` ⇄ `protocol.ts`), timeouts, close reasons |
 | [media-pipeline.md](media-pipeline.md) | capture, H.264/VP8 encoding, `FramePump`, RTP packetizing, pacing, NACK/PLI, bitrate, SDP, SRTP |
+| [audio.md](audio.md) | the PC's sound: loopback capture, Opus, the audio track, DTX, the ♪ toggle, V/A bandwidth |
 | [stats-and-diagnostics.md](stats-and-diagnostics.md) | the Stats panel, `mediaStats`/`stats` messages, the JSONL stats log, the link test |
 | [input-and-desktop.md](input-and-desktop.md) | modes, regions and geometry, `SendInput`, app shortcuts / window switching, cast area, keep-awake |
 | [glasses-client.md](glasses-client.md) | the React app: screens, gestures, focus navigation, Back, Type flow, local storage |
@@ -26,9 +27,10 @@ client-web (React)       --HTTPS/WSS :443-->  Caddy :8443 (TLS, path allowlist)
   PairingScreen                                 --> Kestrel 127.0.0.1:5080
   SessionScreen                                       /ws/pair    -> PairingCoordinator
     connection.ts (tokens)                            /ws/session -> ControlSession
-    rtc.ts (receive-only video)                          InputController -> SendInput
+    rtc.ts (receive-only video + audio)                  InputController -> SendInput
          ^                                               FramePump -> GDI capture -> H.264
          |                                                 -> H264Rtp -> RtpPacer -> SIPSorcery
+         |                                               AudioPump -> WASAPI loopback -> Opus -> SIPSorcery
          +------------- UDP 50000 (SRTP, port forward) <------------------------+
                                                      WinForms UI thread: TrayApp, ApprovePopup,
                                                      SessionBanner, CastFrame
@@ -43,6 +45,7 @@ client-web (React)       --HTTPS/WSS :443-->  Caddy :8443 (TLS, path allowlist)
    (carries a fresh device token) → `hello` → `rtcOffer`. ([session-and-protocol.md](session-and-protocol.md))
 3. The browser answers; ICE checks go to the router's public IP:50000; SIPSorcery learns the
    glasses as peer-reflexive; DTLS-SRTP; `FramePump` starts. ([media-pipeline.md](media-pipeline.md))
+   The glasses send their ♪ setting; with it on, `AudioPump` sends the PC's sound. ([audio.md](audio.md))
 4. Gestures become `move`/`click`/`scroll`/`typeText`/`key`/`switchApp`/`setRegion`/`setMode`,
    gated by mode on the server. ([input-and-desktop.md](input-and-desktop.md), [glasses-client.md](glasses-client.md))
 5. Once a second: PC → `mediaStats`, glasses → `stats`, both into the stats log.

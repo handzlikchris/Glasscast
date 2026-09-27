@@ -14,7 +14,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/PairingScreen.tsx` | Shows the pairing code and countdown; Try again. |
 | `src/pinchPress.ts` | Outside a session, a pinch anywhere presses the focused button. |
 | `src/connection.ts` | Pair and session sockets; the only place tokens live (see [pairing-and-auth.md](pairing-and-auth.md)). |
-| `src/rtc.ts` | Receive-only `RTCPeerConnection`, stats snapshot, `watchFrames`. |
+| `src/rtc.ts` | Receive-only `RTCPeerConnection` (video to `<video>`, audio to `<audio>`), stats snapshot, `watchFrames`. |
 | `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `swipeAction`, `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`, `isSecondLeftSwipe` (`DOUBLE_SWIPE_MS` 600: swipe left switches apps only as the second of two). |
@@ -22,6 +22,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
 | `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |
 | `src/display.ts`, `src/scrollPrefs.ts` | Brightness levels and per-app scroll strength, in localStorage. |
+| `src/audio.ts` | The ♪ setting (localStorage, default on), the stereo fix-up of the answer, the status bar's `V n · A n kbps` label (see [audio.md](audio.md)). |
 | `src/mediaStats.ts` | Latency matching and the Stats panel text (see [stats-and-diagnostics.md](stats-and-diagnostics.md)). |
 | `src/styles.css` | Looks (`natural`, `lifted`, `contrast`), `--brightness`, toolbar, panels; `touch-action: none` must stay in the initial CSS. |
 | `build-label.mjs` | `Build <commit>[+] · <date time>` baked in as `__BUILD__`, shown on pairing/ended screens. |
@@ -49,7 +50,8 @@ Effects:
   to switch app"); a second within 600 ms switches, any other swipe disarms it (the band reads
   some down-swipes as left).
 - The status bar says `live (local)` or `live (remote)`: `mediaPath` on the PC's address in the
-  chosen ICE pair (private = local; see the LAN path in media-pipeline.md). `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
+  chosen ICE pair (private = local; see the LAN path in media-pipeline.md). Next to it
+  `V n · A n kbps` (payload received; `A off` with ♪ off); the codec only when it isn't H.264. `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
 - Back from the view → controls (focus on Type from Pointer, Pointer otherwise); Back from the
   controls (and so from Type and Region) → home to Pointer mode. Two Backs within 400 ms count
   once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch.
@@ -69,7 +71,7 @@ each message) and never inside an emoji; the server flattens newlines.
 ## Local storage
 
 Only `glassesRemote.device` (device token + expiry), `glasses.videoBrightness`,
-`glasses.scrollLevels`. Every access is wrapped in try/catch; blocked storage just means
+`glasses.scrollLevels`, `glasses.audio` (`on`/`off`). Every access is wrapped in try/catch; blocked storage just means
 nothing is remembered.
 
 ## Build and deploy

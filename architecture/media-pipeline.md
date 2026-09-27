@@ -22,6 +22,7 @@ RTP packetizer → pacer → SIPSorcery SRTP on fixed UDP 50000 → the glasses'
 | `server/Media/BitrateController.cs` | Loss-based target (cut on >10% loss, +8% on <2% while busy), `[MinKbps, TargetKbps]`, starts at `StartKbps`. |
 | `server/Media/SdpCandidates.cs` | Offer rewrite: drop SIPSorcery's own candidates (unless enabled), add `BindAddress` first for glasses at home, then `PublicIp:MediaPort`. |
 | `server/Media/MediaPaths.cs` | Is a client at home (same public IP), is an address private (the LAN path). |
+| `server/Media/SdpStreams.cs` | Separate `a=msid` for the audio and video tracks (no lip sync holding the video back); see [audio.md](audio.md). |
 | `server/Media/SdpFeedback.cs` | Adds `nack` (H.264 only), `nack pli`, `ccm fir`, `rtcp-rsize` to the offer. |
 | `server/Media/LinkTest.cs` | Diagnostic noise pattern at stepped bitrates (see [stats-and-diagnostics.md](stats-and-diagnostics.md)). |
 | `client-web/src/rtc.ts` | `VideoReceiver` (receive-only `RTCPeerConnection`, no ICE servers), `watchFrames` (rVFC). |
@@ -53,6 +54,13 @@ cheaper. The encoder's own GOP follows the same interval.
   65535, so every 65535 must be encrypted exactly once and nothing from before a wrap may be
   resent. `_epoch` counts wraps; `SentPackets` refuses other epochs. Never skip a sequence
   number without sending it. The e2e harness starts streams at 65495 to cross a wrap.
+
+## Audio
+
+With `Audio:Enabled` the offer also carries a send-only Opus track; SIPSorcery puts its m-line
+first (mid 0, so the bundle's candidates sit there). `SendAudio` bypasses the pacer and shares a
+lock with `SendPacket` around SRTP. `RtcpReadable` accepts reports naming either SSRC. Details:
+[audio.md](audio.md).
 
 ## Feedback from the glasses
 

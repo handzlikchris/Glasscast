@@ -11,10 +11,10 @@ CLAUDE.md ("Measuring on the device"); this doc explains the machinery.
 | `server/Media/FramePump.cs` | `StatsWindow` / `MediaStats`: per-second capture, encode, send delay, kbps, keyframes, requests, and `[rtp, capturedAtUnixMs, bytes]` per frame. |
 | `server/Media/RtpPacer.cs` | `TakeSendDelay`: handed-over → last packet sent, per frame. |
 | `server/Media/SipsorceryMedia.cs` | `TakeSendStats`: pacer delay + NACKed/resent counts. |
-| `server/Sessions/ControlSession.cs` | `SendStats`: builds `mediaStats` (fire-and-forget) and the `pc` log line; writes `event` lines (start with `lanOffered`, mediaPath with `lan`, setMode, switchApp, end); logs `glasses` lines from the `stats` message. |
+| `server/Sessions/ControlSession.cs` | `SendStats`: builds `mediaStats` (fire-and-forget) and the `pc` log line; writes `event` lines (start with `lanOffered`, mediaPath with `lan`, setMode, switchApp, setAudio with `on`, end); adds `AudioPump.TakeStats` (`audioOn`, `audioKbps`, `audioPackets`); logs `glasses` lines from the `stats` message. |
 | `server/Media/StatsLog.cs` | Appends JSON lines to `%LOCALAPPDATA%\GlassesRemote\stats\stats-yyyy-MM-dd.jsonl` (`Diagnostics:StatsDirectory` overrides). |
 | `server/Protocol/ControlProtocol.cs` | `ClientStatsFields`: the only names a `stats` message may carry. |
-| `client-web/src/mediaStats.ts` | `ClockSync`, `FrameLatency`, `receiverStats`, `statsLines` (panel text), `statsReport` (what goes to the PC), network codes. |
+| `client-web/src/mediaStats.ts` | `ClockSync`, `FrameLatency`, `receiverStats`, `audioStats` (audio kbps, lost, concealed ms not counting DTX, jitter buffer), `statsLines` (panel text), `statsReport` (what goes to the PC), network codes. |
 | `client-web/src/rtc.ts` | `VideoReceiver.stats()` (getStats snapshot, selected pair RTT, ICE network type, `navigator.connection`), `watchFrames` (requestVideoFrameCallback). |
 | `client-web/src/SessionScreen.tsx` | Wires it up: pong → clock, mediaStats → sent frames, rVFC → shown frames, 1 s interval → panel + `stats` message. |
 | `server/Media/LinkTest.cs` | Diagnostic bitrate staircase. |
