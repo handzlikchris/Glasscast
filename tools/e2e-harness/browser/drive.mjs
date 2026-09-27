@@ -53,8 +53,13 @@ try {
   // so plain navigation presses its buttons directly.
   const tapBar = (selector) => page.$eval(`.toolbar.top ${selector}`, (el) => el.click());
 
-  // 1. Pairing (auto-approved by the harness) leads straight into a session.
+  // 1. The first screen asks PC or Phone, with PC focused (nothing chosen before); a pinch
+  //    anywhere presses it. Pairing (auto-approved by the harness) then leads into a session.
   await page.goto(`${BASE}/`, { waitUntil: 'load' });
+  await page.waitForSelector('.choose', { timeout: 10_000 });
+  const firstFocus = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  check('the first screen offers PC or Phone, with PC focused', firstFocus === 'PC', firstFocus);
+  await page.mouse.click(300, 560);
   await page.waitForSelector('.pairing .code', { timeout: 10_000 }).catch(() => {});
   await shot('1-pairing');
   const session = await page.waitForSelector('.stage', { timeout: 15_000 }).then(() => true, () => false);
@@ -567,6 +572,9 @@ try {
   await fetch(`${BASE}/__harness/lose-stream-start`, { method: 'POST' });
   const reloadedAt = Date.now();
   await page.reload({ waitUntil: 'load' });
+  // The first screen again, PC focused (the last choice): one pinch.
+  await page.waitForSelector('.choose', { timeout: 10_000 });
+  await page.mouse.click(300, 560);
   const resumedLive = await page
     .waitForFunction(() => document.querySelector('.status')?.textContent?.includes('live'), { timeout: 15_000 })
     .then(() => true, () => false);
