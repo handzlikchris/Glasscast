@@ -66,7 +66,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 36 checks)
+                        browser/drive.mjs (headless Chrome, 37 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -78,7 +78,7 @@ tools/bin/caddy.exe     local Caddy binary (git-ignored)
 
 ```powershell
 dotnet build GlassesRemote.sln
-dotnet test                                     # ~175 server tests, ~13 s
+dotnet test                                     # ~177 server tests, ~19 s
 cd client-web; npm test; npx tsc --noEmit; npm run build   # ~84 client tests, typecheck, dist/
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
@@ -174,6 +174,10 @@ tight padding, check a screenshot when adding buttons). Model in
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
+- **Leaving the app ends the session:** hidden for 5 s (`HIDDEN_MS`, Page Visibility), the client
+  closes it; a page frozen outright stops pinging and the PC closes it after
+  `Session:HeartbeatTimeout` (15 s, any message counts). Either way the cast frame and banner go,
+  and the ended screen's Reconnect (focused) resumes with the device token.
 - **Stats** (last bar button) shows the latency panel; see "Measuring on the device".
 
 ## Measuring on the device (Stats panel and stats log)

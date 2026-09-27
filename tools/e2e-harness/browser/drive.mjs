@@ -514,6 +514,29 @@ try {
   check('a stream whose start was lost asks for a keyframe and the PC answers it at once',
     asked > 0 && firstPictureMs !== null && firstPictureMs < 4000, `asked ${asked}, picture within ${firstPictureMs} ms`);
 
+  // 18c. The app hidden for 5 s (another glasses app, or closed but kept alive) ends the session on
+  //      both sides, so the PC stops showing it as live; back in view, a pinch presses Reconnect.
+  const setVisibility = (state) =>
+    page.evaluate((s) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => s });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, state);
+  await setVisibility('hidden');
+  const hiddenAt = Date.now();
+  const endedWhileHidden = await page.waitForSelector('main.ended', { timeout: 9000 }).then(() => true, () => false);
+  const hiddenMs = Date.now() - hiddenAt;
+  await sleep(500);
+  const pcSession = await (await fetch(`${BASE}/__harness/session`)).text();
+  await setVisibility('visible');
+  await page.mouse.click(300, 520);
+  const backLive = await page.waitForSelector('.stage', { timeout: 15_000 }).then(() => true, () => false);
+  await page
+    .waitForFunction(() => document.querySelector('.status')?.textContent?.includes('live'), { timeout: 15_000 })
+    .catch(() => {});
+  check('a hidden app ends the session on both sides after 5 s, and Reconnect brings it back',
+    endedWhileHidden && hiddenMs >= 4500 && (pcSession === '' || pcSession === 'null') && backLive,
+    `ended ${endedWhileHidden} after ${hiddenMs} ms, PC session ${pcSession || 'none'}, back ${backLive}`);
+
   // 19. Ending the session on the PC (tray, Ctrl+Shift+X) keeps the glasses remembered: the ended
   //     screen focuses Reconnect, and a pinch anywhere presses it (the glasses' pinch doesn't land
   //     on the button). The new session is a resume, with no pairing.
