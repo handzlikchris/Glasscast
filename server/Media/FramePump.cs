@@ -10,7 +10,9 @@ public readonly record struct FrameTiming(uint Rtp, long CapturedAtUnixMs, int B
 /// <summary>
 /// What the pump sent over about a second. Capture and encode times are per frame, as is send:
 /// the wait in the pacer until the frame's last packet went out; Nacked/Resent count packets the
-/// glasses reported lost and those sent again. The frame list lets the
+/// glasses reported lost and those sent again. TargetKbps is the encoder's target (adapted, see
+/// BitrateController), RembKbps/LossPct the glasses' last estimate and loss report, LinkTestKbps
+/// the link test's step (0 outside it). The frame list lets the
 /// glasses work out capture-to-display latency for each frame they show.
 /// </summary>
 public sealed record MediaStats(
@@ -23,6 +25,10 @@ public sealed record MediaStats(
     double SendMaxMs,
     int Nacked,
     int Resent,
+    int TargetKbps,
+    int? RembKbps,
+    double? LossPct,
+    int LinkTestKbps,
     double Kbps,
     int Keyframes,
     int KeyframeRequests,
@@ -66,6 +72,13 @@ public sealed class FramePump
         var rtpDuration = (uint)(RtpClockRate / fps);
         var keyframeEvery = TimeSpan.FromSeconds(Math.Max(1, _options.KeyframeIntervalSeconds));
         var requestedGap = TimeSpan.FromMilliseconds(Math.Max(0, _options.RequestedKeyframeMinGapMs));
+        var bitrate = new BitrateController(_options.MinKbps, _options.TargetKbps, _options.TargetKbps);
+        var linkTest = _options.LinkTestOnStart
+            ? new LinkTest(_options.LinkTestStepsKbps, TimeSpan.FromSeconds(Math.Max(1, _options.LinkTestStepSeconds)))
+            : null;
+        var streamingSince = _time.GetTimestamp();
+        var appliedKbps = _options.TargetKbps;
+        var testing = linkTest is not null;
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1.0 / fps));
         var lastSource = default(PixelRect);
@@ -78,7 +91,10 @@ public sealed class FramePump
             Interlocked.Increment(ref requests);
             Volatile.Write(ref keyframeWanted, 1);
         }
+        // The link test's steps would teach the controller the wrong thing: it only records then.
+        void OnFeedback(ReceiverFeedback feedback) => bitrate.OnFeedback(feedback, adapt: !Volatile.Read(ref testing));
         peer.KeyframeRequested += OnKeyframeRequested;
+        peer.FeedbackReceived += OnFeedback;
         try
         {
             encoder.ForceKeyFrame();
@@ -88,6 +104,15 @@ public sealed class FramePump
                 var started = _time.GetTimestamp();
                 var capturedAt = _time.GetUtcNow().ToUnixTimeMilliseconds();
                 var source = currentSource();
+
+                var testKbps = linkTest?.KbpsAt(_time.GetElapsedTime(streamingSince, started));
+                Volatile.Write(ref testing, testKbps is not null);
+                var wantedKbps = testKbps ?? bitrate.TargetKbps;
+                if (wantedKbps != appliedKbps)
+                {
+                    encoder.SetTargetKbps(wantedKbps);
+                    appliedKbps = wantedKbps;
+                }
 
                 // A source of a different size (mode switch, resized region) changes the whole picture,
                 // so start it with a keyframe. A region that merely moves (edge panning) is just motion,
@@ -105,7 +130,10 @@ public sealed class FramePump
                 }
                 lastSource = source;
 
-                if (_capture.TryCapture(source, frame, bgra))
+                var grabbed = testKbps is { } kbps
+                    ? Fill(linkTest!, bgra, frame, kbps)
+                    : _capture.TryCapture(source, frame, bgra);
+                if (grabbed)
                 {
                     var captured = _time.GetTimestamp();
                     var encoded = encoder.Encode(bgra, frame.Width, frame.Height);
@@ -125,7 +153,16 @@ public sealed class FramePump
                 {
                     window.KeyframeRequests = Interlocked.Exchange(ref requests, 0);
                     window.Send = peer.TakeSendStats();
-                    onStats?.Invoke(window.ToStats(_time.GetElapsedTime(window.Started, now)));
+                    window.TargetKbps = appliedKbps;
+                    window.LinkTestKbps = testKbps ?? 0;
+                    (window.RembKbps, var loss) = bitrate.LastFeedback;
+                    window.LossPct = loss * 100;
+                    var stats = window.ToStats(_time.GetElapsedTime(window.Started, now));
+                    if (testKbps is null)
+                    {
+                        bitrate.OnSent(stats.Kbps);
+                    }
+                    onStats?.Invoke(stats);
                     window = new StatsWindow(now);
                 }
             }
@@ -133,6 +170,7 @@ public sealed class FramePump
         finally
         {
             peer.KeyframeRequested -= OnKeyframeRequested;
+            peer.FeedbackReceived -= OnFeedback;
         }
     }
 
@@ -152,6 +190,14 @@ public sealed class FramePump
         public int KeyframeRequests { get; set; }
 
         public SendStats Send { get; set; }
+
+        public int TargetKbps { get; set; }
+
+        public int? RembKbps { get; set; }
+
+        public double? LossPct { get; set; }
+
+        public int LinkTestKbps { get; set; }
 
         public void Add(FrameTiming frame, double captureMs, double encodeMs)
         {
@@ -176,11 +222,21 @@ public sealed class FramePump
                 SendMaxMs: Send.MaxMs,
                 Nacked: Send.Nacked,
                 Resent: Send.Resent,
+                TargetKbps: TargetKbps,
+                RembKbps: RembKbps,
+                LossPct: LossPct,
+                LinkTestKbps: LinkTestKbps,
                 Kbps: bytes * 8 / elapsed.TotalSeconds / 1000,
                 Keyframes: Keyframes,
                 KeyframeRequests: KeyframeRequests,
                 Frames: _frames);
         }
+    }
+
+    private static bool Fill(LinkTest test, byte[] bgra, PixelSize frame, int kbps)
+    {
+        test.Fill(bgra, frame.Width, frame.Height, kbps);
+        return true;
     }
 
     private async Task WaitForConnectionAsync(IMediaPeer peer, CancellationToken ct)

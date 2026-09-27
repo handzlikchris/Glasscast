@@ -61,7 +61,21 @@ public sealed class MediaOptions
 
     public int FramesPerSecond { get; set; } = 20;
 
+    /// <summary>The most the encoder is asked for; the target adapts below it (BitrateController).</summary>
     public int TargetKbps { get; set; } = 2500;
+
+    /// <summary>The target never adapts below this.</summary>
+    public int MinKbps { get; set; } = 300;
+
+    /// <summary>
+    /// DIAGNOSTIC: every session starts with a link test (LinkTest): a noise pattern at each of
+    /// <see cref="LinkTestStepsKbps"/> for <see cref="LinkTestStepSeconds"/>, then the desktop.
+    /// </summary>
+    public bool LinkTestOnStart { get; set; }
+
+    public int[] LinkTestStepsKbps { get; set; } = [500, 1000, 2000, 4000, 8000];
+
+    public int LinkTestStepSeconds { get; set; } = 3;
 
     /// <summary>
     /// Periodic keyframes, a safety net: lost packets are resent on NACK, and a picture that still

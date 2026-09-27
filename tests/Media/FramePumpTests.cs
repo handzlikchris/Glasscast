@@ -22,14 +22,18 @@ public sealed class FramePumpTests : IAsyncDisposable
         await _running.ContinueWith(_ => { });
     }
 
-    private void Start(int minGapMs)
+    private readonly FakeCapture _capture = new();
+
+    private void Start(int minGapMs, Action<MediaOptions>? configure = null)
     {
-        var pump = new FramePump(new FakeCapture(), Options.Create(new MediaOptions
+        var options = new MediaOptions
         {
             FramesPerSecond = 50,
             KeyframeIntervalSeconds = 60, // no periodic keyframes during the test
             RequestedKeyframeMinGapMs = minGapMs,
-        }), TimeProvider.System, NullLogger<FramePump>.Instance);
+        };
+        configure?.Invoke(options);
+        var pump = new FramePump(_capture, Options.Create(options), TimeProvider.System, NullLogger<FramePump>.Instance);
         _peer.ApplyAnswer("v=0");
         _running = pump.RunAsync(_peer, _encoder, () => new PixelRect(0, 0, 600, 600),
             s => { lock (_stats) _stats.Add(s); }, _stop.Token);
@@ -88,5 +92,36 @@ public sealed class FramePumpTests : IAsyncDisposable
         Assert.Equal(before, _encoder.KeyframesForced);
 
         await WaitUntil(() => _encoder.KeyframesForced == before + 1, timeoutMs: 1000);
+    }
+
+    [Fact]
+    public async Task Loss_reported_by_the_glasses_lowers_the_encoder_target()
+    {
+        Start(minGapMs: 0, o => o.TargetKbps = 2000);
+        await WaitUntil(() => _peer.FramesSent >= 5);
+
+        _peer.ReportFeedback(new ReceiverFeedback(0.5, null)); // 50% lost: -25%
+
+        await WaitUntil(() => _encoder.TargetKbps == 1500, timeoutMs: 1000);
+        await WaitUntil(() => _stats.Any(s => s.TargetKbps == 1500 && s.LossPct == 50));
+    }
+
+    [Fact]
+    public async Task The_link_test_steps_through_its_bitrates_on_a_test_pattern_then_shows_the_desktop()
+    {
+        Start(minGapMs: 0, o =>
+        {
+            o.LinkTestOnStart = true;
+            o.LinkTestStepsKbps = [700, 900];
+            o.LinkTestStepSeconds = 1;
+        });
+
+        await WaitUntil(() => _encoder.TargetKbps == 700, timeoutMs: 1000);
+        _peer.ReportFeedback(new ReceiverFeedback(0.9, null)); // ignored during the test
+        Assert.Empty(_capture.Sources);
+        await WaitUntil(() => _encoder.TargetKbps == 900, timeoutMs: 2000);
+        await WaitUntil(() => _encoder.TargetKbps == 2500, timeoutMs: 2000);
+        await WaitUntil(() => _capture.Sources.Count > 0);
+        Assert.Contains(_stats, s => s.LinkTestKbps > 0); // the step when each 1 s window closed
     }
 }
