@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="SIPSorcery" Version="10.0.16" />
     <PackageReference Include="SIPSorceryMedia.Encoders" Version="10.0.4" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
   </ItemGroup>
 

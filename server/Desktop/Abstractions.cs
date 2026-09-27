@@ -41,3 +41,33 @@ public interface IKeepAwake
 {
     IDisposable Acquire();
 }
+
+/// <summary>
+/// The sound the PC is playing (every app, as mixed for the default output device), at
+/// <see cref="AudioFormat48k.SampleRate"/> Hz, interleaved stereo floats.
+/// </summary>
+public interface IAudioCapture : IDisposable
+{
+    /// <summary>
+    /// Appends what was played since the last call. While nothing plays Windows may deliver
+    /// nothing at all. Throws when the device went away (unplugged, disabled).
+    /// </summary>
+    void ReadInto(AudioFifo fifo);
+
+    /// <summary>The default output device is no longer the one being captured (headphones plugged in, ...).</summary>
+    bool IsStale { get; }
+}
+
+public interface IAudioCaptureFactory
+{
+    /// <summary>Starts capturing the default output device; null when there is none.</summary>
+    IAudioCapture? Start();
+}
+
+/// <summary>The one format audio moves in between capture and the Opus encoder.</summary>
+public static class AudioFormat48k
+{
+    public const int SampleRate = 48_000;
+
+    public const int Channels = 2;
+}
