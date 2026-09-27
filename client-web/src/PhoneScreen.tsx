@@ -2,8 +2,10 @@
 // here, and input sent straight to the phone on the DataChannel. The PC only relays signalling.
 //
 // Controls, kept close to the PC session's:
-// - On the view: pinch-drag moves the cursor, a pinch taps there, a longer pinch (held still)
-//   long-presses; swipes scroll (up/down) or page (left/right) around the cursor.
+// - On the view: pinch-drag moves the cursor, a pinch taps there (any pinch shorter than a long
+//   press), a longer pinch (held still) long-presses. Swipes as in a PC session's Pointer mode:
+//   up/down scroll around the cursor, right opens Type, two lefts within 0.6 s press the phone's
+//   Back (one alone only arms it: the band reads some down-swipes as left).
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the composer's text goes into the phone's focused text field; Enter is separate.
@@ -12,7 +14,8 @@
 //   window made square) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Session } from './connection';
-import { GestureTracker } from './gestures';
+import { isSecondLeftSwipe } from './focusnav';
+import { DEFAULT_GESTURES, GestureTracker } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
   FULL_REGION,
@@ -36,6 +39,8 @@ import type { PhoneState, ServerMessage, Size } from './protocol';
 
 interface Props {
   onEnded(reason: string): void;
+  /** End on the bar: back to the PC/Phone choice. */
+  onLeave(): void;
 }
 
 type Focus = 'view' | 'bar' | 'type' | 'region';
@@ -62,11 +67,9 @@ const PHONE_STATUS: Record<PhoneState, string> = {
   live: 'phone sharing',
 };
 
-const SWIPES: Record<string, SwipeDirection> = {
+const SCROLLS: Record<string, SwipeDirection> = {
   ArrowUp: 'up',
   ArrowDown: 'down',
-  ArrowLeft: 'left',
-  ArrowRight: 'right',
 };
 
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
@@ -76,7 +79,7 @@ const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'notifications', label: 'Notif' },
 ];
 
-export function PhoneScreen({ onEnded }: Props) {
+export function PhoneScreen({ onEnded, onLeave }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -91,10 +94,14 @@ export function PhoneScreen({ onEnded }: Props) {
   const sessionRef = useRef<Session | null>(null);
   const frame = useRef<Rect>({ x: 0, y: 0, width: 600, height: 600 });
   const cursor = useRef<Point>({ x: 300, y: 300 });
-  const tracker = useRef(new GestureTracker());
+  // Any pinch that isn't a drag or a long press is a tap: no gap between the two where it's lost.
+  const tracker = useRef(new GestureTracker({ ...DEFAULT_GESTURES, tapMaxMs: LONG_PRESS_MS }));
+  const leftSwipeAt = useRef<number | null>(null);
   const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
 
   const [focus, setFocus] = useState<Focus>('view');
   const focusRef = useRef(focus);
@@ -324,11 +331,31 @@ export function PhoneScreen({ onEnded }: Props) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const current = focusRef.current;
-      if (current === 'view') {
-        const direction = SWIPES[e.key];
-        if (!direction) return;
+      if ((e.key === 'Escape' || e.key === 'Backspace') && !(e.target instanceof HTMLTextAreaElement)) {
+        // The glasses' Back, as a key (as in a PC session).
         e.preventDefault();
-        send(scrollSwipe(direction, atCursor()), `swipe ${direction}`);
+        e.stopPropagation();
+        backRef.current();
+        return;
+      }
+      if (current === 'view') {
+        if (!(e.key in SCROLLS) && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key !== 'ArrowLeft') leftSwipeAt.current = null;
+        const direction = SCROLLS[e.key];
+        if (direction) {
+          send(scrollSwipe(direction, atCursor()), `swipe → scroll ${direction}`);
+        } else if (e.key === 'ArrowRight') {
+          setFocus('type');
+          setLastInput('swipe → type');
+        } else if (isSecondLeftSwipe(leftSwipeAt.current, performance.now())) {
+          leftSwipeAt.current = null;
+          send({ type: 'nav', action: 'back' }, 'swipe → back');
+        } else {
+          leftSwipeAt.current = performance.now();
+          setLastInput('swipe left again for Back');
+        }
       } else if (current === 'region') {
         const screenSize = phoneScreen.current;
         const choice = choosing.current;
@@ -440,7 +467,7 @@ export function PhoneScreen({ onEnded }: Props) {
 
   const endSession = () => {
     sessionRef.current?.close();
-    onEndedRef.current('You ended the phone session.');
+    onLeaveRef.current();
   };
 
   const connected = media === 'connected' && channelOpen;
