@@ -335,6 +335,26 @@ public sealed class EndpointTests : IAsyncLifetime
         await WaitUntil(() => _host.Coordinator.ActiveSession is null);
     }
 
+    // Glasses closed, hidden or frozen can keep the socket open: silence ends the session.
+    [Fact]
+    public async Task A_session_that_goes_quiet_is_closed_but_pings_keep_it_open()
+    {
+        await using var host = new TestServerHost(new() { ["Session:HeartbeatTimeout"] = "00:00:01" });
+        var token = await host.PairAsync();
+        using var session = await host.StartSessionAsync(token);
+
+        for (var i = 0; i < 8; i++)
+        {
+            await session.SendAsync(new { type = "ping", t = 1 });
+            await Task.Delay(250);
+        }
+        Assert.NotNull(host.Coordinator.ActiveSession);
+
+        await session.WaitForCloseAsync(); // nothing sent from here on
+        Assert.Equal("no heartbeat", session.Socket.CloseStatusDescription);
+        await WaitUntil(() => host.Coordinator.ActiveSession is null && host.CastArea.Current is null);
+    }
+
     // Brief test 10: tokens never reach the logs.
     [Fact]
     public async Task Tokens_never_appear_in_logs()

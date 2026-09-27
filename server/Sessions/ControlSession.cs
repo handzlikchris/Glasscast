@@ -38,6 +38,7 @@ public sealed class ControlSession
     private readonly SessionServices _s;
     private readonly ControlSessionOptions _options;
     private long _lastInputTimestamp;
+    private long _lastMessageTimestamp;
 
     public ControlSession(SocketIO io, SessionLease lease, SessionServices services)
     {
@@ -86,7 +87,7 @@ public sealed class ControlSession
                 ["resumed"] = _lease.Resumed,
             });
 
-            _lastInputTimestamp = _s.Time.GetTimestamp();
+            _lastInputTimestamp = _lastMessageTimestamp = _s.Time.GetTimestamp();
             var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
             var streaming = _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
             var watching = IdleWatchAsync(ct);
@@ -101,7 +102,7 @@ public sealed class ControlSession
             }
             else if (finished == watching && !ct.IsCancellationRequested)
             {
-                closeReason = "idle";
+                closeReason = await watching;
             }
 
             SafeCancel(cts);
@@ -150,6 +151,7 @@ public sealed class ControlSession
                 return null;
             }
 
+            Interlocked.Exchange(ref _lastMessageTimestamp, _s.Time.GetTimestamp());
             if (!bucket.TryTake())
             {
                 _s.Alerts.Raise(AlertKind.MessageRateLimited, _lease.RemoteAddress, "Session exceeded the message rate");
@@ -286,17 +288,25 @@ public sealed class ControlSession
         _ => "failed",
     };
 
-    private async Task IdleWatchAsync(CancellationToken ct)
+    /// <summary>Returns the close reason once the user or the glasses have gone quiet for too long.</summary>
+    private async Task<string> IdleWatchAsync(CancellationToken ct)
     {
-        var check = TimeSpan.FromSeconds(Math.Min(30, Math.Max(1, _options.IdleTimeout.TotalSeconds / 4)));
+        var seconds = Math.Min(_options.IdleTimeout.TotalSeconds / 4, _options.HeartbeatTimeout.TotalSeconds / 4);
+        var check = TimeSpan.FromSeconds(Math.Clamp(seconds, 0.25, 30));
         while (true)
         {
             await Task.Delay(check, _s.Time, ct);
+            var silentFor = _s.Time.GetElapsedTime(Interlocked.Read(ref _lastMessageTimestamp));
+            if (silentFor >= _options.HeartbeatTimeout)
+            {
+                _s.Logger.LogInformation("Session {Session} heard nothing from the glasses for {Silent}; closing", _lease.Id, silentFor);
+                return "no heartbeat";
+            }
             var idleFor = _s.Time.GetElapsedTime(Interlocked.Read(ref _lastInputTimestamp));
             if (idleFor >= _options.IdleTimeout)
             {
                 _s.Logger.LogInformation("Session {Session} idle for {Idle}; closing", _lease.Id, idleFor);
-                return;
+                return "idle";
             }
         }
     }

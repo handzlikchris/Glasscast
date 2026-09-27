@@ -28,6 +28,13 @@ public sealed class ControlSessionOptions
     /// <summary>A session with no user input (pings don't count) for this long is closed.</summary>
     public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromMinutes(60);
 
+    /// <summary>
+    /// A session that hears nothing at all from the glasses for this long is closed: their page
+    /// pings every 2 s and reports stats every second, so silence means it was closed, hidden or
+    /// frozen, even while the browser keeps the socket and the video connection alive.
+    /// </summary>
+    public TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
     /// <summary>Hard cap on one session, whatever happens.</summary>
     public TimeSpan MaxDuration { get; set; } = TimeSpan.FromHours(4);
 
