@@ -72,6 +72,7 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private int _nacked;
     private int _resent;
     private int _nackReadLogged;
+    private int _epoch;
 
     /// <summary>
     /// An RTCP packet whose first part is a payload-specific feedback (PT 206) PLI (FMT 1) or FIR
@@ -302,7 +303,7 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
         var lost = new List<ushort>();
         RtcpNack.ReadLost(readable, track.Ssrc, lost);
-        var resend = _sent.TakeForResend(lost, Stopwatch.GetTimestamp());
+        var resend = _sent.TakeForResend(lost, Stopwatch.GetTimestamp(), Volatile.Read(ref _epoch));
         Interlocked.Add(ref _nacked, lost.Count);
         Interlocked.Add(ref _resent, resend.Count);
         _pacer.EnqueueUrgent(resend);
@@ -328,13 +329,23 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
         // A resend keeps the packet's sequence number (plain NACK, no RTX stream); a new packet
         // takes the next one and is kept for a while in case it's NACKed.
+        if (Interlocked.Exchange(ref _startNearWrap, 0) == 1)
+        {
+            // dev/test only, see StartNearSequenceWrap; before the first packet, so nothing is skipped.
+            while (track.SeqNum < ushort.MaxValue - 40)
+            {
+                track.GetNextSeqNum();
+            }
+        }
         var seq = packet.ResendSeq ?? track.GetNextSeqNum();
         if (packet.ResendSeq is null)
         {
-            var lose = Interlocked.Exchange(ref _losePacket, 0);
+            // Never lose 65535 on purpose: SIPSorcery's SRTP only moves its rollover counter on
+            // when it encrypts that one (see SentPackets).
+            var lose = seq == ushort.MaxValue ? 0 : Interlocked.Exchange(ref _losePacket, 0);
             if (lose != 2)
             {
-                _sent.Add(seq, packet, Stopwatch.GetTimestamp());
+                _sent.Add(seq, packet, Stopwatch.GetTimestamp(), Volatile.Read(ref _epoch));
             }
             if (lose != 0)
             {
@@ -343,6 +354,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         }
         stream.SetRtpHeaderExtensionValue(TransportWideCCExtension.RTP_HEADER_EXTENSION_URI, null);
         stream.SendRtpRaw(packet.Payload, packet.Timestamp, packet.Marker ? 1 : 0, _payloadType, seq);
+        if (packet.ResendSeq is null && seq == ushort.MaxValue)
+        {
+            Interlocked.Increment(ref _epoch); // the next packet starts a new rollover epoch
+        }
     }
 
     private int _framesToDrop;
@@ -362,6 +377,14 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     /// <paramref name="forGood"/> it can't be resent either, so they end up asking for a keyframe.
     /// </summary>
     internal void LoseOnePacket(bool forGood) => _losePacket = forGood ? 2 : 1;
+
+    private int _startNearWrap;
+
+    /// <summary>
+    /// DEV/TEST ONLY (e2e harness): the stream's sequence numbers start just below 65535, so they
+    /// wrap (and SRTP's rollover counter moves on) within the first couple of seconds.
+    /// </summary>
+    internal void StartNearSequenceWrap() => _startNearWrap = 1;
 
     private void RaiseClosed()
     {
