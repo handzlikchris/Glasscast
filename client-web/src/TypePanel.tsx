@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { MAX_TEXT_LENGTH, type KeyName } from './protocol';
+import type { KeyName } from './protocol';
 
 interface Props {
   /** Moves focus for the user and holds it against the glasses resetting it (SessionScreen). */
@@ -85,7 +85,7 @@ export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
       <textarea
         ref={boxRef}
         value={text}
-        maxLength={MAX_TEXT_LENGTH}
+        // No length limit: long text goes to the PC in several typeText messages (textChunks).
         placeholder="Speak or write, then Send text"
         onChange={(e) => setText(e.target.value)}
         // Enter in the box inserts a newline (flattened to a space by the PC); it never submits.
@@ -99,7 +99,7 @@ export function TypePanel({ focusPinned, onSendText, onKey }: Props) {
           Clear
         </button>
         <span className="count">
-          {text.length}/{MAX_TEXT_LENGTH}
+          {text.length}
         </span>
       </div>
       <div className="row keys">

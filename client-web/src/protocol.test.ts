@@ -1,5 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { parseServerMessage } from './protocol';
+import { MAX_TEXT_LENGTH, parseServerMessage, textChunks } from './protocol';
+
+describe('textChunks', () => {
+  it('splits long text into message-sized pieces in order, with nothing lost', () => {
+    const text = 'x'.repeat(MAX_TEXT_LENGTH * 2 + 7);
+    const chunks = textChunks(text);
+    expect(chunks.map((c) => c.length)).toEqual([MAX_TEXT_LENGTH, MAX_TEXT_LENGTH, 7]);
+    expect(chunks.join('')).toBe(text);
+    expect(textChunks('short')).toEqual(['short']);
+    expect(textChunks('')).toEqual([]);
+  });
+
+  it('never cuts an emoji in half', () => {
+    expect(textChunks('abcd😀ef', 5)).toEqual(['abcd', '😀ef']);
+  });
+
+  it('never splits next to a space, which the PC would trim away', () => {
+    const text = Array.from({ length: 130 }, (_, i) => `word${i}`).join(' ');
+    const chunks = textChunks(text);
+    expect(chunks.join('')).toBe(text);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.length).toBeLessThanOrEqual(MAX_TEXT_LENGTH);
+      expect(chunk).toBe(chunk.trim());
+    }
+  });
+});
 
 describe('parseServerMessage', () => {
   it('accepts well-formed messages', () => {

@@ -51,7 +51,7 @@ import {
   type ScrollLevels,
 } from './scrollPrefs';
 import { drawOverlay, type Look } from './overlay';
-import type { ClientMessage, KeyName, PcMediaStats, Region, ServerMessage, Size, ViewMode } from './protocol';
+import { textChunks, type ClientMessage, type KeyName, type PcMediaStats, type Region, type ServerMessage, type Size, type ViewMode } from './protocol';
 import { VideoReceiver, watchFrames } from './rtc';
 import { TypePanel } from './TypePanel';
 
@@ -967,7 +967,10 @@ export function SessionScreen({ onEnded }: Props) {
       {mode === 'type' && (
         <TypePanel
           focusPinned={focusPinned}
-          onSendText={(text) => send({ type: 'typeText', text })}
+          onSendText={(text) => {
+            // Any length: in order, in pieces the PC accepts (500 characters each).
+            for (const chunk of textChunks(text)) send({ type: 'typeText', text: chunk });
+          }}
           onKey={(key: KeyName) => {
             send({ type: 'key', key });
             // Enter usually finishes the job: straight back to Pointer mode.

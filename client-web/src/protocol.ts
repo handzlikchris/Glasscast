@@ -28,7 +28,36 @@ export interface Region {
   height: number;
 }
 
+/** Most characters one typeText message may carry (the PC rejects longer ones). */
 export const MAX_TEXT_LENGTH = 500;
+
+/**
+ * Splits text of any length into typeText-sized pieces, in order. A split never lands next to
+ * whitespace (the PC trims each message, so a space there would be lost and two words would
+ * run together) nor between the halves of a surrogate pair (an emoji); it moves back up to half
+ * a piece to find such a place, mid-word if need be: the pieces are typed back to back.
+ */
+export function textChunks(text: string, max = MAX_TEXT_LENGTH): string[] {
+  const isSpace = (i: number) => /\s/.test(text[i]);
+  const isHighSurrogate = (i: number) => {
+    const code = text.charCodeAt(i);
+    return code >= 0xd800 && code <= 0xdbff;
+  };
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    let end = Math.min(start + max, text.length);
+    if (end < text.length) {
+      let split = end;
+      while (split > start + max / 2 && (isSpace(split - 1) || isSpace(split) || isHighSurrogate(split - 1))) split--;
+      if (split > start + max / 2) end = split;
+      else if (isHighSurrogate(end - 1) && end - start > 1) end--;
+    }
+    chunks.push(text.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
 
 /** App shortcuts are configured on the PC; the glasses only see their names and send a slot. */
 export const MAX_APPS = 9;

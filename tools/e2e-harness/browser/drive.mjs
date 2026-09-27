@@ -126,6 +126,23 @@ try {
   await sleep(200);
   actions = await input();
   check('typed text arrives flattened, without Enter', actions.includes('type hello from e2e second line') && !actions.includes('key Enter'));
+  // Dictation can run long: text of any length arrives whole, in 500-character messages.
+  const long = Array.from({ length: 130 }, (_, i) => `word${i}`).join(' ');
+  const longBefore = actions.length;
+  // As the composer does: the whole text at once, then input and change (fill() would type it
+  // key by key, far too slowly for this much).
+  await page.$eval('textarea', (el, text) => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, text);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, long);
+  await sleep(200);
+  await page.locator('button::-p-text(Send text)').click();
+  await sleep(300);
+  const pieces = (await input()).slice(longBefore).filter((a) => a.startsWith('type ')).map((a) => a.slice(5));
+  check('long text arrives whole, in 500-character messages',
+    pieces.length > 1 && pieces.join('') === long && pieces.every((p) => p.length <= 500),
+    `${long.length} chars in ${pieces.length} messages (${pieces.map((p) => p.length).join('+')})`);
   await page.locator('button::-p-text(Enter)').click();
   await sleep(200);
   actions = await input();
