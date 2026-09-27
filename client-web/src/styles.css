@@ -55,6 +55,11 @@ button[aria-pressed="true"] {
   color: var(--accent);
 }
 
+/* ♪ is on but the browser waits for a pinch or swipe before it plays sound. */
+button[data-blocked="true"] {
+  color: var(--warn);
+}
+
 button:disabled {
   opacity: 0.45;
 }

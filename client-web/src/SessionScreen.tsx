@@ -39,7 +39,7 @@ import {
   type NavTarget,
 } from './focusnav';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
-import { audioButtonLabel, bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
+import { bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
 import { AudioOutput, type OutputState } from './audioOutput';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
 import { ClockSync, FrameLatency, PC_STATS_KEPT, statsLines, statsReport } from './mediaStats';
@@ -252,9 +252,7 @@ export function SessionScreen({ onEnded }: Props) {
     void out.play(next).then((running) => {
       setAudioBlocked(next && !running);
       setOutputState(out.state);
-      // Test beep (diagnostic): heard = the glasses can play sound from a web app at all.
-      if (next) out.beep();
-      setLastInput(next ? `sound on + beep (web audio ${out.state})` : 'sound off');
+      setLastInput(next ? `sound on (web audio ${out.state})` : 'sound off');
     });
     // Off stops the PC capturing and sending too: the bandwidth goes to the video.
     send({ type: 'setAudio', enabled: next });
@@ -1031,8 +1029,18 @@ export function SessionScreen({ onEnded }: Props) {
           ☀ {Math.round(brightness * 100)}%
         </button>
         {audioOffered && (
-          <button type="button" data-toggle="audio" data-output={outputState} aria-pressed={audioOn} onClick={toggleAudio} title="The PC's sound">
-            {audioButtonLabel(audioState)}
+          // Always just ♪, so the bar never changes width: off loses the highlight, and a sound the
+          // browser won't start before the next pinch or swipe shows in the warning colour.
+          <button
+            type="button"
+            data-toggle="audio"
+            data-output={outputState}
+            data-blocked={audioState === 'blocked'}
+            aria-pressed={audioOn}
+            onClick={toggleAudio}
+            title="The PC's sound"
+          >
+            ♪
           </button>
         )}
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>

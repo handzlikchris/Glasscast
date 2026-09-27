@@ -57,8 +57,3 @@ export function bandwidthLabel(videoKbps: number | null, audioKbps: number | nul
       return `${video} · A ${n(audioKbps)} kbps`;
   }
 }
-
-/** The ♪ button's label: on, off, or waiting for a tap before the browser lets it play. */
-export function audioButtonLabel(audio: AudioState): string {
-  return audio === 'off' ? '♪ off' : audio === 'blocked' ? '♪ tap' : '♪';
-}

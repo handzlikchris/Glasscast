@@ -1,12 +1,11 @@
 // Plays the PC's sound through Web Audio instead of straight from the <audio> element.
 //
-// On the glasses the sound arrived and was decoded (the jitter buffer drained) but nothing was
-// heard. Android can route a media element playing a WebRTC stream like a call rather than as
-// media; Web Audio output goes out as media. The element stays, muted: Chrome only pulls a
-// remote WebRTC track into Web Audio while a media element is playing it.
-//
-// Also a short beep when ♪ turns on, straight to the speakers: it tells "the glasses can play
-// sound at all" apart from "the stream doesn't come through". DOM glue, covered by the e2e run.
+// Web Audio output goes out as media on Android, where a media element playing a WebRTC stream
+// can be routed like a call. The element stays, muted: Chrome only pulls a remote WebRTC track
+// into Web Audio while a media element is playing it. Verified on the glasses (2026-09-27): the
+// sound plays through their speakers this way. (The first silent try there was the PC's low
+// volume, since fixed by process loopback; whether the plain element would play was not tested.)
+// DOM glue, covered by the e2e run.
 
 /** How long to wait for AudioContext.resume(): without a user gesture it never settles. */
 const RESUME_WAIT_MS = 300;
@@ -47,21 +46,6 @@ export class AudioOutput {
       await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, RESUME_WAIT_MS))]);
     }
     return ctx.state === 'running';
-  }
-
-  /** A quarter-second 880 Hz beep, straight to the speakers. */
-  beep(): void {
-    const { ctx } = this.context();
-    const t = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const envelope = ctx.createGain();
-    osc.frequency.value = 880;
-    envelope.gain.setValueAtTime(0.0001, t);
-    envelope.gain.exponentialRampToValueAtTime(0.3, t + 0.02);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
-    osc.connect(envelope).connect(ctx.destination);
-    osc.start(t);
-    osc.stop(t + 0.3);
   }
 
   close(): void {

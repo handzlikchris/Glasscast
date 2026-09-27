@@ -133,11 +133,11 @@ try {
   await tapBar('button[data-toggle="audio"]');
   await sleep(2500);
   const offText = await page.$eval('[data-bandwidth]', (el) => el.textContent);
-  const offButton = await page.$eval('button[data-toggle="audio"]', (el) => el.textContent.trim());
+  const offButton = await page.$eval('button[data-toggle="audio"]', (el) => `${el.textContent.trim()} pressed=${el.getAttribute('aria-pressed')}`);
   const pcOff = statsLog().findLast((l) => l.kind === 'pc');
   const elementOff = await audioElement();
   check('♪ off stops the PC capturing and sending, and the status bar says so',
-    offText.includes('A off') && offButton === '♪ off' && pcOff?.audioOn === 0 && pcOff?.audioKbps === 0 && elementOff.playing,
+    offText.includes('A off') && offButton === '♪ pressed=false' && pcOff?.audioOn === 0 && pcOff?.audioKbps === 0 && elementOff.playing,
     `${offText}, button ${offButton}, PC on ${pcOff?.audioOn} at ${pcOff?.audioKbps} kbps`);
   await tapBar('button[data-toggle="audio"]');
   const soundAgain = await audioKbps();
@@ -589,9 +589,9 @@ try {
     asked > 0 && firstPictureMs !== null && firstPictureMs < 4000, `asked ${asked}, picture within ${firstPictureMs} ms`);
   await sleep(1500);
   const resumedAudio = statsLog().filter((l) => l.kind === 'pc' && l.session === starts.at(-1)?.session);
-  const rememberedButton = await page.$eval('button[data-toggle="audio"]', (el) => el.textContent.trim());
+  const rememberedButton = await page.$eval('button[data-toggle="audio"]', (el) => `${el.textContent.trim()} pressed=${el.getAttribute('aria-pressed')}`);
   check('♪ off is remembered: the restarted session gets no sound',
-    rememberedButton === '♪ off' && resumedAudio.length > 0 && resumedAudio.every((l) => l.audioOn === 0 && l.audioPackets === 0),
+    rememberedButton === '♪ pressed=false' && resumedAudio.length > 0 && resumedAudio.every((l) => l.audioOn === 0 && l.audioPackets === 0),
     `button ${rememberedButton}, ${resumedAudio.length} PC lines, packets ${resumedAudio.reduce((s, l) => s + l.audioPackets, 0)}`);
   await tapBar('button[data-toggle="audio"]'); // back on for the rest
 

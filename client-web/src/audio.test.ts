@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioButtonLabel, bandwidthLabel, loadAudioOn, parseAudioOn, withStereoOpus } from './audio';
+import { bandwidthLabel, loadAudioOn, parseAudioOn, withStereoOpus } from './audio';
 
 describe('audio setting', () => {
   it('is on unless turned off on this device', () => {
@@ -45,11 +45,5 @@ describe('status bar', () => {
     expect(bandwidthLabel(812.4, null, 'off')).toBe('V 812 kbps · A off');
     expect(bandwidthLabel(null, null, 'none')).toBe('V – kbps');
     expect(bandwidthLabel(700, 0, 'blocked')).toBe('V 700 · A 0 kbps');
-  });
-
-  it('labels the ♪ button', () => {
-    expect(audioButtonLabel('on')).toBe('♪');
-    expect(audioButtonLabel('off')).toBe('♪ off');
-    expect(audioButtonLabel('blocked')).toBe('♪ tap');
   });
 });
