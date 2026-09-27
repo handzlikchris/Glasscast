@@ -538,8 +538,10 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   };
 
   const onResult = (of: 'typeText' | 'key', ok: boolean) => {
+    // Not ok: nothing on the phone takes keyboard input (an app like a remote desktop client only
+    // does while its own keyboard is open) and there's no text field on screen either.
     if (of === 'key') {
-      setLastInput(ok ? 'key sent' : 'key: no text field on the phone');
+      setLastInput(ok ? 'key sent' : "key not sent: open the phone app's keyboard (or tap a text field)");
       return;
     }
     const text = pendingText.current;
@@ -549,7 +551,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       return;
     }
     // Nothing on the phone to type into: keep the text rather than lose it.
-    setLastInput('no text field on the phone: tap one, then Send text');
+    setLastInput("not typed: open the phone app's keyboard (or tap a text field), then Send text");
     if (text) setRefill({ text });
   };
 
