@@ -19,7 +19,7 @@ export type Swipe = 'up' | 'down' | 'left' | 'right';
 export type SwipeGesture = Swipe | 'doubleLeft' | 'doubleRight';
 
 /** How long a left or right swipe waits for a second one in the same direction (ms). */
-export const DOUBLE_SWIPE_MS = 500;
+export const DOUBLE_SWIPE_MS = 300;
 
 const SWIPE_KEYS: Readonly<Record<string, Swipe>> = {
   ArrowUp: 'up',

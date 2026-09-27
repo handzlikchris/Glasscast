@@ -19,7 +19,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
-| `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 500), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
+| `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
 | `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)). |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
@@ -68,12 +68,12 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 | Swipe on the view | PC session | Phone session |
 | --- | --- | --- |
 | up / down | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor |
-| right, right (within 0.5 s) | **Type** | **Type** |
-| left, left (within 0.5 s) | **next app** shortcut | the phone's **Back** |
-| right or left once | after 0.5 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.5 s: page (a sideways swipe on the phone) |
+| right, right (within 0.3 s) | **Type** | **Type** |
+| left, left (within 0.3 s) | **next app** shortcut | the phone's **Back** |
+| right or left once | after 0.3 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.3 s: page (a sideways swipe on the phone) |
 
 - Why doubles: the shortcuts are the same on both targets, and a single stray swipe can't open
-  Type or switch apps. The price: a single left or right acts 0.5 s late (accepted by the user).
+  Type or switch apps. The price: a single left or right acts 0.3 s late (accepted by the user; 0.5 s at first, cut to 0.3 s the same day as quick enough for a double).
 - While a left/right waits, the status bar says what the second one would do ("swipe right
   again for Type").
 - An up or down swipe while a left/right waits drops the waiting one: the band reads some

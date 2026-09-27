@@ -286,7 +286,7 @@ try {
   await sleep(200);
   const beforeSwipe = await regionAt();
   await page.keyboard.press('ArrowLeft');
-  await sleep(900); // a single left acts once the wait for a second one is over (swipes.ts)
+  await sleep(900); // a single left acts once the wait for a second one (0.3 s) is over (swipes.ts)
   const afterSwipe = await regionAt();
   await tapBar('button[data-toggle="pan"]'); // Pan off again
   await sleep(200);
@@ -433,7 +433,7 @@ try {
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
   // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, a double swipe left (two
-  //     within 0.5 s) cycles the apps (1 → 2 → 1, starting after app 1 from step 15), a lone left
+  //     within 0.3 s) cycles the apps (1 → 2 → 1, starting after app 1 from step 15), a lone left
   //     swipe does nothing, right twice opens Type (one right alone doesn't). With Pan on single
   //     swipes move the view.
   // A plain click(): focus was left on Type by the keyboard, so a mouse press here would be

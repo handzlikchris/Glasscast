@@ -188,8 +188,8 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** up/down act at once;
-  **right twice → Type**; **left twice → next app** (PC) / **Back** (phone), both within 0.5 s. A
-  single left/right waits 0.5 s for a second, then does its plain action (nothing in Pointer
+  **right twice → Type**; **left twice → next app** (PC) / **Back** (phone), both within 0.3 s. A
+  single left/right waits 0.3 s for a second, then does its plain action (nothing in Pointer
   mode, pan with Pan on, page on the phone). Up/down drops a waiting left (the band reads some
   down-swipes as left).
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second

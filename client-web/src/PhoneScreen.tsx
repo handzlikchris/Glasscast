@@ -4,7 +4,7 @@
 // Controls, kept close to the PC session's:
 // - On the view: pinch-drag moves the cursor, a pinch taps there (any pinch shorter than a long
 //   press), a longer pinch (held still) long-presses. Swipes (swipes.ts, shared with PC sessions):
-//   up/down scroll around the cursor, left/right page (after a 0.5 s wait for a second swipe),
+//   up/down scroll around the cursor, left/right page (after a 0.3 s wait for a second swipe),
 //   right twice opens Type, left twice presses the phone's Back.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
