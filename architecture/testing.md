@@ -40,10 +40,10 @@ running (`dotnet test <dll>` after deleting avoids a rebuild re-copying it).
   drop the next stream's start or one packet (`/__harness/lose-*`).
 - Inspection endpoints: `/__harness/input`, `/session`, `/region`, `/terminate`.
 
-`browser/drive.mjs` (puppeteer-core + local Chrome, `CHROME_PATH` overrides) runs ~37 checks:
-pairing, live video, brightness/look, stats panel and stats log, pointer drag/tap/double-click,
-typing, region, edge lock/scroll/pan, focus navigation and Back, Type round trip, app buttons
-and swipes, scroll strength, NACK resend, PLI, lost stream start, resume after reload, hidden
+`browser/drive.mjs` (puppeteer-core + local Chrome, `CHROME_PATH` overrides) runs ~39 checks:
+pairing, live video (and `live (local)`), brightness/look, stats panel and stats log, pointer drag/tap/double-click,
+typing (long text in pieces), region, edge lock/scroll/pan, focus navigation and Back, Type round trip, app buttons
+and swipes (double left), scroll strength, NACK resend, PLI, lost stream start, resume after reload, hidden
 app ending the session, Reconnect after a PC terminate. Press top-bar buttons with `tapBar()`.
 
 Run it (restart the harness between runs; it keeps recorded input for its whole life):

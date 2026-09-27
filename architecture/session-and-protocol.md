@@ -54,7 +54,7 @@ Client → server (`ControlProtocol.TryParse`, anything else is a violation):
 | `move` | `x,y` 0..1 in the current view | Pointer mode only |
 | `click` | `button:"left"` | Pointer mode only |
 | `scroll` | `dy` ≤ ±1200, browser sign | Pointer/Scroll modes |
-| `typeText` | `text` ≤500 | Type mode; newlines/tabs → spaces, control chars dropped, never Enter |
+| `typeText` | `text` ≤500 (the client splits longer text, `textChunks`) | Type mode; newlines/tabs → spaces, control chars dropped, trimmed, never Enter |
 | `key` | allowlisted name | Type mode; `Enter`, `Escape`, `Tab`, `Backspace`, `Ctrl+C/V`, `Alt+Tab`, `Win+Shift+Left/Right` |
 | `switchApp` | `slot` 1..9 | slots beyond the configured list → `failed` |
 | `ping` | `t` | answered with `pong`; any message counts as a heartbeat |

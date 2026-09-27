@@ -72,7 +72,7 @@ client-web/             glasses client (600×600)
   src/overlay.ts        canvas: cursor, region box, pan-edge glow
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 37 checks)
+                        browser/drive.mjs (headless Chrome, 39 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -166,7 +166,8 @@ tight padding, check a screenshot when adding buttons). Model in
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes are shortcuts: **up/down scroll** 3 notches (default), **right → Type**,
-  **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
+  **double left → next app** (two left swipes within 0.6 s; one alone only arms it, since the
+  band reads some down-swipes as left) (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
   the edges, and pushing past the top/bottom edge starts **hold-to-scroll** (`edgeScrollStep`):
   steady scrolling until the drag ends or comes back in. It also starts when the glasses' own
   pointer is pushed against the display edge, since it then reports no more movement. **↕** sets
@@ -180,11 +181,13 @@ tight padding, check a screenshot when adding buttons). Model in
   and in Region.
 - **Type flow:** entering Type focuses and clicks the text box (tries to open the composer at
   once) → when the composer hands text back (`change`), **Send text** → **Enter** → Enter itself
-  returns to Pointer mode. Only a swipe of the user's stops the chain.
+  returns to Pointer mode. Only a swipe of the user's stops the chain. No length limit: long
+  text goes as several ≤500-character `typeText` messages (`textChunks`).
 - **App buttons:** the current app is highlighted (moves only on a confirmed switch).
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
+  `live (local)` / `live (remote)` says whether the video comes over the LAN or the internet.
 - **Leaving the app ends the session:** hidden for 5 s (`HIDDEN_MS`, Page Visibility), the client
   closes it; a page frozen outright stops pinging and the PC closes it after
   `Session:HeartbeatTimeout` (15 s, any message counts). Either way the cast frame and banner go,

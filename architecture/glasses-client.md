@@ -17,7 +17,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/rtc.ts` | Receive-only `RTCPeerConnection`, stats snapshot, `watchFrames`. |
 | `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
-| `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `swipeAction`, `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
+| `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `swipeAction`, `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`, `isSecondLeftSwipe` (`DOUBLE_SWIPE_MS` 600: swipe left switches apps only as the second of two). |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
 | `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |
@@ -45,7 +45,11 @@ Effects:
 ## Navigation model
 
 - `nav = 'view'`: swipes act on the desktop (`swipeAction`), the top bar is hidden and
-  click-through. `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
+  click-through. In Pointer mode a lone left swipe only arms the app switch ("swipe left again
+  to switch app"); a second within 600 ms switches, any other swipe disarms it (the band reads
+  some down-swipes as left).
+- The status bar says `live (local)` or `live (remote)`: `mediaPath` on the PC's address in the
+  chosen ICE pair (private = local; see the LAN path in media-pipeline.md). `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
 - Back from the view → controls (focus on Type from Pointer, Pointer otherwise); Back from the
   controls (and so from Type and Region) → home to Pointer mode. Two Backs within 400 ms count
   once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch.
@@ -58,7 +62,9 @@ Effects:
 Entering Type (`flushSync` so the panel exists inside the same user gesture) focuses and
 clicks the textarea to try to open the composer → the composer's `change` moves focus to
 **Send text** → sending moves focus to **Enter** → Enter returns to Pointer mode. A swipe of
-the user's breaks the chain. Text is capped at 500 characters; the server flattens newlines.
+the user's breaks the chain. Text has no length limit: `textChunks` sends it as `typeText`
+messages of at most 500 characters, split between two non-space characters (the server trims
+each message) and never inside an emoji; the server flattens newlines.
 
 ## Local storage
 
