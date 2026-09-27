@@ -78,7 +78,8 @@ client-web/             glasses client (600×600)
   src/PhoneScreen.tsx   phone session: phone's frame, local cursor, taps/swipes/nav/text over the
                         DataChannel (phoneRtc.ts, phoneProtocol.ts)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
-  src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
+  src/focusnav.ts       navigation model: Back targets, tap routing (pure, tested)
+  src/swipes.ts         THE swipe rules for PC and phone: double left/right, what each does (pure, tested)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
   src/mediaStats.ts     Stats panel: capture-to-display latency (RTP timestamp matching, clock offset
                         from ping/pong), receiver counters, PC pump figures (pure, tested)
@@ -185,15 +186,20 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 
+- **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
+  mapped, table in `architecture/glasses-client.md` "Swipes"):** up/down act at once;
+  **right twice → Type**; **left twice → next app** (PC) / **Back** (phone), both within 0.5 s. A
+  single left/right waits 0.5 s for a second, then does its plain action (nothing in Pointer
+  mode, pan with Pan on, page on the phone). Up/down drops a waiting left (the band reads some
+  down-swipes as left).
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
-  pinch → double-click). Swipes are shortcuts: **up/down scroll** 3 notches (default), **right → Type**,
-  **double left → next app** (two left swipes within 0.6 s; one alone only arms it, since the
-  band reads some down-swipes as left) (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
+  pinch → double-click). Swipes: **up/down scroll** 3 notches (default), the doubles above
+  (next app: 1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
   the edges, and pushing past the top/bottom edge starts **hold-to-scroll** (`edgeScrollStep`):
   steady scrolling until the drag ends or comes back in. It also starts when the glasses' own
   pointer is pushed against the display edge, since it then reports no more movement. **↕** sets
   the scroll strength per app (9/5/3/2/1 notches per swipe, default 3; edge scrolling at half that per
-  second), kept in localStorage by app name. The **Pan** toggle makes swipes move the view by a quarter screen instead, and pushing
+  second), kept in localStorage by app name. The **Pan** toggle makes single swipes move the view by a quarter screen instead, and pushing
   the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
   otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then

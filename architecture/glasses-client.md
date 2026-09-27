@@ -10,15 +10,17 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | File | Role |
 | --- | --- |
 | `src/main.tsx` | Mounts `<App/>` without `<StrictMode>` (double effects would open two sessions). |
-| `src/App.tsx` | Phases: `pairing` → `session` → `ended` (Reconnect / Pair again). Starts in `session` when a device token is stored. |
+| `src/App.tsx` | Phases: `choose` (PC or Phone, last choice focused) → `pairing` (skipped with a stored device token) → `session` → `ended` (Reconnect / Pair again / PC or phone). End on a bar goes straight back to `choose`. |
 | `src/PairingScreen.tsx` | Shows the pairing code and countdown; Try again. |
-| `src/pinchPress.ts` | Outside a session, a pinch anywhere presses the focused button. |
+| `src/pinchPress.ts` | Outside a session and on a phone session's bar and Type panel, a pinch anywhere presses the focused button, or focuses and clicks the focused text box (which opens the composer). |
 | `src/connection.ts` | Pair and session sockets; the only place tokens live (see [pairing-and-auth.md](pairing-and-auth.md)). |
 | `src/rtc.ts` | Receive-only `RTCPeerConnection` (video to `<video>`, the audio stream to `AudioOutput`), stats snapshot, `watchFrames`. |
 | `src/audioOutput.ts` | Plays the PC's sound through Web Audio (a muted `<audio>` keeps the stream flowing); see [audio.md](audio.md). |
 | `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
-| `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `swipeAction`, `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`, `isSecondLeftSwipe` (`DOUBLE_SWIPE_MS` 600: swipe left switches apps only as the second of two). |
+| `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
+| `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 500), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
+| `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)). |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
 | `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |
@@ -46,10 +48,8 @@ Effects:
 
 ## Navigation model
 
-- `nav = 'view'`: swipes act on the desktop (`swipeAction`), the top bar is hidden and
-  click-through. In Pointer mode a lone left swipe only arms the app switch ("swipe left again
-  to switch app"); a second within 600 ms switches, any other swipe disarms it (the band reads
-  some down-swipes as left).
+- `nav = 'view'`: swipes act on the desktop (`swipes.ts`, see "Swipes"), the top bar is hidden
+  and click-through.
 - The status bar says `live (local)` or `live (remote)`: `mediaPath` on the PC's address in the
   chosen ICE pair (private = local; see the LAN path in media-pipeline.md). Next to it
   `V n · A n kbps` (payload received; `A off` with ♪ off); the codec only when it isn't H.264. `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
@@ -59,6 +59,28 @@ Effects:
 - The glasses reset focus after a Back and when the composer closes. Focus the app moves on
   purpose goes through `focusPinned`, which restores it for 600 ms (re-checked at 50/150/300/500 ms);
   any swipe or pinch ends the pin.
+
+## Swipes (interface decision, 2026-09-27)
+
+One rule set for PC and phone sessions, in `src/swipes.ts` only; the screens feed arrow keys to
+a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
+
+| Swipe on the view | PC session | Phone session |
+| --- | --- | --- |
+| up / down | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor |
+| right, right (within 0.5 s) | **Type** | **Type** |
+| left, left (within 0.5 s) | **next app** shortcut | the phone's **Back** |
+| right or left once | after 0.5 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.5 s: page (a sideways swipe on the phone) |
+
+- Why doubles: the shortcuts are the same on both targets, and a single stray swipe can't open
+  Type or switch apps. The price: a single left or right acts 0.5 s late (accepted by the user).
+- While a left/right waits, the status bar says what the second one would do ("swipe right
+  again for Type").
+- An up or down swipe while a left/right waits drops the waiting one: the band reads some
+  down-swipes as left, and that stray left must not act.
+- A waiting swipe that lands after the swipes left the view (Back, a panel opened) is ignored.
+- Swipes on the controls, in Type and in Region don't go through this: they move focus (or zoom
+  the Region box).
 
 ## Type flow
 
