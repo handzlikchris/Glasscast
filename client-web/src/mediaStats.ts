@@ -286,6 +286,7 @@ export function statsLines(
     const asked = pc.reduce((sum, s) => sum + s.keyframeRequests, 0);
     const nacked = pc.reduce((sum, s) => sum + s.nacked, 0);
     const resent = pc.reduce((sum, s) => sum + s.resent, 0);
+    const unreadable = pc.reduce((sum, s) => sum + s.rtcpUnreadable, 0);
     lines.push(
       `PC capture ${ms(avg((s) => s.captureMs))} (max ${ms(max((s) => s.captureMaxMs))}) · encode ${ms(avg((s) => s.encodeMs))} (max ${ms(max((s) => s.encodeMaxMs))}) · send ${ms(avg((s) => s.sendMs))} (max ${ms(max((s) => s.sendMaxMs))}) ms`,
     );
@@ -294,7 +295,8 @@ export function statsLines(
     );
     const last = pc[pc.length - 1];
     lines.push(
-      `PC target ${ms(last.targetKbps)} kbps · REMB ${ms(last.rembKbps)} · loss ${ms(last.lossPct)}% · resent ${resent} of ${nacked}`,
+      `PC target ${ms(last.targetKbps)} kbps · REMB ${ms(last.rembKbps)} · loss ${ms(last.lossPct)}% · resent ${resent} of ${nacked}` +
+        (unreadable > 0 ? ` · RTCP unreadable ${unreadable}` : ''),
     );
     if (last.linkTestKbps > 0) lines.unshift(`LINK TEST ${last.linkTestKbps} kbps`);
   }

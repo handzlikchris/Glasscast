@@ -111,8 +111,8 @@ describe('statsLines', () => {
       },
       { jitterBufferMs: 45, decodeMs: 8, kbps: 2400, lost: 0, lostTotal: 3, nacks: 1, plis: 2, freezes: 0, dropped: 1, keyframes: 9 },
       [
-        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, sendMs: 3, sendMaxMs: 80, nacked: 4, resent: 3, targetKbps: 2500, rembKbps: null, lossPct: null, linkTestKbps: 0, kbps: 2500, keyframes: 1, keyframeRequests: 2, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
-        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, sendMs: 5, sendMaxMs: 6, nacked: 1, resent: 1, targetKbps: 1800, rembKbps: 1500, lossPct: 12.5, linkTestKbps: 0, kbps: 2400, keyframes: 0, keyframeRequests: 1, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
+        { fps: 20, captureMs: 10, captureMaxMs: 30, encodeMs: 6, encodeMaxMs: 25, sendMs: 3, sendMaxMs: 80, nacked: 4, resent: 3, rtcpUnreadable: 0, targetKbps: 2500, rembKbps: null, lossPct: null, linkTestKbps: 0, kbps: 2500, keyframes: 1, keyframeRequests: 2, frames: [{ rtp: 1, capturedAt: 0, bytes: 102_400 }] },
+        { fps: 20, captureMs: 12, captureMaxMs: 14, encodeMs: 8, encodeMaxMs: 9, sendMs: 5, sendMaxMs: 6, nacked: 1, resent: 1, rtcpUnreadable: 7, targetKbps: 1800, rembKbps: 1500, lossPct: 12.5, linkTestKbps: 0, kbps: 2400, keyframes: 0, keyframeRequests: 1, frames: [{ rtp: 2, capturedAt: 0, bytes: 10_240 }] },
       ],
     );
     expect(lines).toEqual([
@@ -122,7 +122,7 @@ describe('statsLines', () => {
       'lost 0 (3) · nack 1 · pli 2 · freezes 0 · dropped 1',
       'PC capture 11 (max 30) · encode 7 (max 25) · send 4 (max 80) ms',
       'PC frame 55 KB (max 100) · 20 fps · 2400 kbps · keyframes 1 (asked 3)',
-      'PC target 1800 kbps · REMB 1500 · loss 13% · resent 4 of 5',
+      'PC target 1800 kbps · REMB 1500 · loss 13% · resent 4 of 5 · RTCP unreadable 7',
     ]);
   });
 
@@ -141,7 +141,7 @@ describe('mediaPath', () => {
 
 describe('link test', () => {
   it('heads the panel while the PC runs it', () => {
-    const pc = { fps: 20, captureMs: 1, captureMaxMs: 1, encodeMs: 1, encodeMaxMs: 1, sendMs: 1, sendMaxMs: 1, nacked: 0, resent: 0, targetKbps: 4000, rembKbps: null, lossPct: 0, linkTestKbps: 4000, kbps: 3900, keyframes: 0, keyframeRequests: 0, frames: [] };
+    const pc = { fps: 20, captureMs: 1, captureMaxMs: 1, encodeMs: 1, encodeMaxMs: 1, sendMs: 1, sendMaxMs: 1, nacked: 0, resent: 0, rtcpUnreadable: 0, targetKbps: 4000, rembKbps: null, lossPct: 0, linkTestKbps: 4000, kbps: 3900, keyframes: 0, keyframeRequests: 0, frames: [] };
     expect(statsLines(null, null, [pc])[0]).toBe('LINK TEST 4000 kbps');
   });
 });

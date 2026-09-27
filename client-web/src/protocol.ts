@@ -85,6 +85,8 @@ export interface PcMediaStats {
   /** Packets the glasses reported lost (NACK), and how many of those the PC sent again. */
   nacked: number;
   resent: number;
+  /** RTCP packets from the glasses the PC couldn't decrypt: their NACKs, PLIs and loss reports went unheard. */
+  rtcpUnreadable: number;
   /** The encoder's current target (adapted to the link), the glasses' last REMB and loss report. */
   targetKbps: number | null;
   rembKbps: number | null;
@@ -236,6 +238,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         sendMaxMs: isNumber(data.sendMaxMs) ? data.sendMaxMs : 0,
         nacked: isNumber(data.nacked) ? data.nacked : 0,
         resent: isNumber(data.resent) ? data.resent : 0,
+        rtcpUnreadable: isNumber(data.rtcpUnreadable) ? data.rtcpUnreadable : 0,
         targetKbps: isNumber(data.targetKbps) ? data.targetKbps : null,
         rembKbps: isNumber(data.rembKbps) ? data.rembKbps : null,
         lossPct: isNumber(data.lossPct) ? data.lossPct : null,
