@@ -92,6 +92,8 @@ const LOOKS: Look[] = ['natural', 'lifted', 'contrast'];
 
 interface Props {
   onEnded(reason: string): void;
+  /** End on the bar: back to the PC/Phone choice. */
+  onLeave(): void;
 }
 
 interface Status {
@@ -106,7 +108,7 @@ interface Status {
   audioKbps: number | null;
 }
 
-export function SessionScreen({ onEnded }: Props) {
+export function SessionScreen({ onEnded, onLeave }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -211,6 +213,8 @@ export function SessionScreen({ onEnded }: Props) {
 
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
 
   const send = useCallback((message: ClientMessage) => sessionRef.current?.send(message), []);
 
@@ -1048,6 +1052,17 @@ export function SessionScreen({ onEnded }: Props) {
         </button>
         <button type="button" data-toggle="stats" aria-pressed={showStats} onClick={() => setShowStats((v) => !v)} title="Latency stats">
           Stats
+        </button>
+        <button
+          type="button"
+          data-action="end"
+          onClick={() => {
+            sessionRef.current?.close();
+            onLeaveRef.current();
+          }}
+          title="End the session and choose PC or Phone"
+        >
+          End
         </button>
       </nav>
 

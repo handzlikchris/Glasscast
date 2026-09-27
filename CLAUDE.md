@@ -87,7 +87,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 45 checks)
+                        browser/drive.mjs (headless Chrome, 46 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -179,8 +179,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · ♪ · Look · Stats** (one row;
-tight padding, check a screenshot when adding buttons). Model in
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · ♪ · Look · Stats · End** (one
+row; with two app buttons it is exactly full at 588 px, and the e2e drive checks it fits). **End**
+goes back to the PC/Phone first screen (so does End in a phone session), never the ended screen. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 

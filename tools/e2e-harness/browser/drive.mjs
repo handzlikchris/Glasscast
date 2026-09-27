@@ -639,6 +639,16 @@ try {
   check('after the PC ends a session, a pinch presses Reconnect and it resumes without pairing',
     ended && focusedButton === 'Reconnect' && reconnected && lastStart?.resumed === true,
     `ended ${ended}, focus ${focusedButton}, new session ${reconnected}, resumed ${lastStart?.resumed}`);
+
+  // 20. The mode bar (with End last) still fits on one row, and End goes back to the PC/Phone
+  //     choice rather than the ended screen, with PC (the last choice) focused.
+  const bar = await page.$eval('.toolbar.top', (el) => ({ fits: el.scrollWidth <= el.clientWidth, width: el.scrollWidth }));
+  await tapBar('button[data-action="end"]');
+  const chose = await page.waitForSelector('.choose', { timeout: 5000 }).then(() => true, () => false);
+  const chooseFocus = await page.evaluate(() => document.activeElement?.textContent?.trim());
+  check('End on the bar goes back to the PC/Phone choice, and the bar fits on one row',
+    bar.fits && chose && chooseFocus === 'PC' && !(await page.$('main.ended')),
+    `bar ${bar.width}px fits ${bar.fits}, choice ${chose}, focus ${chooseFocus}`);
 } finally {
   await browser.close();
 }

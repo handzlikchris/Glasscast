@@ -48,6 +48,7 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
 | Capture | `MediaProjection`, **entire screen** (`createConfigForDefaultDisplay`), cropped to a region on the phone | Input mapping needs screen coordinates; single-app capture gives no window position |
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
 | Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
+| Glasses controls | As a PC session's Pointer mode: pinch-drag moves the cursor, a pinch taps (anything shorter than a 0.6 s long press), swipe up/down scrolls, right opens Type, two lefts press the phone's Back. Bar: Back · Home · Apps · Notif · Type · Region · Fit · End (End returns to the PC/Phone choice) | Same habits on both targets (user's request, 2026-09-27) |
 | Input | `AccessibilityService`: `dispatchGesture` (tap, long press, swipe), `performGlobalAction` (Back/Home/Recents/notifications), `ACTION_SET_TEXT` + `ACTION_IME_ENTER` | Public API, no ADB, no root |
 | Coordinates | Glasses send 0..1 **within the video frame**; the phone maps through its current crop | Same idea as the PC's `move`; the phone alone knows the crop |
 | Cursor | Drawn on the glasses (overlay), never on the phone | Nothing to inject until a tap |
