@@ -31,6 +31,9 @@ public static class ControlProtocol
         // How the glasses reach the network: type codes (client mediaStats.ts NETWORK_CODES:
         // 1 wifi, 2 cellular, 3 bluetooth, ...), the browser's bandwidth estimate, the UDP round trip.
         "netType", "iceNetType", "downlinkMbps", "rttMs",
+        // The PC's sound as received: Opus kbit/s, packets lost in the second, how much of the
+        // second was made up by the decoder (lost or late sound), the audio jitter buffer.
+        "audioKbps", "audioLost", "audioConcealedMs", "audioBufferMs",
     ];
 
     private const char LineSeparator = (char)0x2028;
@@ -101,6 +104,7 @@ public static class ControlProtocol
                 "key" => ParseKey(root),
                 "ping" => ParsePing(root),
                 "switchApp" => ParseSwitchApp(root),
+                "setAudio" => ParseSetAudio(root),
                 "stats" => ParseClientStats(root),
                 _ => null,
             };
@@ -223,6 +227,9 @@ public static class ControlProtocol
             ? new SwitchAppMessage(slot)
             : null;
 
+    private static ControlMessage? ParseSetAudio(JsonElement e) =>
+        Only(e, "enabled") && Bool(e, "enabled", out var enabled) ? new SetAudioMessage(enabled) : null;
+
     private static ControlMessage? ParseClientStats(JsonElement e)
     {
         if (!Only(e, ClientStatsFields))
@@ -299,6 +306,17 @@ public static class ControlProtocol
 
         value = p.GetString()!;
         return value.Length <= maxLength;
+    }
+
+    private static bool Bool(JsonElement e, string name, out bool value)
+    {
+        value = false;
+        if (!e.TryGetProperty(name, out var p) || p.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            return false;
+        }
+        value = p.GetBoolean();
+        return true;
     }
 
     private static bool Num(JsonElement e, string name, out double value)

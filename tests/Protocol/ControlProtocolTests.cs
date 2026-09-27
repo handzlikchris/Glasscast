@@ -108,6 +108,21 @@ public sealed class ControlProtocolTests
     [InlineData("{\"type\":\"switchApp\",\"slot\":1,\"process\":\"cmd\"}")]
     public void Switch_app_rejects_anything_but_a_small_slot(string json) => Rejected(json);
 
+    [Fact]
+    public void Set_audio_is_on_or_off()
+    {
+        Assert.True(Parse<SetAudioMessage>("{\"type\":\"setAudio\",\"enabled\":true}").Enabled);
+        Assert.False(Parse<SetAudioMessage>("{\"type\":\"setAudio\",\"enabled\":false}").Enabled);
+    }
+
+    [Theory]
+    [InlineData("{\"type\":\"setAudio\"}")]
+    [InlineData("{\"type\":\"setAudio\",\"enabled\":1}")]
+    [InlineData("{\"type\":\"setAudio\",\"enabled\":\"true\"}")]
+    [InlineData("{\"type\":\"setAudio\",\"enabled\":null}")]
+    [InlineData("{\"type\":\"setAudio\",\"enabled\":true,\"device\":\"mic\"}")]
+    public void Set_audio_rejects_anything_but_a_boolean(string json) => Rejected(json);
+
     [Theory]
     [InlineData("Enter", KeyCommand.Enter)]
     [InlineData("Ctrl+V", KeyCommand.CtrlV)]

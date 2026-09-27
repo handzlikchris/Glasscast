@@ -11,6 +11,8 @@ internal sealed partial class SessionBanner : Form
     private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
     private readonly Label _text;
+    private string _remoteAddress = "";
+    private bool _audio;
 
     public SessionBanner(string hotkeyText)
     {
@@ -38,10 +40,26 @@ internal sealed partial class SessionBanner : Form
 
     public void ShowFor(string remoteAddress)
     {
-        _text.Text = $"● Glasses in control from {remoteAddress} – {HotkeyText} to end";
+        _remoteAddress = remoteAddress;
+        UpdateText();
+        Show();
+    }
+
+    /// <summary>Says whether the PC's sound is going to the glasses too.</summary>
+    public void SetAudio(bool on)
+    {
+        _audio = on;
+        UpdateText();
+    }
+
+    private void UpdateText()
+    {
+        var sound = _audio ? " · ♪ sound on" : "";
+        _text.Text = $"● Glasses in control from {_remoteAddress}{sound} – {HotkeyText} to end";
+        var width = TextRenderer.MeasureText(_text.Text, _text.Font).Width + 40;
+        Size = new Size(Math.Max(LogicalToDeviceUnits(460), width), Height);
         var area = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
         Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + 6);
-        Show();
     }
 
     // Don't steal focus from whatever the glasses are controlling.

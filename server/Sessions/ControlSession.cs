@@ -27,7 +27,9 @@ public sealed record SessionServices(
     StatsLog Stats,
     TimeProvider Time,
     ILogger<ControlSession> Logger,
-    IOptions<MediaOptions> Media);
+    IOptions<MediaOptions> Media,
+    IOptions<AudioOptions> Audio,
+    IAudioCaptureFactory AudioCaptures);
 
 /// <summary>
 /// One authenticated session: WebRTC signalling, video, and input, until the
@@ -63,6 +65,11 @@ public sealed class ControlSession
         using var encoder = _s.Encoders.Create();
         using var peer = _s.Peers.Create(encoder.Codec);
         peer.Closed += () => SafeCancel(cts);
+        // Off until the glasses ask for it (their ♪ setting, sent right after hello). Disposed
+        // before the peer (declared after it).
+        using var audio = peer.CarriesAudio
+            ? new AudioPump(_s.AudioCaptures, _s.Audio.Value, peer, _s.Logger)
+            : null;
         // Which way the video went: over the LAN (glasses at home took the LAN address) or the internet.
         peer.Connected += () => _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
         {
@@ -82,6 +89,8 @@ public sealed class ControlSession
                 mode = ControlProtocol.ModeName(controller.Mode),
                 apps = apps.Select(a => a.Name.Trim()).ToArray(),
                 codec = encoder.Codec,
+                // Whether the offer carries the PC's sound (the glasses show their ♪ button).
+                audio = audio is not null,
             }, ct);
 
             // The PC's LAN address first, if the glasses may reach it (Media:OfferLan).
@@ -105,8 +114,8 @@ public sealed class ControlSession
             });
 
             _lastInputTimestamp = _lastMessageTimestamp = _s.Time.GetTimestamp();
-            var receiving = ReceiveLoopAsync(controller, peer, apps, ct);
-            var streaming = StreamAsync(peer, encoder, controller, ct);
+            var receiving = ReceiveLoopAsync(controller, peer, audio, apps, ct);
+            var streaming = StreamAsync(peer, encoder, controller, audio, ct);
             var watching = IdleWatchAsync(ct);
 
             var finished = await Task.WhenAny((Task)receiving, streaming, watching);
@@ -148,6 +157,7 @@ public sealed class ControlSession
                 closeReason = _lease.Superseded ? "replaced" : "terminated";
             }
             _s.CastArea.Set(null);
+            _s.CastArea.SetAudio(false);
             _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?> { ["event"] = "end", ["reason"] = closeReason });
             await _io.CloseQuietlyAsync(closeStatus, closeReason);
             _s.Logger.LogInformation("Session {Session} closed: {Reason}", _lease.Id, closeReason);
@@ -160,11 +170,12 @@ public sealed class ControlSession
     /// glasses and the stats log can show instead of looking like a dropped connection.
     /// </summary>
     private async Task<string?> StreamAsync(IMediaPeer peer, IFrameEncoder encoder, InputController controller,
-        CancellationToken ct)
+        AudioPump? audio, CancellationToken ct)
     {
         try
         {
-            await _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource, stats => SendStats(stats, ct), ct);
+            await _s.Pump.RunAsync(peer, encoder, () => controller.CurrentSource,
+                stats => SendStats(stats, audio?.TakeStats() ?? default, ct), ct);
             return null;
         }
         catch (Exception ex) when (ex is not (OperationCanceledException or WebSocketException or ObjectDisposedException))
@@ -175,7 +186,7 @@ public sealed class ControlSession
     }
 
     /// <summary>Returns null when the client goes away, or a reason when it breaks the rules.</summary>
-    private async Task<string?> ReceiveLoopAsync(InputController controller, IMediaPeer peer,
+    private async Task<string?> ReceiveLoopAsync(InputController controller, IMediaPeer peer, AudioPump? audio,
         IReadOnlyList<AppShortcut> apps, CancellationToken ct)
     {
         var rate = Math.Max(1, _options.MaxMessagesPerSecond);
@@ -247,6 +258,21 @@ public sealed class ControlSession
                     await _io.SendAsync(new { type = "appSwitch", slot = switchApp.Slot, result = ResultName(result) }, ct);
                     break;
 
+                case SetAudioMessage setAudio:
+                    Interlocked.Exchange(ref _lastInputTimestamp, _s.Time.GetTimestamp());
+                    if (audio is not null && audio.Enabled != setAudio.Enabled)
+                    {
+                        audio.Enabled = setAudio.Enabled;
+                        _s.CastArea.SetAudio(setAudio.Enabled);
+                        _s.Logger.LogInformation("Session {Session}: sound {State}", _lease.Id, setAudio.Enabled ? "on" : "off");
+                        _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
+                        {
+                            ["event"] = "setAudio",
+                            ["on"] = setAudio.Enabled,
+                        });
+                    }
+                    break;
+
                 case ClientStatsMessage stats:
                     // Measurements, not input: they don't keep an idle session alive.
                     _s.Stats.Write(_lease.Id, "glasses", stats.Values.Select(v => new KeyValuePair<string, object?>(v.Key, v.Value)));
@@ -282,7 +308,7 @@ public sealed class ControlSession
     /// Media stats for the glasses' stats panel. Fire and forget: the frame pump must never wait
     /// on the control socket, and a stats message that fails to send is simply lost.
     /// </summary>
-    private void SendStats(MediaStats stats, CancellationToken ct)
+    private void SendStats(MediaStats stats, AudioStats audio, CancellationToken ct)
     {
         var message = new
         {
@@ -304,6 +330,10 @@ public sealed class ControlSession
             kbps = Math.Round(stats.Kbps),
             keyframes = stats.Keyframes,
             keyframeRequests = stats.KeyframeRequests,
+            // The PC's sound: capturing and sending, Opus kbit/s (payload, like kbps), packets.
+            audioOn = audio.On,
+            audioKbps = Math.Round(audio.Kbps, 1),
+            audioPackets = audio.Packets,
             // [RTP timestamp, capture start in Unix ms (server clock), bytes] per frame sent.
             frames = stats.Frames.Select(f => new long[] { f.Rtp, f.CapturedAtUnixMs, f.Bytes }).ToArray(),
         };
@@ -329,6 +359,9 @@ public sealed class ControlSession
             ["kbps"] = message.kbps,
             ["keyframes"] = message.keyframes,
             ["keyframeRequests"] = message.keyframeRequests,
+            ["audioOn"] = message.audioOn ? 1 : 0,
+            ["audioKbps"] = message.audioKbps,
+            ["audioPackets"] = message.audioPackets,
             ["frameKb"] = Math.Round(sizes.Average(), 1),
             ["frameMaxKb"] = Math.Round(sizes.Max(), 1),
         });

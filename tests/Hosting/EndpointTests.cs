@@ -204,6 +204,41 @@ public sealed class EndpointTests : IAsyncLifetime
         await WaitUntil(() => _host.CastArea.Current is null);
     }
 
+    [Fact]
+    public async Task Sound_goes_out_only_while_the_glasses_have_it_on_and_is_logged()
+    {
+        var token = await _host.PairAsync();
+        using var session = await _host.StartSessionAsync(token);
+        Assert.True(_host.LastHello.GetProperty("audio").GetBoolean());
+        await session.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\n" });
+        var peer = _host.Peers.Created[0];
+
+        await Task.Delay(100);
+        Assert.Equal(0, _host.Audio.Started); // off until asked for
+        await session.SendAsync(new { type = "setAudio", enabled = true });
+        await WaitUntil(() => peer.AudioPacketsSent >= 10);
+        Assert.True(_host.CastArea.Audio);
+        JsonElement stats;
+        do
+        {
+            stats = await session.ReceiveAsync("mediaStats");
+        } while (!stats.GetProperty("audioOn").GetBoolean());
+        await session.SendAsync(new { type = "setAudio", enabled = false });
+        await WaitUntil(() => _host.Audio.Open == 0);
+        Assert.False(_host.CastArea.Audio);
+
+        do
+        {
+            stats = await session.ReceiveAsync("mediaStats");
+        } while (stats.GetProperty("audioOn").GetBoolean());
+        var lines = ReadStatsLog();
+        var events = lines.Where(l => l.GetProperty("kind").GetString() == "event" && l.GetProperty("event").GetString() == "setAudio")
+            .Select(l => l.GetProperty("on").GetBoolean()).ToArray();
+        Assert.Equal([true, false], events);
+        Assert.Contains(lines, l => l.GetProperty("kind").GetString() == "pc" && l.GetProperty("audioKbps").GetDouble() > 0);
+        Assert.Empty(_host.Input.Actions);
+    }
+
     // Brief tests 1 and 4: no pairing while a session is active, and the answer is generic.
     [Fact]
     public async Task Pairing_is_refused_generically_while_a_session_is_active()

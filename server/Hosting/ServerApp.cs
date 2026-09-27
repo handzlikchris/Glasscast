@@ -44,6 +44,7 @@ public static class ServerApp
         });
         services.Configure<ControlSessionOptions>(config.GetSection(ControlSessionOptions.SectionName));
         services.Configure<MediaOptions>(config.GetSection(MediaOptions.SectionName));
+        services.Configure<AudioOptions>(config.GetSection(AudioOptions.SectionName));
         services.Configure<AppShortcutOptions>(config.GetSection(AppShortcutOptions.SectionName));
 
         services.AddSingleton(TimeProvider.System);
@@ -64,6 +65,7 @@ public static class ServerApp
         services.AddSingleton<IWindowSwitcher, Win32WindowSwitcher>();
         services.AddSingleton<IKeepAwake, WindowsKeepAwake>();
         services.AddSingleton<IFrameEncoderFactory, FrameEncoderFactory>();
+        services.AddSingleton<IAudioCaptureFactory, LoopbackAudioCaptureFactory>();
         services.AddSingleton<IMediaPeerFactory, MediaPeerFactory>();
         services.AddSingleton<FramePump>();
         services.AddSingleton<SessionServices>();

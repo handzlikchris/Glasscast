@@ -63,6 +63,7 @@ public sealed class TestServerHost : IAsyncDisposable
             builder.Services.AddSingleton<IKeepAwake>(KeepAwake);
             builder.Services.AddSingleton<IMediaPeerFactory>(Peers);
             builder.Services.AddSingleton<IFrameEncoderFactory>(new FakeEncoderFactory());
+            builder.Services.AddSingleton<IAudioCaptureFactory>(Audio);
         });
 
         _app.StartAsync().GetAwaiter().GetResult();
@@ -82,6 +83,8 @@ public sealed class TestServerHost : IAsyncDisposable
     public FakeKeepAwake KeepAwake { get; } = new();
 
     public FakePeerFactory Peers { get; } = new();
+
+    public FakeAudioCaptureFactory Audio { get; } = new();
 
     public PairingCoordinator Coordinator => _app.Services.GetRequiredService<PairingCoordinator>();
 

@@ -91,6 +91,7 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.SessionChanged += OnSessionChanged;
         _coordinator.DeviceGrantChanged += OnDeviceGrantChanged;
         _castArea.Changed += OnCastAreaChanged;
+        _castArea.AudioChanged += OnAudioChanged;
         _alerts.Raised += OnAlert;
 
         // A pairing request may already be pending if the host started first.
@@ -154,6 +155,8 @@ internal sealed class TrayApp : ApplicationContext
     });
 
     private void OnCastAreaChanged(CaptureRegion? region) => Ui(() => UpdateFrame(region));
+
+    private void OnAudioChanged(bool on) => Ui(() => _banner.SetAudio(on));
 
     private void UpdateFrame(CaptureRegion? region)
     {
@@ -230,6 +233,7 @@ internal sealed class TrayApp : ApplicationContext
         _coordinator.SessionChanged -= OnSessionChanged;
         _coordinator.DeviceGrantChanged -= OnDeviceGrantChanged;
         _castArea.Changed -= OnCastAreaChanged;
+        _castArea.AudioChanged -= OnAudioChanged;
         _alerts.Raised -= OnAlert;
         _flushTimer.Stop();
         _hotkey.Dispose();

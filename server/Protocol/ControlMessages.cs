@@ -80,3 +80,6 @@ public sealed record ClientStatsMessage(IReadOnlyDictionary<string, double?> Val
 
 /// <summary>Switch to app shortcut <paramref name="Slot"/> (1-based) from the PC's configured list.</summary>
 public sealed record SwitchAppMessage(int Slot) : ControlMessage;
+
+/// <summary>The glasses' ♪ button: send the PC's sound, or stop capturing and sending it.</summary>
+public sealed record SetAudioMessage(bool Enabled) : ControlMessage;
