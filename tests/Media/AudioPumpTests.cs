@@ -76,13 +76,17 @@ public sealed class AudioPumpTests
         _captures.Silent = false;
         await WaitUntil(() => _peer.AudioPacketsSent >= duringSilence + 5);
 
-        Assert.InRange(duringSilence, 0, 8); // DTX: a few while Opus notices, then a refresh now and then
-        (byte[] Opus, uint Timestamp, bool Marker) first;
+        // DTX: two silent frames, then a header-only packet when silence starts and every 400 ms.
+        Assert.InRange(duringSilence, 3, 6);
+        List<(byte[] Opus, uint Timestamp, bool Marker)> sent;
         lock (_peer.AudioSent)
         {
-            first = _peer.AudioSent[duringSilence];
+            sent = _peer.AudioSent.ToList();
         }
-        Assert.True(first.Marker); // sound starts again after silence
+        Assert.All(sent.Take(duringSilence).Skip(2), p => Assert.Single(p.Opus));
+        Assert.Equal(20u * 960, unchecked(sent[3].Timestamp - sent[2].Timestamp)); // 400 ms apart
+        var sound = sent.Skip(duringSilence).First(p => p.Opus.Length > 1);
+        Assert.True(sound.Marker); // sound starts again after silence
     }
 
     [Fact]

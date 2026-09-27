@@ -34,7 +34,7 @@ public sealed class AudioPump : IDisposable
     /// <summary>Silent frames sent before going quiet, so the glasses' decoder gets the sound's tail.</summary>
     private const int SilentFramesSent = 2;
 
-    /// <summary>While silent, one packet this often (like Opus DTX's refresh) keeps the glasses' decoder in step.</summary>
+    /// <summary>While silent, a DTX packet this often (like Opus DTX's refresh) keeps the glasses' decoder in step.</summary>
     private const int SilenceRefreshMs = 400;
 
     private readonly IAudioCaptureFactory _captures;
@@ -56,6 +56,7 @@ public sealed class AudioPump : IDisposable
     private long _statsFrom = Stopwatch.GetTimestamp();
     private int _failures;
     private int _silentFrames;
+    private int _dtxFrames;
 
     public AudioPump(IAudioCaptureFactory captures, AudioOptions options, IMediaPeer peer, ILogger logger)
     {
@@ -179,7 +180,10 @@ public sealed class AudioPump : IDisposable
         }
     }
 
-    /// <summary>Encodes one frame and sends it unless it's DTX; returns whether it was sent.</summary>
+    /// <summary>
+    /// Encodes one frame and sends it, or during silence (DTX) a header-only packet now and then.
+    /// Returns whether sound went out (so the next sound after silence starts a talkspurt).
+    /// </summary>
     private bool SendFrame(float[] frame, long position, bool lastSent)
     {
         if (!_peer.IsConnected)
@@ -191,17 +195,32 @@ public sealed class AudioPump : IDisposable
         _silentFrames = OpusAudioEncoder.IsDigitalSilence(frame) ? _silentFrames + 1 : 0;
         _encoder.PacketLossPercent = Volatile.Read(ref _lossPercent);
         var packet = _encoder.Encode(frame);
-        var quiet = _silentFrames > SilentFramesSent && _silentFrames % (SilenceRefreshMs / _encoder.FrameMs) != 0;
-        if (OpusAudioEncoder.IsDtx(packet) || quiet)
+        var timestamp = unchecked(_rtpBase + (uint)position);
+
+        if (OpusAudioEncoder.IsDtx(packet) || _silentFrames > SilentFramesSent)
         {
+            // Silence, WebRTC style: a packet of just the Opus header byte (a frame with nothing in
+            // it) when it starts and every SilenceRefreshMs, nothing in between. The glasses' jitter
+            // buffer reads that as "the sender went quiet" and plays silence, instead of treating
+            // the gap as lost packets and concealing it (which the stats would count).
+            if (_dtxFrames++ % (SilenceRefreshMs / _encoder.FrameMs) == 0)
+            {
+                Send([packet[0]], timestamp, marker: false);
+            }
             return false;
         }
 
+        _dtxFrames = 0;
         // The marker bit starts a talkspurt: the first packet after silence (RFC 3551).
-        _peer.SendAudio(packet.ToArray(), unchecked(_rtpBase + (uint)position), marker: !lastSent);
-        Interlocked.Add(ref _bytes, packet.Length);
-        Interlocked.Increment(ref _packets);
+        Send(packet.ToArray(), timestamp, marker: !lastSent);
         return true;
+    }
+
+    private void Send(byte[] payload, uint timestamp, bool marker)
+    {
+        _peer.SendAudio(payload, timestamp, marker);
+        Interlocked.Add(ref _bytes, payload.Length);
+        Interlocked.Increment(ref _packets);
     }
 
     private void Close(ref IAudioCapture? capture)

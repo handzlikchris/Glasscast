@@ -12,8 +12,8 @@ namespace GlassesRemote.Server.Media;
 ///   repaired at the glasses without a resend; <see cref="PacketLossPercent"/> tunes how much;
 /// - silence costs next to nothing: Opus's own DTX (≤ 2-byte packets, <see cref="IsDtx"/>) only
 ///   works in its speech modes, and this is general audio (CELT), where digital silence still
-///   makes a 3-byte packet 50 times a second. So <see cref="AudioPump"/> doesn't send those
-///   (<see cref="IsDigitalSilence"/>) beyond a refresh now and then, as WebRTC does with DTX.
+///   makes a 3-byte packet 50 times a second. So <see cref="AudioPump"/> sends DTX itself on
+///   <see cref="IsDigitalSilence"/>: a header-only packet now and then, as WebRTC does.
 /// Not thread-safe: one pump thread.
 /// </summary>
 public sealed class OpusAudioEncoder
@@ -61,8 +61,8 @@ public sealed class OpusAudioEncoder
     }
 
     /// <summary>
-    /// A packet this short only says "still silent" (DTX): WebRTC doesn't send those, and the
-    /// glasses' decoder fills the gap with silence.
+    /// A packet this short only says "silent" (DTX): no sound in it. The glasses' jitter buffer
+    /// takes one as the start of silence and plays silence until sound comes again.
     /// </summary>
     public static bool IsDtx(ReadOnlySpan<byte> packet) => packet.Length <= 2;
 
