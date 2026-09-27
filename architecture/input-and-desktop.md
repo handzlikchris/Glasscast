@@ -54,10 +54,11 @@ ignored (`HandleResult.IgnoredForMode`), so a pinch-drag can't mean two things.
   half a swipe's worth per second until the drag ends or comes back 12 px.
 - Pan on → `moveCursorWithEdgePan`: inside a 24 px edge zone, the rest of the push slides the
   region (`setRegion` at most every 100 ms; local copy wins until all are answered).
-- Pinch → click after 350 ms unless a second pinch follows (double-click) or turns into
-  pinch-and-hold (→ controls).
-- Swipes: up/down scroll by the app's level, right → Type, left → next app (Pan off); a
-  quarter-view nudge each (Pan on).
+- Pinch → click after 350 ms unless a second pinch follows: released quickly, a double-click;
+  moved or held, tap-and-a-half: the left button held (`mouseButton`) until it ends (see
+  glasses-client.md "Pinches").
+- Swipes: see glasses-client.md "Swipes" (`swipes.ts`): up/down scroll by the app's level, right
+  twice → Type, left twice → next app; single left/right pan with Pan on.
 
 ## Typing
 

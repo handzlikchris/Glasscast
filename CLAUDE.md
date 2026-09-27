@@ -88,7 +88,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 48 checks)
+                        browser/drive.mjs (headless Chrome, 46 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -193,10 +193,12 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   mode, pan with Pan on, page on the phone). Up/down drops a waiting left (the band reads some
   down-swipes as left).
 - **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**
-  pinch = click / tap (after 350 ms: two quick ones = double-click / double tap); pinch and move =
-  cursor; **pinch, hold still 0.4 s, then move = drag with the button / finger down** (select
-  text, move windows, drag on the phone), released with the pinch. PC: `mouseButton` message,
-  released by the PC itself on mode change or session end.
+  like a laptop touchpad (user's choice): pinch = click / tap (after 350 ms: two quick ones =
+  double-click / double tap); pinch and move = cursor only; **pinch, then pinch and hold (tap-and-
+  a-half) = button / finger held**: move to select text, drag a window or drag on the phone; let
+  go to release (held still: press and release in place, a long press on the phone). PC:
+  `mouseButton` message, released by the PC itself on mode change or session end. (The
+  pinch-then-hold → controls gesture and a short-lived "hold still, then move" drag are gone.)
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
   pinch → double-click). Swipes: **up/down scroll** 3 notches (default), the doubles above
   (next app: 1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
@@ -207,8 +209,8 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   second), kept in localStorage by app name. The **Pan** toggle makes single swipes move the view by a quarter screen instead, and pushing
   the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer
-  otherwise); from the controls, Type or Region → **home to Pointer mode**. Pinch, then
-  pinch-and-hold 0.5 s (movement ignored) also opens the controls.
+  otherwise); from the controls, Type or Region → **home to Pointer mode**. (Pinch, then
+  pinch-and-hold no longer opens the controls: it's the tap-and-a-half drag.)
 - **Mode bar is hidden** (opacity 0, click-through) while on the view; shown when focused, in Type
   and in Region.
 - **Type flow:** entering Type focuses and clicks the text box (tries to open the composer at
@@ -486,8 +488,8 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 - Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
   toggle (user reported it not working before the always-visible bar; no readout yet).
 - Pending: external port scan, decode cost on the glasses, pinch-drag
-  gain/threshold tuning, maybe removing the pinch-then-hold gesture (Back replaced it; dropping
-  it would remove the 350 ms click delay).
+  gain/threshold tuning. (Pinch-then-hold → controls is gone; the 350 ms click delay stays, for
+  double-click and tap-and-a-half.)
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
 - **Code review (2026-09-27):** https://claude.ai/artifact/DtG7DX4v6vaqCNYp5wiGuB (read with
   the Artifact tool). F1-F4 fixed the same day (device token confirmed on the first

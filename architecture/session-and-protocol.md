@@ -58,7 +58,7 @@ Client → server (`ControlProtocol.TryParse`, anything else is a violation):
 | `setRegion` | `x,y,width,height` ints | coarse bounds ±32768, then `RegionMath.Clamp`; always answered with `region` |
 | `move` | `x,y` 0..1 in the current view | Pointer mode only |
 | `click` | `button:"left"` | Pointer mode only; ignored while the button is held |
-| `mouseButton` | `button:"left"`, `down` true/false | Pointer mode only: a held drag (pinch, hold still, move). Out-of-order presses are ignored; the PC releases a held button itself when the mode changes or the session ends (`InputController.ReleaseButton`) |
+| `mouseButton` | `button:"left"`, `down` true/false | Pointer mode only: a held drag (tap-and-a-half: pinch, then pinch and move or hold). Out-of-order presses are ignored; the PC releases a held button itself when the mode changes or the session ends (`InputController.ReleaseButton`) |
 | `scroll` | `dy` ≤ ±1200, browser sign | Pointer/Scroll modes |
 | `typeText` | `text` ≤500 (the client splits longer text, `textChunks`) | Type mode; newlines/tabs → spaces, control chars dropped, trimmed, never Enter |
 | `key` | allowlisted name | Type mode; `Enter`, `Escape`, `Tab`, `Backspace`, `Ctrl+C/V`, `Alt+Tab`, `Win+Shift+Left/Right` |
