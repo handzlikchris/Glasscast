@@ -1,0 +1,154 @@
+# Phone mode: controlling the Android phone from the glasses
+
+Status: **being built on branch `feat/phone-mode`** (started 2026-09-27). Nothing has run on the
+S25 yet. The research notes below come from docs and web sources, not from the device.
+
+The first screen of the glasses app asks **PC or Phone**. PC is everything that exists today.
+Phone connects to an **Android companion app** on the user's Samsung S25 (unrooted, no ADB at
+run time), which streams its screen to the glasses and injects the glasses' taps, swipes, Back /
+Home / Recents and typed text.
+
+## Shape
+
+```
+                    signalling only (SDP, ICE, start/stop)
+glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄──WSS /ws/companion── companion app (phone)
+      ▲   │                                           PhoneRelay                          │   ▲
+      │   └──────────── WebRTC DataChannel "input": tap, swipe, nav, text ───────────────►│   │
+      └──────────────── WebRTC video: the phone's screen (MediaProjection, HW H.264) ─────┘   │
+                                                                   AccessibilityService ──────┘
+```
+
+- **The PC is only the meeting point.** It already serves the web app (the glasses can't load it
+  without the PC being reachable), has the certificate, the Origin rules and the glasses'
+  pairing. It relays the handful of signalling messages and nothing else: no video, no input.
+- **Video and input go straight between phone and glasses** over one WebRTC peer connection the
+  phone offers (video track + a DataChannel). On the go the glasses' traffic is relayed by the
+  phone anyway, so the path should be phone → phone. Whether ICE finds it is the first thing to
+  test (P0).
+- **libwebrtc on the phone** (`io.getstream:stream-webrtc-android`) does capture
+  (`ScreenCapturerAndroid`), hardware H.264, pacing, NACK/PLI and congestion control, so none
+  of the PC's hand-built media pipeline is needed there.
+
+### Why not phone ↔ glasses without the PC
+
+- The glasses load only HTTPS pages, from a public URL. The phone has no stable name or
+  certificate, and a page can't open `ws://` to a LAN or phone address (mixed content). Meta's
+  web-app docs say nothing about reaching a phone app from the page.
+- Signalling needs a rendezvous both sides can reach from anywhere. The PC is it, today. A later
+  option: host the static client elsewhere and a tiny relay in the cloud (not planned).
+
+## Decisions
+
+| Topic | Choice | Why |
+| --- | --- | --- |
+| Transport | WebRTC: phone offers video + DataChannel; PC relays signalling only | Lowest latency; input doesn't make a trip through the PC |
+| Capture | `MediaProjection`, **entire screen** (`createConfigForDefaultDisplay`), cropped to a region on the phone | Input mapping needs screen coordinates; single-app capture gives no window position |
+| Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
+| Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
+| Input | `AccessibilityService`: `dispatchGesture` (tap, long press, swipe), `performGlobalAction` (Back/Home/Recents/notifications), `ACTION_SET_TEXT` + `ACTION_IME_ENTER` | Public API, no ADB, no root |
+| Coordinates | Glasses send 0..1 **within the video frame**; the phone maps through its current crop | Same idea as the PC's `move`; the phone alone knows the crop |
+| Cursor | Drawn on the glasses (overlay), never on the phone | Nothing to inject until a tap |
+| Glasses auth | The existing approval / device token, with `target: "phone"` in `authenticate`/`resume` | No new glasses credential; one session at a time still holds |
+| Companion auth | Pairs once through the PC's **Approve popup** (code on phone and popup), then a 256-bit companion token (hash on the PC, `companion-grant.json`), forgettable in the tray | Same pattern as the glasses; a fake "phone" must never receive the glasses' input |
+| Per-session gate on the phone | Android's own MediaProjection consent dialog, every session (Android 14+ makes the token single-use) | A human on the phone agrees to each session anyway |
+| Companion socket | `/ws/companion`; a request **with** an `Origin` header is refused (browsers always send one) | Native client; no web page can open it |
+| Session driver | The glasses' session socket (`PhoneRelay`): it asks the companion to start, relays, and ends both sides together | One lease, one lifetime, same watchdogs |
+
+## Protocol
+
+### Glasses ⇄ PC (`/ws/session`, target phone)
+
+- First message: `authenticate{token, target:"phone"}` or `resume{token, target:"phone"}`.
+  `target` is optional; absent or `"pc"` is today's behaviour.
+- PC → glasses: `authenticated{…}`, then `phoneStatus{state}` with `state` one of
+  `offline` (no companion connected), `asking` (consent dialog on the phone), `declined`,
+  `live`; then `rtcOffer{sdp}` and trickled `iceCandidate{candidate, sdpMid, sdpMLineIndex}`
+  (a new direction for that message).
+- Glasses → PC: `rtcAnswer`, `iceCandidate`, `ping`. Nothing else is accepted in a phone session
+  (input never goes through the PC).
+
+### Companion ⇄ PC (`/ws/companion`)
+
+- First message, within 3 s: `pair{name}` (≤ 32 chars) or `auth{token}`.
+- Pairing: PC → `pairCode{code, expiresInSeconds}`, then `paired{token}` or `pairFailed`, close.
+- Authenticated: PC → `authenticated`. Then:
+  - PC → phone: `sessionStart{}` (glasses want the phone), `rtcAnswer{sdp}`,
+    `iceCandidate{…}`, `sessionEnd{reason}`, `pong{t}`.
+  - Phone → PC: `sessionState{state}` (`asking`, `declined`, `live`, `ended`), `rtcOffer{sdp}`,
+    `iceCandidate{…}`, `ping{t}`.
+- Strict allowlist, 16 KB cap, rate-limited; anything else closes the socket. One companion
+  connection at a time (a new authenticated one replaces the old).
+
+### Glasses ⇄ phone (DataChannel `input`, JSON)
+
+- Glasses → phone: `tap{x,y}`, `longPress{x,y}`, `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
+  `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
+  flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`
+  (0..1 of the phone screen), `ping{t}`.
+- Phone → glasses: `screen{width, height, region{x,y,width,height}}` (on connect and on every
+  change), `result{of, ok}` for text and keys, `pong{t}`.
+- The companion parses these as strictly as `ControlProtocol` does.
+
+## Security (additions to the invariants in CLAUDE.md)
+
+- The PC never relays video or input for the phone; it can't see either.
+- The companion pairs only through the Approve popup; its token is hashed on the PC, stored in
+  the app's private storage on the phone, never logged. Tray: **Forget phone**.
+- Every phone session needs the MediaProjection consent tapped **on the phone**. The companion
+  shows a notification while live, with **Stop**. Android's own status-bar chip shows capture.
+- The companion accepts input only on the DataChannel of the peer it offered to, after DTLS
+  (fingerprints exchanged over the authenticated signalling). Strict parser, rate limit.
+- Typed text never presses Enter; Enter is a separate `key`.
+- The companion never launches apps or opens URLs on the glasses' request (as on the PC).
+
+## Milestones
+
+| # | What | Needs the phone? |
+| --- | --- | --- |
+| P0 | Feasibility on the S25: install, allow restricted settings, enable accessibility, capture consent, WebRTC to the glasses at home **and** on 5G, a square pop-up window | yes |
+| P1 | PC: companion pairing, `/ws/companion`, `PhoneRelay`, `target` in auth; tests with a fake companion | no |
+| P2 | Glasses: PC/Phone chooser, phone session screen (video, cursor, tap, swipe to scroll, Back/Home/Recents, Type) | no (fake companion in the harness) |
+| P3 | Companion app: pairing, foreground service, consent, capture → WebRTC, DataChannel → accessibility | build: no; run: yes |
+| P4 | Region: fit to the top app window (accessibility window bounds), Samsung pop-up view helper, the PC-style Region mode | yes |
+| P5 | On the go: keep the screen on while live, lock handling, approval on the phone instead of the PC after the 24 h device token runs out, reconnect | yes |
+| P6 | Later: the phone's sound (`AudioPlaybackCapture`), stats panel figures, app shortcuts configured on the phone | yes |
+
+## Research notes (2026-09-27; verify on the S25)
+
+- **Capture stops when the phone locks.** From Android 15 QPR1, a running MediaProjection ends
+  when the keyguard shows (with a PIN/fingerprint set), and a status-bar chip shows while
+  capturing. So the phone must stay unlocked with the screen on during a session. The companion
+  can keep it on while live (a tiny accessibility overlay with `FLAG_KEEP_SCREEN_ON`). Whether
+  Samsung's "accidental touch protection" in a pocket blocks injected gestures is unknown.
+- **Consent every session.** Since Android 14, the `createScreenCaptureIntent` result works once,
+  and one `MediaProjection` makes one virtual display. The foreground service must be of type
+  `mediaProjection` and start **after** consent. `MediaProjection.Callback` must be registered
+  before `createVirtualDisplay` (the libwebrtc capturer does this).
+- **Starting the consent dialog from the background:** apps with a bound AccessibilityService are
+  exempt from Android's background-activity-start limits, so the companion can raise the dialog
+  when the glasses ask. To confirm on the S25.
+- **Accessibility for a sideloaded app:** Android 13+ greys out the toggle for apps installed from
+  a browser or file manager ("Restricted setting"); Android 15 blocks it even for `adb install`.
+  Fix: App info → ⋮ → **Allow restricted settings**, then enable. One-off.
+- **Samsung windows:** pop-up view (freeform) windows resize by hand; `ActivityOptions.setLaunchBounds`
+  only applies in freeform mode. Split screen: `FLAG_ACTIVITY_LAUNCH_ADJACENT`, divider not
+  controllable. Accessibility's `getWindows()` gives each window's screen bounds, which is how P4
+  fits the crop to the app window.
+- **Protected content** (banking apps, DRM video, `FLAG_SECURE`) captures black; some controls
+  ignore accessibility input.
+- **WebRTC library:** `io.getstream:stream-webrtc-android` 1.3.10 (Maven Central, June 2026) is
+  the maintained prebuilt libwebrtc; it has `ScreenCapturerAndroid`, hardware encoders and
+  `VideoProcessor` for cropping.
+- **Network on the go:** the glasses' WebView reports no network of its own (`netType` 8) and its
+  traffic leaves through the phone. Whether it can reach the phone's own addresses (Wi-Fi,
+  cellular IPv4/IPv6) is unknown; P0 logs the chosen ICE pair. Fallbacks: a STUN server (server
+  reflexive candidates), then a TURN relay on the PC.
+- **Build tools on this PC:** Android SDK platforms up to 35, build-tools 35, JDK 17, AGP 9.0.0
+  and Gradle 9.1.0 in the Gradle cache. The companion targets SDK 35, min SDK 30.
+
+## Questions for the user
+
+1. Which Android / One UI version is the S25 on (Settings → About phone → Software information)?
+2. On the go, is the phone going to be unlocked in a pocket or bag? Capture stops on lock (above).
+3. After the 24 h device token runs out away from home, approve on the phone instead of the PC (P5)?
