@@ -73,3 +73,55 @@ describe('TapThenHold', () => {
     expect(t.pressStarted(1200)).toBe(false);
   });
 });
+
+describe('GestureTracker holds', () => {
+  const options = { tapThreshold: 10, tapMaxMs: 500 };
+
+  it('a press kept still becomes a hold, and moving after it is a held drag', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 100, 100, 0);
+    expect(g.move(1, 104, 102)).toEqual([]);
+    expect(g.hold(1)).toEqual([{ kind: 'hold', x: 100, y: 100 }]);
+    expect(g.holding).toBe(true);
+    expect(g.move(1, 120, 100)).toEqual([
+      { kind: 'dragStart', x: 100, y: 100, held: true },
+      { kind: 'drag', dx: 20, dy: 0 },
+    ]);
+    expect(g.up(1, 120, 100, 900)).toEqual([{ kind: 'dragEnd', held: true }]);
+    expect(g.holding).toBe(false);
+  });
+
+  it('a hold released without moving ends the hold, not a tap', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 0, 0, 0);
+    g.hold(1);
+    expect(g.up(1, 3, 0, 450)).toEqual([{ kind: 'holdEnd' }]);
+  });
+
+  it('moving before the hold is a plain drag, and the late hold does nothing', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 0, 0, 0);
+    expect(g.move(1, 30, 0)[0]).toEqual({ kind: 'dragStart', x: 0, y: 0 });
+    expect(g.hold(1)).toEqual([]);
+    expect(g.up(1, 30, 0, 600)).toEqual([{ kind: 'dragEnd' }]);
+  });
+
+  it('cancelling a hold or a held drag ends it', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 0, 0, 0);
+    g.hold(1);
+    expect(g.cancel(1)).toEqual([{ kind: 'holdEnd' }]);
+    g.down(2, 0, 0, 0);
+    g.hold(2);
+    g.move(2, 50, 0);
+    expect(g.cancel(2)).toEqual([{ kind: 'dragEnd', held: true }]);
+  });
+
+  it('a hold for another pointer or after release does nothing', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 0, 0, 0);
+    expect(g.hold(2)).toEqual([]);
+    g.up(1, 0, 0, 100);
+    expect(g.hold(1)).toEqual([]);
+  });
+});

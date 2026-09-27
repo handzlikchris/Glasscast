@@ -138,6 +138,8 @@ export type ClientMessage =
   | { type: 'setRegion'; x: number; y: number; width: number; height: number }
   | { type: 'move'; x: number; y: number }
   | { type: 'click'; button: 'left' }
+  /** Press or release the button: a held drag (pinch, hold still, move). The PC releases it itself on mode change or session end. */
+  | { type: 'mouseButton'; button: 'left'; down: boolean }
   | { type: 'scroll'; dy: number }
   | { type: 'typeText'; text: string }
   | { type: 'key'; key: KeyName }

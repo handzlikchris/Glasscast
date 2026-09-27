@@ -490,6 +490,30 @@ try {
   const modeAfterBackFromType = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   check('Back from Type returns to Pointer mode', modeAfterBackFromType === 'pointer', modeAfterBackFromType);
 
+  // 17c. Pinch, hold still 0.4 s, then move: a drag with the button held (select text, move a
+  //      window). A pinch held still and let go without moving is still a click.
+  await press('button[data-mode="pointer"]');
+  await sleep(200);
+  const beforeHeld = (await input()).length;
+  await page.mouse.move(300, 300);
+  await page.mouse.down();
+  await sleep(600);
+  await page.mouse.move(360, 340, { steps: 6 });
+  await sleep(150);
+  await page.mouse.up();
+  await sleep(500);
+  const heldDrag = (await input()).slice(beforeHeld).map((a) => (a.startsWith('move ') ? 'move' : a));
+  const heldPlain = heldDrag.filter((a, i) => a !== 'move' || heldDrag[i - 1] !== 'move');
+  const beforeSlow = (await input()).length;
+  await page.mouse.down();
+  await sleep(550);
+  await page.mouse.up();
+  await sleep(600);
+  const slow = (await input()).slice(beforeSlow).filter((a) => !a.startsWith('move '));
+  check('pinch, hold still, move: a drag with the button down; held and let go still: a click',
+    heldPlain.filter((a, i) => !(i === 0 && a === 'move')).join('|') === 'down Left|move|up Left' && slow.join('|') === 'click Left',
+    `held: ${heldPlain.join('|')} · slow: ${slow.join('|')}`);
+
   await press('button[data-mode="pointer"]');
   await sleep(100);
   await press('button[data-toggle="pan"]');

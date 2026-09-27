@@ -36,7 +36,7 @@ import {
   type NavTarget,
 } from './focusnav';
 import { SwipeReader, pcSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
-import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
+import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
 import { AudioOutput, type OutputState } from './audioOutput';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
@@ -113,6 +113,11 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const gestures = useRef(new GestureTracker(DEFAULT_GESTURES));
+  /** Turns a pinch kept still into a hold (then moving drags with the button down). */
+  const dragHoldTimer = useRef<number | null>(null);
+  /** Where the current press started (stage px): a hold released still taps there. */
+  const pressAt = useRef({ x: 0, y: 0 });
+  const handleGestureRef = useRef<(event: GestureEvent) => void>(() => {});
   const scroll = useRef(new ScrollAccumulator());
   const pendingMove = useRef<Point | null>(null);
   const moveScheduled = useRef(false);
@@ -796,6 +801,18 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const handleGesture = (event: GestureEvent) => {
     const { mode: m, monitor: mon, region: r, draft: d, cursor: c, content: box } = live.current;
 
+    // A hold released without moving is a slow pinch: a tap, as it was before holds existed.
+    if (event.kind === 'holdEnd') {
+      const at = pressAt.current;
+      handleGesture({ kind: 'tap', x: at.x, y: at.y });
+      return;
+    }
+    if (event.kind === 'hold') {
+      releasePendingClick();
+      if (m === 'pointer') setLastInput('hold: move to drag with the button down');
+      return;
+    }
+
     if (event.kind === 'tap') {
       const route = routeTap({
         nav: live.current.nav,
@@ -811,7 +828,14 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       }
     } else if (event.kind === 'dragStart') {
       releasePendingClick();
-      setLastInput(`drag (${pointerType.current})`);
+      setLastInput(event.held && m === 'pointer' ? 'drag with the button down' : `drag (${pointerType.current})`);
+      if (event.held && m === 'pointer' && box) {
+        // Press where the cursor is now, before any of this drag's moves.
+        flushRegion();
+        flushMove();
+        if (!c) send({ type: 'move', ...toNormalized(centreOf(box), box) });
+        send({ type: 'mouseButton', button: 'left', down: true });
+      }
     }
 
     if (m === 'overview' && event.kind === 'drag' && d && mon) {
@@ -882,6 +906,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         // Land the final region before the final cursor position.
         flushRegion();
         flushMove();
+        if (event.held) send({ type: 'mouseButton', button: 'left', down: false });
       } else if (event.kind === 'tap') {
         // Make sure Windows' cursor is where ours is before clicking.
         flushRegion();
@@ -904,6 +929,8 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       scroll.current.add(event.dy);
     }
   };
+
+  handleGestureRef.current = handleGesture;
 
   const toLocal = (e: PointerEvent) => {
     const rect = stageRef.current!.getBoundingClientRect();
@@ -937,6 +964,17 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       return;
     }
     gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
+    pressAt.current = p;
+    clearDragHold();
+    const id = e.pointerId;
+    dragHoldTimer.current = window.setTimeout(() => {
+      dragHoldTimer.current = null;
+      gestures.current.hold(id).forEach(handleGestureRef.current);
+    }, HOLD_DRAG_MS);
+  };
+  const clearDragHold = () => {
+    if (dragHoldTimer.current !== null) clearTimeout(dragHoldTimer.current);
+    dragHoldTimer.current = null;
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (secondPress.current?.id === e.pointerId) return; // wobble during pinch-then-hold
@@ -952,6 +990,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     lastPointerAt.current = performance.now();
     clearHold();
+    clearDragHold();
     const press = secondPress.current;
     if (press?.id === e.pointerId) {
       secondPress.current = null;
@@ -964,6 +1003,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   };
   const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
     clearHold();
+    clearDragHold();
     if (secondPress.current?.id === e.pointerId) secondPress.current = null;
     releasePendingClick();
     gestures.current.cancel(e.pointerId).forEach(handleGesture);
