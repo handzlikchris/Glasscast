@@ -60,6 +60,8 @@ const HIDDEN_MS = 5000;
 /** A press held this still and this long is a long press. */
 const LONG_PRESS_MS = 600;
 const POINTER_GAIN = 1.0;
+/** Composer text that came as input events with no change event is sent after this quiet time. */
+const INPUT_SETTLE_MS = 1500;
 
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
@@ -97,6 +99,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   // Any pinch that isn't a drag or a long press is a tap: no gap between the two where it's lost.
   const tracker = useRef(new GestureTracker({ ...DEFAULT_GESTURES, tapMaxMs: LONG_PRESS_MS }));
   const leftSwipeAt = useRef<number | null>(null);
+  /** Text sent to the phone and not yet confirmed: it goes back in the box if the phone had no field. */
+  const pendingText = useRef<string | null>(null);
   const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
@@ -206,7 +210,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
           const h = Math.round(message.region.height * message.height);
           setScreen(message.follow ? `window ${w}×${h}` : `${w}×${h}`);
         }
-        else if (message.type === 'result') setLastInput(`${message.of === 'key' ? 'key' : 'text'} ${message.ok ? 'sent' : 'had no text field'}`);
+        else if (message.type === 'result') onResult(message.of, message.ok);
       },
     });
     linkRef.current = link;
@@ -441,17 +445,34 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
 
   const sendText = (text: string) => {
     const pieces = phoneText(text);
-    for (const piece of pieces) send({ type: 'typeText', text: piece }, 'text');
+    if (pieces.length > 0) pendingText.current = text;
+    for (const piece of pieces) send({ type: 'typeText', text: piece }, 'text → phone');
     return pieces.length > 0;
   };
 
-  // The composer hands its text back with a change event: send it and offer Enter.
-  const onTextChange = () => {
-    const box = textRef.current!;
-    if (sendText(box.value)) {
-      box.value = '';
-      if (enterRef.current) focusHeld(enterRef.current);
+  /** Sends what's in the box (the composer's text) and offers Enter. */
+  const sendBox = () => {
+    const box = textRef.current;
+    if (!box || !sendText(box.value)) return;
+    box.value = '';
+    if (enterRef.current) focusHeld(enterRef.current);
+  };
+
+  const onResult = (of: 'typeText' | 'key', ok: boolean) => {
+    if (of === 'key') {
+      setLastInput(ok ? 'key sent' : 'key: no text field on the phone');
+      return;
     }
+    const text = pendingText.current;
+    pendingText.current = null;
+    if (ok) {
+      setLastInput('text typed on the phone');
+      return;
+    }
+    // Nothing on the phone to type into: keep the text rather than lose it.
+    setLastInput('no text field on the phone: tap one, then Send text');
+    const box = textRef.current;
+    if (box && text && !box.value) box.value = text;
   };
 
   /**
@@ -471,15 +492,31 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     setTimeout(() => document.removeEventListener('keydown', onKey, true), 600);
   };
 
-  // The native change event (not React's onChange, which is every keystroke): the composer closing.
-  const onTextChangeRef = useRef(onTextChange);
-  onTextChangeRef.current = onTextChange;
+  // The composer hands its text back with input events and then, usually, a change event (the
+  // native one, not React's onChange). Send on change; if only input came, send once it has been
+  // quiet for INPUT_SETTLE_MS. Typing on a laptop keyboard counts the same way.
+  const sendBoxRef = useRef(sendBox);
+  sendBoxRef.current = sendBox;
   useEffect(() => {
     if (focus !== 'type') return;
     const box = textRef.current!;
-    const listener = () => onTextChangeRef.current();
-    box.addEventListener('change', listener);
-    return () => box.removeEventListener('change', listener);
+    let settle: ReturnType<typeof setTimeout> | null = null;
+    const onChange = () => {
+      if (settle !== null) clearTimeout(settle);
+      settle = null;
+      sendBoxRef.current();
+    };
+    const onInput = () => {
+      if (settle !== null) clearTimeout(settle);
+      settle = setTimeout(onChange, INPUT_SETTLE_MS);
+    };
+    box.addEventListener('change', onChange);
+    box.addEventListener('input', onInput);
+    return () => {
+      if (settle !== null) clearTimeout(settle);
+      box.removeEventListener('change', onChange);
+      box.removeEventListener('input', onInput);
+    };
   }, [focus]);
 
   const endSession = () => {
@@ -526,7 +563,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
         <div className="type-panel">
           <textarea ref={textRef} rows={3} placeholder="Speak or write; it goes into the phone's text field" />
           <div className="row keys">
-            <button type="button" onClick={() => { const box = textRef.current!; if (sendText(box.value)) box.value = ''; }}>
+            <button type="button" onClick={sendBox}>
               Send text
             </button>
             <button ref={enterRef} type="button" onClick={() => { send({ type: 'key', key: 'Enter' }, 'Enter'); setFocus('view'); }}>
