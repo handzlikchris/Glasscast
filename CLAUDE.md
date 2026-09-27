@@ -410,6 +410,14 @@ tight padding, check a screenshot when adding buttons). Model in
   for good through the SRTP rollover bug (fixed). Phone-browser comparison still to do. Still open: a delay
   signal for the controller (the glasses' arrivalMs, or RTT), gradual intra refresh or a
   keyframe size cap, and as a last resort a TCP path (WebSocket + WebCodecs), like RDP.
+- **Open bug (2026-09-27, 11:30 session, glasses on the slow relay):** ~13 s in, SIPSorcery
+  started rejecting every SRTCP packet from the glasses (4,590 × "SRTCP unprotect failed",
+  result -4 = replay, after one -3 = HMAC failure; also STUN integrity failures). With the
+  glasses' RTCP unreadable, NACKs weren't resent (0 of 3,728) and the bitrate target froze at
+  479 kbit/s. Not seen in the harness. Next: log each raw SRTCP index (trailer, in the clear) to
+  see duplicates/corruption/jumps, then recover (reset SIPSorcery's SRTCP replay state, or
+  renegotiate) instead of staying blind. The morning's link test logged "no RTCP activity for
+  30 s" too, so it may have hit this as well.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
   phone-friendly layout; hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN
   over TLS for UDP-blocking networks; remote approval flow; Claude-specific controls; a tray
