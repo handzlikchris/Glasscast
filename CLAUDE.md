@@ -415,10 +415,10 @@ tight padding, check a screenshot when adding buttons). Model in
   it would remove the 350 ms click delay).
 - Open question: primary monitor resolution/scaling (affects region defaults and readability).
 - **Code review (2026-09-27):** https://claude.ai/artifact/DtG7DX4v6vaqCNYp5wiGuB (read with
-  the Artifact tool). Open findings F1-F14, most important: a dropped connection during resume
-  looks like token reuse (F1), the client forgets a valid device token when the PC is only
-  busy (F2), `OnNack` decrypts through SIPSorcery's SRTCP replay state (F3), pump/encoder
-  exceptions end sessions without a clear reason (F4).
+  the Artifact tool). F1-F4 fixed the same day (device token confirmed on the first
+  `rtcAnswer`; token kept on a refused resume; no NACK copy-decrypt, `rtcpUnreadable` counted and
+  logged; `media error` / `server error` close reasons). Open: F5-F14 (low), e.g. the Approve
+  popup's stale "End session" text, stale cursor before clicks, region file written per pan step.
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
   the task". `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
   mic via Meta's DAT) is planned but **on hold** at the user's request.
