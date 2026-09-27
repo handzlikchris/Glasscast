@@ -68,6 +68,13 @@ public sealed class MediaOptions
     public int MinKbps { get; set; } = 300;
 
     /// <summary>
+    /// Where the target starts; it climbs 8% a second while the link is clean and busy. The
+    /// glasses' link measured ~0.9 Mbit/s with the phone on 5G, so starting at the max (2.5)
+    /// would overload it first and back off after.
+    /// </summary>
+    public int StartKbps { get; set; } = 1000;
+
+    /// <summary>
     /// DIAGNOSTIC: every session starts with a link test (LinkTest): a noise pattern at each of
     /// <see cref="LinkTestStepsKbps"/> for <see cref="LinkTestStepSeconds"/>, then the desktop.
     /// </summary>

@@ -97,7 +97,7 @@ public sealed class FramePumpTests : IAsyncDisposable
     [Fact]
     public async Task Loss_reported_by_the_glasses_lowers_the_encoder_target()
     {
-        Start(minGapMs: 0, o => o.TargetKbps = 2000);
+        Start(minGapMs: 0, o => (o.TargetKbps, o.StartKbps) = (2500, 2000));
         await WaitUntil(() => _peer.FramesSent >= 5);
 
         _peer.ReportFeedback(new ReceiverFeedback(0.5, null)); // 50% lost: -25%
@@ -120,7 +120,7 @@ public sealed class FramePumpTests : IAsyncDisposable
         _peer.ReportFeedback(new ReceiverFeedback(0.9, null)); // ignored during the test
         Assert.Empty(_capture.Sources);
         await WaitUntil(() => _encoder.TargetKbps == 900, timeoutMs: 2000);
-        await WaitUntil(() => _encoder.TargetKbps == 2500, timeoutMs: 2000);
+        await WaitUntil(() => _encoder.TargetKbps == 1000, timeoutMs: 2000); // back to the start target
         await WaitUntil(() => _capture.Sources.Count > 0);
         Assert.Contains(_stats, s => s.LinkTestKbps > 0); // the step when each 1 s window closed
     }

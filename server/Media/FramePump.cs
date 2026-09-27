@@ -72,7 +72,7 @@ public sealed class FramePump
         var rtpDuration = (uint)(RtpClockRate / fps);
         var keyframeEvery = TimeSpan.FromSeconds(Math.Max(1, _options.KeyframeIntervalSeconds));
         var requestedGap = TimeSpan.FromMilliseconds(Math.Max(0, _options.RequestedKeyframeMinGapMs));
-        var bitrate = new BitrateController(_options.MinKbps, _options.TargetKbps, _options.TargetKbps);
+        var bitrate = new BitrateController(_options.MinKbps, _options.TargetKbps, _options.StartKbps);
         var linkTest = _options.LinkTestOnStart
             ? new LinkTest(_options.LinkTestStepsKbps, TimeSpan.FromSeconds(Math.Max(1, _options.LinkTestStepSeconds)))
             : null;
