@@ -1,0 +1,80 @@
+# The glasses client (client-web)
+
+A React 19 + TypeScript app built by Vite into `client-web/dist`, which the server serves
+from disk. It runs in the Meta Ray-Ban Display WebView: 600×600, additive display (black is
+transparent), input as arrow keys (swipes), pointer taps at the glasses' pointer (pinches),
+pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
+
+## Files
+
+| File | Role |
+| --- | --- |
+| `src/main.tsx` | Mounts `<App/>` without `<StrictMode>` (double effects would open two sessions). |
+| `src/App.tsx` | Phases: `pairing` → `session` → `ended` (Reconnect / Pair again). Starts in `session` when a device token is stored. |
+| `src/PairingScreen.tsx` | Shows the pairing code and countdown; Try again. |
+| `src/pinchPress.ts` | Outside a session, a pinch anywhere presses the focused button. |
+| `src/connection.ts` | Pair and session sockets; the only place tokens live (see [pairing-and-auth.md](pairing-and-auth.md)). |
+| `src/rtc.ts` | Receive-only `RTCPeerConnection`, stats snapshot, `watchFrames`. |
+| `src/SessionScreen.tsx` | The session UI and all its behaviour (~1000 lines): connection effect, navigation, gestures, modes, panning, overlay, toolbar. |
+| `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, shortcut keys, the focus chain. |
+| `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `swipeAction`, `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
+| `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms), `TapThenHold`, `DOUBLE_TAP_MS` 350, `HOLD_MS` 500. |
+| `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
+| `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |
+| `src/display.ts`, `src/scrollPrefs.ts` | Brightness levels and per-app scroll strength, in localStorage. |
+| `src/mediaStats.ts` | Latency matching and the Stats panel text (see [stats-and-diagnostics.md](stats-and-diagnostics.md)). |
+| `src/styles.css` | Looks (`natural`, `lifted`, `contrast`), `--brightness`, toolbar, panels; `touch-action: none` must stay in the initial CSS. |
+| `build-label.mjs` | `Build <commit>[+] · <date time>` baked in as `__BUILD__`, shown on pairing/ended screens. |
+
+## SessionScreen structure
+
+State that must not go stale inside event handlers is mirrored in refs (`live`, `focused`,
+`pin`, `currentApp`, `activeAppRef`, `scrollLevelsRef`, `edgeScroll`, …); handlers are
+reassigned to refs each render (`swipeRef`, `backRef`, `setNavRef`, `restorePinRef`).
+
+Effects:
+1. **Connection** (mount once): `Session.open`, `VideoReceiver`, `watchFrames`, ping every
+   2 s, stats every 1 s, scroll flush every 50 ms, visibility watch (hidden 5 s → end). Cleanup
+   closes everything.
+2. **Navigation** (mount once): `focusin`, captured `pointerdown`/`pointerup`/`click` on the
+   stage (a pinch while on the controls presses the *focused* control), `keydown` on the
+   document (swipes, Escape/Backspace as Back, Enter de-duplication).
+3. **History**: pushes one entry so Back arrives as `popstate`; re-pushed after each Back.
+4. **Overlay** redraw when cursor, region box, look or edge glow change.
+
+## Navigation model
+
+- `nav = 'view'`: swipes act on the desktop (`swipeAction`), the top bar is hidden and
+  click-through. `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
+- Back from the view → controls (focus on Type from Pointer, Pointer otherwise); Back from the
+  controls (and so from Type and Region) → home to Pointer mode. Two Backs within 400 ms count
+  once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch.
+- The glasses reset focus after a Back and when the composer closes. Focus the app moves on
+  purpose goes through `focusPinned`, which restores it for 600 ms (re-checked at 50/150/300/500 ms);
+  any swipe or pinch ends the pin.
+
+## Type flow
+
+Entering Type (`flushSync` so the panel exists inside the same user gesture) focuses and
+clicks the textarea to try to open the composer → the composer's `change` moves focus to
+**Send text** → sending moves focus to **Enter** → Enter returns to Pointer mode. A swipe of
+the user's breaks the chain. Text is capped at 500 characters; the server flattens newlines.
+
+## Local storage
+
+Only `glassesRemote.device` (device token + expiry), `glasses.videoBrightness`,
+`glasses.scrollLevels`. Every access is wrapped in try/catch; blocked storage just means
+nothing is remembered.
+
+## Build and deploy
+
+`npm run build` = `tsc --noEmit && vite build`. The running server serves the new `dist`
+at once; the user presses Restart in the glasses' web app menu. `index.html` is `no-cache`,
+hashed `/assets` are immutable (`ClientCaching`). Strict CSP: no inline scripts/styles in
+`index.html`; React `style` props are fine. Budget: <300 KB first load, <15 requests.
+
+## Tests
+
+Unit (Vitest, node): `focusnav`, `gestures`, `controls`, `geometry`, `protocol`,
+`mediaStats`, `display`, `scrollPrefs`. `SessionScreen`, `TypePanel` and `connection` have no
+unit tests; they are covered by the e2e harness (`tools/e2e-harness/browser/drive.mjs`).
