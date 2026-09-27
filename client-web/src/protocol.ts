@@ -53,6 +53,9 @@ export interface PcMediaStats {
   /** Wait in the PC's pacer until a frame's last packet went out. */
   sendMs: number;
   sendMaxMs: number;
+  /** Packets the glasses reported lost (NACK), and how many of those the PC sent again. */
+  nacked: number;
+  resent: number;
   kbps: number;
   keyframes: number;
   /** Keyframe requests (PLI/FIR) the PC received from the glasses. */
@@ -191,6 +194,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         keyframeRequests: isNumber(data.keyframeRequests) ? data.keyframeRequests : 0,
         sendMs: isNumber(data.sendMs) ? data.sendMs : 0,
         sendMaxMs: isNumber(data.sendMaxMs) ? data.sendMaxMs : 0,
+        nacked: isNumber(data.nacked) ? data.nacked : 0,
+        resent: isNumber(data.resent) ? data.resent : 0,
         frames,
       };
     }

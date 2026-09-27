@@ -226,12 +226,15 @@ export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | n
     const maxKb = Math.max(0, ...pc.flatMap((s) => s.frames.map((f) => f.bytes))) / 1024;
     const keyframes = pc.reduce((sum, s) => sum + s.keyframes, 0);
     const asked = pc.reduce((sum, s) => sum + s.keyframeRequests, 0);
+    const nacked = pc.reduce((sum, s) => sum + s.nacked, 0);
+    const resent = pc.reduce((sum, s) => sum + s.resent, 0);
     lines.push(
       `PC capture ${ms(avg((s) => s.captureMs))} (max ${ms(max((s) => s.captureMaxMs))}) · encode ${ms(avg((s) => s.encodeMs))} (max ${ms(max((s) => s.encodeMaxMs))}) · send ${ms(avg((s) => s.sendMs))} (max ${ms(max((s) => s.sendMaxMs))}) ms`,
     );
     lines.push(
       `PC frame ${ms(frameKb)} KB (max ${ms(maxKb)}) · ${ms(pc[pc.length - 1].fps)} fps · ${ms(pc[pc.length - 1].kbps)} kbps · keyframes ${keyframes} (asked ${asked})`,
     );
+    lines.push(`PC resent ${resent} of ${nacked} NACKed`);
   }
   return lines;
 }
