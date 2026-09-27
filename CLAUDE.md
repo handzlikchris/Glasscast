@@ -333,7 +333,8 @@ tight padding, check a screenshot when adding buttons). Model in
 - Firewall rules come from `deploy/firewall.ps1` (admin): TCP 8443, UDP 50000, optional TCP 5080 LAN-only.
 - Caddy certificate is stored in `%APPDATA%\Caddy`; access log `caddy-access.log` in the repo root
   (git-ignored). The log's User-Agent tells devices apart: `Greatwhite` = the glasses; the phone
-  is a Galaxy S25 (SM-S931B, Android 16). A mobile-network IP there means the real outside path.
+  is a Galaxy S25 (SM-S931B, Android 16, One UI 8.0). It's paired for **wireless adb** (`adb devices`
+  lists it as 192.168.1.233:<port>; the port changes when wireless debugging restarts). A mobile-network IP there means the real outside path.
 - Remote is `origin` = github.com/handzlikchris/GlassesRemote; the user asks for pushes ("check in").
 
 ## Gotchas already paid for
@@ -460,8 +461,8 @@ tight padding, check a screenshot when adding buttons). Model in
 
 - **Phone mode (2026-09-27, branch `feat/phone-mode`):** PC side (companion pairing,
   `/ws/companion`, `PhoneRelay`) and glasses side (PC/Phone first screen, `PhoneScreen`) built and
-  tested (server tests with a fake companion, client tests, e2e 45/45). The Android companion is
-  written but **not built** (Gradle 9.1 not downloaded) and nothing has run on the S25. Next
+  tested (server tests with a fake companion, client tests, e2e 45/45). The Android companion
+  builds and is installed on the S25; not yet used for a session. Next
   steps and questions: `architecture/phone-mode.md`.
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the

@@ -5,16 +5,21 @@ to the PC, and when the glasses start a phone session it asks for Android's scre
 consent, streams the screen to the glasses over WebRTC and turns their input into taps, swipes,
 Back/Home/Recents and text through an accessibility service. The PC only relays signalling.
 
-Status: written 2026-09-27, **not built or run yet**.
+Status: builds and installs (2026-09-27, Gradle 9.1, AGP 9.0 with build-tools 36; 4 unit tests pass).
+Not yet used for a session.
 
 ## Build
 
-Needs JDK 17 and the Android SDK (platform 35). Gradle 9.1 and AGP 9.0 (the wrapper downloads
-Gradle on first use; the wrapper jar and scripts are not committed).
+Needs JDK 17 (Gradle 9 won't run on the JDK 11 in `JAVA_HOME` on this PC) and the Android SDK
+(platform 35; AGP 9.0 installs build-tools 36 itself). The wrapper jar and scripts are not
+committed; create them once.
 
 ```powershell
 cd android-companion
-gradle wrapper --gradle-version 9.1.0     # once, creates gradlew (any installed Gradle will do)
+# once: any installed Gradle, in an empty folder (Gradle 7.6 can't load this project), then copy
+# gradlew, gradlew.bat and gradle/wrapper/gradle-wrapper.jar here
+gradle wrapper --gradle-version 9.1.0
+$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.13.11-hotspot'
 .\gradlew.bat assembleDebug testDebugUnitTest
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```

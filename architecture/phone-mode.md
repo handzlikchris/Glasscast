@@ -1,7 +1,7 @@
 # Phone mode: controlling the Android phone from the glasses
 
-Status (2026-09-27, branch `feat/phone-mode`): **P1 and P2 built and tested; P3 written but not
-built** (Gradle 9.1 not downloaded yet). Nothing has run on the S25. The research notes below
+Status (2026-09-27, branch `feat/phone-mode`): **P1 and P2 built and tested; P3 builds and is
+installed on the S25** (Android 16, One UI 8.0), not yet used for a session. The research notes below
 come from docs and web sources, not from the device.
 
 The first screen of the glasses app asks **PC or Phone**. PC is everything that exists today.
@@ -172,8 +172,7 @@ has no phone path yet.
 
 ## Next steps
 
-1. Build the companion (needs Gradle 9.1 downloaded, maybe build-tools 36 for AGP 9) and run its
-   unit tests. Fix what the compiler finds: the libwebrtc and accessibility code is unchecked.
+1. Done: the companion builds (Gradle 9.1, build-tools 36) and is installed over wireless adb.
 2. P0 on the S25 (the user): install, allow restricted settings, accessibility on, pair, Start;
    then Phone on the glasses, at home on Wi-Fi first, then on 5G. Read the glasses' status bar
    (`live (local|remote)`) and `adb logcat -s ScreenSession CompanionService`.
