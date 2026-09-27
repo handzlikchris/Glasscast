@@ -62,9 +62,10 @@ public interface IMediaPeer : IDisposable
 
 /// <summary>
 /// Since the last call: how long frames waited in the pacer (handed over → last packet sent),
-/// how many packets the glasses NACKed, and how many of those were sent again.
+/// how many packets the glasses NACKed, how many of those were sent again, and how many RTCP
+/// packets from the glasses SIPSorcery couldn't decrypt (their reports, NACKs and PLIs unheard).
 /// </summary>
-public readonly record struct SendStats(double AvgMs, double MaxMs, int Nacked, int Resent);
+public readonly record struct SendStats(double AvgMs, double MaxMs, int Nacked, int Resent, int RtcpUnreadable = 0);
 
 public interface IMediaPeerFactory
 {

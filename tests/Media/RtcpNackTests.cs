@@ -70,8 +70,8 @@ public sealed class RtcpNackTests
         var nack = Nack(Ours, (1, 0));
 
         Assert.True(RtcpNack.IsStandalone(nack));
-        Assert.True(RtcpNack.IsReadable(nack, Ours));
-        Assert.False(RtcpNack.IsReadable(nack, 0x12345678));
+        Assert.True(RtcpReadable.Decrypted(nack, Ours));
+        Assert.False(RtcpReadable.Decrypted(nack, 0x12345678));
         Assert.False(RtcpNack.IsStandalone(Remb()));
     }
 }

@@ -50,7 +50,7 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
                         RegionMath, RegionStore, CastArea (region of the active session), AppShortcuts
   Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, SdpFeedback, MfH264Encoder, Nv12,
                         Vp8 encoder, H264Rtp (packetizer) + RtpPacer (spreads packets out; uses
-                        Windows/PreciseSleep), SentPackets + RtcpNack (resend what the glasses NACK),
+                        Windows/PreciseSleep), SentPackets + RtcpNack (resend what the glasses NACK), RtcpReadable,
                         BitrateController (target from the glasses' loss), LinkTest (diagnostic),
                         StatsLog (daily JSONL of glasses + PC media figures)
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
@@ -201,7 +201,8 @@ tight padding, check a screenshot when adding buttons). Model in
   decode, render); `clock ±n` is the clock-offset error. Then the receiver's counters (jitter
   buffer, decode, bitrate, lost, NACK, PLI, freezes, dropped) and the PC's pump figures
   (capture, encode, `send` = wait in the pacer until a frame's last packet left), `PC target n
-  kbps · REMB · loss% · resent n of m`, and a `net` line (connection type, ICE network type,
+  kbps · REMB · loss% · resent n of m` (plus `RTCP unreadable n` when the PC couldn't decrypt
+  some of the glasses' RTCP), and a `net` line (connection type, ICE network type,
   the browser's bandwidth estimate, UDP rtt). `LINK TEST n kbps` heads it during a link test. The
   status bar's `ms` is only the control socket's ping. Not included: the wait for the next capture
   tick (0–50 ms at 20 fps) and the glasses' display scan-out.
@@ -216,7 +217,9 @@ tight padding, check a screenshot when adding buttons). Model in
   7 other, 8 none, 0 unknown, null = not reported; `downlinkMbps`, `rttMs`),
   `pc` (capture/encode/`sendMs` timings, frame KB, keyframes forced and `keyframeRequests` =
   PLI/FIR received, compare with the glasses' `plis`; `nacked` = packets the glasses NACKed,
-  `resent` = those sent again, compare with the glasses' `nacks`/`lostTotal`; `targetKbps` = the
+  `resent` = those sent again, compare with the glasses' `nacks`/`lostTotal`; `rtcpUnreadable` =
+  RTCP packets from the glasses SIPSorcery couldn't decrypt, so their NACKs/PLIs/loss went
+  unheard (each logged as a warning with source, sender SSRC and the clear SRTCP trailer); `targetKbps` = the
   encoder's adapted target, `rembKbps`/`lossPct` = the glasses' last RTCP estimate and loss,
   `linkTestKbps` = link test step, 0 outside it) and `event` (start with `lanOffered`,
   mediaPath with `lan` = whether the video went over the LAN, setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
@@ -308,7 +311,8 @@ tight padding, check a screenshot when adding buttons). Model in
   SendVideo, which keeps nothing). Resends reuse the original sequence number (no RTX). NACKs
   arrive in packets of their own (rsize), which SIPSorcery drops as unmatched, but it has already
   decrypted the channel's buffer **in place** when our handler runs (it subscribed first), so we
-  read them there (`RtcpNack.IsReadable` checks, else a copy is decrypted). SIPSorcery's own NACK
+  read them there (`RtcpReadable.Decrypted` checks; one it couldn't decrypt is dropped and counted,
+  never decrypted from a copy: that would move SIPSorcery's replay window). SIPSorcery's own NACK
   parse keeps only the first FCI; `RtcpNack` reads them all.
 - **Pacing:** H.264 frames are packetized by `H264Rtp` and sent by `RtpPacer` at
   `Media:PacingKbps` (6000) or faster to stay within `MaxPacingDelayMs` (150). Sent in one burst,
@@ -444,8 +448,10 @@ tight padding, check a screenshot when adding buttons). Model in
   authenticated with the live keys moved the window ahead (or the glasses' index went back).
   Suspects: our `OnNack` copy-decrypt path, which updates the same replay state as
   SIPSorcery's own decrypt; an index jump in the WebView. The STUN integrity failures hint at
-  a stale peer also sending to 50000 (fits the one -3, can't move the window). Log source,
-  SSRC and index of each failure first.
+  a stale peer also sending to 50000 (fits the one -3, can't move the window). Since review
+  fix F3 the copy-decrypt is gone, and each undecryptable RTCP packet is counted
+  (`rtcpUnreadable`) and logged with source, sender SSRC and trailer (E flag + index): read those
+  after the next relay session.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
   phone-friendly layout; hardware H.264 (async NVENC/QSV MFT); Windows.Graphics.Capture; TURN
   over TLS for UDP-blocking networks; remote approval flow; Claude-specific controls; a tray

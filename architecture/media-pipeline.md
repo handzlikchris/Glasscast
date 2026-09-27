@@ -18,6 +18,7 @@ RTP packetizer → pacer → SIPSorcery SRTP on fixed UDP 50000 → the glasses'
 | `server/Windows/PreciseSleep.cs` | High-resolution waitable timer (sub-ms sleeps for the pacer). |
 | `server/Media/SentPackets.cs` | Ring of the last 4096 packets (3 s, one resend per 50 ms, same SRTP epoch only). |
 | `server/Media/RtcpNack.cs` | Reads every FCI of every generic NACK in a (decrypted) RTCP packet. |
+| `server/Media/RtcpReadable.cs` | Whether SIPSorcery managed to decrypt an RTCP packet from the glasses (for NACKs and the `rtcpUnreadable` count). |
 | `server/Media/BitrateController.cs` | Loss-based target (cut on >10% loss, +8% on <2% while busy), `[MinKbps, TargetKbps]`, starts at `StartKbps`. |
 | `server/Media/SdpCandidates.cs` | Offer rewrite: drop SIPSorcery's own candidates (unless enabled), add `BindAddress` first for glasses at home, then `PublicIp:MediaPort`. |
 | `server/Media/MediaPaths.cs` | Is a client at home (same public IP), is an address private (the LAN path). |
@@ -62,9 +63,11 @@ cheaper. The encoder's own GOP follows the same interval.
 | PLI inside a compound report | SIPSorcery keeps only one feedback item per report | still checked in `OnReceiveReport` |
 | NACK | own packet; SIPSorcery has already decrypted the channel buffer in place (it subscribed first) | `OnNack` → `RtcpNack.ReadLost` → `SentPackets.TakeForResend` → `RtpPacer.EnqueueUrgent` |
 
-If the buffer is not readable (handler order changed), `OnNack` decrypts a copy with the
-stream's SRTCP context. That call updates the same context's replay window as SIPSorcery's
-own decrypt, so it matters which one sees a packet first (see the review's SRTCP note).
+A NACK SIPSorcery couldn't decrypt is dropped, never decrypted from a copy: that would go
+through SIPSorcery's own SRTCP context and move its replay window. `WatchRtcp` checks every
+RTCP packet from the glasses (`RtcpReadable.Decrypted`: a field after the clear 8 bytes must
+name our stream), counts the ones left encrypted (`rtcpUnreadable` in the stats) and logs the
+first 20 and every 500th with source, sender SSRC and the clear SRTCP trailer.
 
 ## Connectivity
 

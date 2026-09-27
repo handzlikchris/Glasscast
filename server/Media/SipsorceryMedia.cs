@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;
 using GlassesRemote.Server.Hosting;
@@ -71,7 +72,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     private int _standaloneRequests;
     private int _nacked;
     private int _resent;
-    private int _nackReadLogged;
+    private int _rtcpUnreadable;
+    private int _rtcpUnreadableTotal;
     private int _epoch;
 
     /// <summary>
@@ -138,8 +140,9 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
                 OnKeyframeRequest("in a compound report", ref _compoundRequests);
             }
         };
-        _peer.GetRtpChannel().OnRTPDataReceived += (_, _, packet) =>
+        _peer.GetRtpChannel().OnRTPDataReceived += (_, remote, packet) =>
         {
+            WatchRtcp(remote, packet);
             if (IsStandaloneKeyframeRequest(packet))
             {
                 OnKeyframeRequest("on its own", ref _standaloneRequests);
@@ -273,14 +276,42 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     public SendStats TakeSendStats()
     {
         var delay = _pacer.TakeSendDelay();
-        return new SendStats(delay.AvgMs, delay.MaxMs, Interlocked.Exchange(ref _nacked, 0), Interlocked.Exchange(ref _resent, 0));
+        return new SendStats(delay.AvgMs, delay.MaxMs, Interlocked.Exchange(ref _nacked, 0), Interlocked.Exchange(ref _resent, 0),
+            Interlocked.Exchange(ref _rtcpUnreadable, 0));
+    }
+
+    /// <summary>
+    /// On a network thread, after SIPSorcery tried to decrypt the packet in place: counts RTCP from
+    /// the glasses it couldn't decrypt (while that lasts, loss reports, NACKs and PLIs go unheard)
+    /// and logs where each came from. The first ones and then every 500th are logged, with the
+    /// SRTCP trailer, which is in the clear: its E flag and index show a replay or a jump.
+    /// </summary>
+    private void WatchRtcp(IPEndPoint remote, byte[] packet)
+    {
+        if (_peer.VideoLocalTrack?.Ssrc is not { } ssrc || RtcpReadable.Decrypted(packet, ssrc) != false)
+        {
+            return;
+        }
+
+        Interlocked.Increment(ref _rtcpUnreadable);
+        var total = Interlocked.Increment(ref _rtcpUnreadableTotal);
+        if (total <= 20 || total % 500 == 0)
+        {
+            _logger.LogWarning(
+                "RTCP from the glasses not decrypted (#{Total}): from {Remote}, type {Type}, sender SSRC {Sender:x8}, "
+                + "{Length} bytes, trailer {Trailer}",
+                total, remote, packet[1], BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4)), packet.Length,
+                Convert.ToHexString(packet.AsSpan(Math.Max(8, packet.Length - 14))));
+        }
     }
 
     /// <summary>
     /// On a network thread: the glasses list packets they're missing; the ones still in
     /// <see cref="_sent"/> go out again ahead of new frames. The list (NACK FCI) is encrypted
     /// (SRTCP). SIPSorcery has already decrypted the channel's buffer in place by the time this
-    /// handler runs (it subscribed first); should that ever change, a copy is decrypted here.
+    /// handler runs (it subscribed first). A NACK it couldn't decrypt is dropped (and counted by
+    /// <see cref="WatchRtcp"/>): decrypting a copy here would go through SIPSorcery's own SRTCP
+    /// context and move its replay window, so its decrypt of the same packet would then fail.
     /// </summary>
     private void OnNack(byte[] packet)
     {
@@ -290,26 +321,13 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             return;
         }
 
-        var readable = packet;
-        var decrypted = RtcpNack.IsReadable(packet, track.Ssrc);
-        if (Interlocked.Exchange(ref _nackReadLogged, 1) == 0)
+        if (RtcpReadable.Decrypted(packet, track.Ssrc) != true)
         {
-            _logger.LogInformation("NACKs from the glasses: {How}", decrypted ? "already decrypted" : "decrypting a copy");
-        }
-        if (!decrypted)
-        {
-            var copy = packet.ToArray();
-            var unprotect = stream.GetSecurityContext()?.UnprotectRtcpPacket;
-            if (unprotect is null || unprotect(copy, copy.Length, out var length) != 0)
-            {
-                _logger.LogDebug("Couldn't decrypt a NACK from the glasses");
-                return;
-            }
-            readable = copy.AsSpan(0, length).ToArray();
+            return;
         }
 
         var lost = new List<ushort>();
-        RtcpNack.ReadLost(readable, track.Ssrc, lost);
+        RtcpNack.ReadLost(packet, track.Ssrc, lost);
         var resend = _sent.TakeForResend(lost, Stopwatch.GetTimestamp(), Volatile.Read(ref _epoch));
         Interlocked.Add(ref _nacked, lost.Count);
         Interlocked.Add(ref _resent, resend.Count);

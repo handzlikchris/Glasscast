@@ -10,7 +10,8 @@ public readonly record struct FrameTiming(uint Rtp, long CapturedAtUnixMs, int B
 /// <summary>
 /// What the pump sent over about a second. Capture and encode times are per frame, as is send:
 /// the wait in the pacer until the frame's last packet went out; Nacked/Resent count packets the
-/// glasses reported lost and those sent again. TargetKbps is the encoder's target (adapted, see
+/// glasses reported lost and those sent again, RtcpUnreadable the RTCP packets from the glasses
+/// that SIPSorcery couldn't decrypt. TargetKbps is the encoder's target (adapted, see
 /// BitrateController), RembKbps/LossPct the glasses' last estimate and loss report, LinkTestKbps
 /// the link test's step (0 outside it). The frame list lets the
 /// glasses work out capture-to-display latency for each frame they show.
@@ -25,6 +26,7 @@ public sealed record MediaStats(
     double SendMaxMs,
     int Nacked,
     int Resent,
+    int RtcpUnreadable,
     int TargetKbps,
     int? RembKbps,
     double? LossPct,
@@ -222,6 +224,7 @@ public sealed class FramePump
                 SendMaxMs: Send.MaxMs,
                 Nacked: Send.Nacked,
                 Resent: Send.Resent,
+                RtcpUnreadable: Send.RtcpUnreadable,
                 TargetKbps: TargetKbps,
                 RembKbps: RembKbps,
                 LossPct: LossPct,

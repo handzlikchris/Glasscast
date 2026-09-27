@@ -19,14 +19,6 @@ public static class RtcpNack
         && packet[1] == Rtpfb
         && (packet[0] & 0x1F) == GenericNack;
 
-    /// <summary>
-    /// True when the packet's first feedback item names <paramref name="mediaSsrc"/> as its media
-    /// source. In SRTCP that field is encrypted, so this tells a decrypted packet from one that
-    /// isn't (a random match is a 1 in 2^32 chance).
-    /// </summary>
-    public static bool IsReadable(ReadOnlySpan<byte> packet, uint mediaSsrc) =>
-        packet.Length >= 12 && BinaryPrimitives.ReadUInt32BigEndian(packet[8..]) == mediaSsrc;
-
     /// <summary>Adds every sequence number NACKed for <paramref name="mediaSsrc"/> in the packet.</summary>
     public static void ReadLost(ReadOnlySpan<byte> rtcp, uint mediaSsrc, ICollection<ushort> lost)
     {
