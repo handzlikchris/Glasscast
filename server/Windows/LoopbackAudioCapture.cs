@@ -185,11 +185,32 @@ internal sealed class LoopbackAudioCapture : IAudioCapture
     }
 }
 
-/// <summary>Opens <see cref="LoopbackAudioCapture"/> on the default output device.</summary>
+/// <summary>
+/// Opens <see cref="ProcessLoopbackCapture"/> (every app, before the PC's volume) where Windows
+/// has it, else <see cref="LoopbackAudioCapture"/> on the default output device (follows the PC's
+/// volume and mute).
+/// </summary>
 public sealed class LoopbackAudioCaptureFactory(ILogger<LoopbackAudioCaptureFactory> logger) : IAudioCaptureFactory
 {
+    private bool _processLoopbackFailed;
+
     public IAudioCapture? Start()
     {
+        if (ProcessLoopbackCapture.IsSupported && !_processLoopbackFailed)
+        {
+            try
+            {
+                var capture = ProcessLoopbackCapture.Start();
+                logger.LogInformation("Capturing every app's sound (process loopback: the PC's volume doesn't matter)");
+                return capture;
+            }
+            catch (Exception ex)
+            {
+                _processLoopbackFailed = true;
+                logger.LogWarning(ex, "Process loopback unavailable; capturing the default output device (follows the PC's volume)");
+            }
+        }
+
         try
         {
             var capture = LoopbackAudioCapture.Start();
