@@ -234,8 +234,9 @@ tight padding, check a screenshot when adding buttons). Model in
   hashes kept (also in `%LOCALAPPDATA%\GlassesRemote\device-grant.json`). The expiry is fixed at
   approval, never extended. One device remembered at a time; a new approval replaces it.
   Reusing a swapped-out token forgets the device, ends any session and raises `DeviceTokenReused`.
-  Ending a session on the PC, a protocol violation, or **Forget remembered glasses** in the tray
-  forget it too. Still one session at a time: a resume only takes over a session of the **same**
+  A protocol violation or **Forget remembered glasses** in the tray forget it too. Ending a
+  session on the PC (tray or Ctrl+Shift+X) does **not** (user's choice, 2026-09-27): the
+  glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
 - The client stores only the brightness level, scroll strengths per app name, and the device token (`connection.ts`, localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); only a

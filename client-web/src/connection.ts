@@ -136,8 +136,9 @@ export class Session {
       }
     };
     this.ws.onclose = (event) => {
-      // The PC forgets the glasses when it ends the session or catches bad messages.
-      if (['terminated', 'invalid message', 'rate limit', 'bad answer'].includes(event.reason)) forgetDevice();
+      // The PC forgets the glasses when it catches bad messages. Ending the session on the PC
+      // ('terminated') keeps them remembered: Reconnect works without a new approval.
+      if (['invalid message', 'rate limit', 'bad answer'].includes(event.reason)) forgetDevice();
       if (!this.closedByUs) this.handlers.onClose(describeClose(event));
     };
   }

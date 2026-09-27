@@ -514,14 +514,19 @@ try {
   check('a stream whose start was lost asks for a keyframe and the PC answers it at once',
     asked > 0 && firstPictureMs !== null && firstPictureMs < 4000, `asked ${asked}, picture within ${firstPictureMs} ms`);
 
-  // 19. After the session ends, a pinch anywhere presses the focused "Pair again" (the glasses'
-  //     pinch doesn't land on the button), and pairing starts again (auto-approved here).
+  // 19. Ending the session on the PC (tray, Ctrl+Shift+X) keeps the glasses remembered: the ended
+  //     screen focuses Reconnect, and a pinch anywhere presses it (the glasses' pinch doesn't land
+  //     on the button). The new session is a resume, with no pairing.
   await fetch(`${BASE}/__harness/terminate`, { method: 'POST' });
   const ended = await page.waitForSelector('main.ended', { timeout: 5000 }).then(() => true, () => false);
+  const focusedButton = await page.evaluate(() => document.activeElement?.textContent?.trim());
   await page.mouse.click(300, 520);
-  const repaired = await page.waitForSelector('.stage', { timeout: 15_000 }).then(() => true, () => false);
-  check('a pinch anywhere presses "Pair again" and a new session starts', ended && repaired,
-    `ended ${ended}, new session ${repaired}`);
+  const reconnected = await page.waitForSelector('.stage', { timeout: 15_000 }).then(() => true, () => false);
+  await sleep(500);
+  const lastStart = statsLog().filter((l) => l.kind === 'event' && l.event === 'start').at(-1);
+  check('after the PC ends a session, a pinch presses Reconnect and it resumes without pairing',
+    ended && focusedButton === 'Reconnect' && reconnected && lastStart?.resumed === true,
+    `ended ${ended}, focus ${focusedButton}, new session ${reconnected}, resumed ${lastStart?.resumed}`);
 } finally {
   await browser.close();
 }

@@ -468,7 +468,12 @@ public sealed class PairingCoordinator : IDisposable
         DeviceGrantChanged?.Invoke(null);
     }
 
-    /// <summary>Signals the active session to close. The slot frees once its handler disposes the lease.</summary>
+    /// <summary>
+    /// Signals the active session to close (tray, Ctrl+Shift+X). The slot frees once its handler
+    /// disposes the lease. The glasses stay remembered: ending a session means "stop for now", and
+    /// the user reconnects without walking back to the PC. Forget remembered glasses (tray) is the
+    /// way to lock them out.
+    /// </summary>
     public bool TerminateActiveSession()
     {
         SessionLease? lease;
@@ -483,8 +488,6 @@ public sealed class PairingCoordinator : IDisposable
         }
 
         _logger.LogInformation("Session {Session} terminated from the PC", lease.Id);
-        // Ending a session on the PC means "not now": the glasses need a new approval.
-        ForgetDevice(lease.GrantId, "session ended on the PC");
         lease.Signal();
         return true;
     }

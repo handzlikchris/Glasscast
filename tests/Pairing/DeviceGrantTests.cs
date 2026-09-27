@@ -136,14 +136,15 @@ public sealed class DeviceGrantTests : IDisposable
     }
 
     [Fact]
-    public async Task Ending_the_session_on_the_pc_forgets_the_glasses()
+    public async Task Ending_the_session_on_the_pc_keeps_the_glasses_remembered()
     {
         var (lease, token) = await ApprovedSessionAsync();
         Assert.True(_coordinator.TerminateActiveSession());
         lease.Dispose();
 
-        Assert.Null(_coordinator.RememberedDeviceExpiresAt);
-        Assert.Null(await Resume(token));
+        Assert.NotNull(_coordinator.RememberedDeviceExpiresAt);
+        using var resumed = await Resume(token);
+        Assert.NotNull(resumed);
     }
 
     [Fact]
