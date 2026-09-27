@@ -171,6 +171,8 @@ function describeClose(event: CloseEvent): string {
       return 'These glasses connected again in another session.';
     case 'idle':
       return 'The session ended after a long time without input.';
+    case 'no heartbeat':
+      return 'The PC heard nothing from the glasses for a while and closed the session.';
     case 'rate limit':
     case 'invalid message':
       return 'The PC closed the session (unexpected messages).';

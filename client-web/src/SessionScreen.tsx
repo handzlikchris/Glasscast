@@ -67,6 +67,13 @@ const PAN_GLOW_MS = 250;
 const EDGE_SCROLL_INSET = 24;
 const NO_ROOM: PanRoom = { left: false, right: false, up: false, down: false };
 const PING_MS = 2000;
+/**
+ * The app hidden this long (another glasses app, or closed but kept alive) ends the session, so
+ * the PC stops showing it as live; Reconnect is a pinch when it's back. Short enough to free the
+ * PC quickly, long enough to survive a glance away. A page frozen outright stops pinging instead,
+ * and the PC ends the session after its heartbeat timeout (Session:HeartbeatTimeout, 15 s).
+ */
+const HIDDEN_MS = 5000;
 /** How long focus put on the controls is held there against resets we didn't cause (ms). */
 const FOCUS_PIN_MS = 600;
 
@@ -268,6 +275,16 @@ export function SessionScreen({ onEnded }: Props) {
       // PC has sent mediaStats: an older server would reject the message and end the session.
       if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount, s.network) });
     }, 1000);
+    let hiddenTimer: ReturnType<typeof setTimeout> | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenTimer ??= setTimeout(() => end('The session was closed while the app was hidden.'), HIDDEN_MS);
+      } else if (hiddenTimer !== null) {
+        clearTimeout(hiddenTimer);
+        hiddenTimer = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     const scrollFlush = setInterval(() => {
       const edge = edgeScroll.current;
       if (edge) scroll.current.addUnits((edge.dir * edgeUnitsPerSecond(currentScrollLevel()) * SCROLL_FLUSH_MS) / 1000);
@@ -277,6 +294,8 @@ export function SessionScreen({ onEnded }: Props) {
 
     return () => {
       ended = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (hiddenTimer !== null) clearTimeout(hiddenTimer);
       stopWatchingFrames();
       clearInterval(ping);
       clearInterval(stats);
