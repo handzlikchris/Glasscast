@@ -3,12 +3,14 @@ package uk.co.reliablesolutions.glassesremote.companion
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 
 /**
  * Turns the glasses' input into input on the phone, through Android's accessibility API: gestures
@@ -31,6 +33,10 @@ class InputService : AccessibilityService() {
 
     private var keepAwake: View? = null
 
+    /** Called (on the main thread) when windows open, close, move or resize; set by a live session. */
+    @Volatile
+    var onWindowsChanged: (() -> Unit)? = null
+
     override fun onServiceConnected() {
         instance = this
     }
@@ -47,7 +53,27 @@ class InputService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) onWindowsChanged?.invoke()
+    }
+
+    /**
+     * The window Fit follows: the top-most app window that doesn't fill the screen, such as a
+     * Samsung pop-up view window (freeform windows sit above full-screen apps). Null when every
+     * app window fills the screen. In screen pixels.
+     */
+    fun floatingAppWindow(screenWidth: Int, screenHeight: Int): Rect? {
+        val bounds = Rect()
+        return windows
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { window ->
+                window.getBoundsInScreen(bounds)
+                val own = window.root?.packageName?.toString() == packageName
+                val fillsScreen = bounds.width() * bounds.height() >= 0.9 * screenWidth * screenHeight
+                if (own || fillsScreen || bounds.width() < 100 || bounds.height() < 100) null else Rect(bounds)
+            }
+    }
 
     override fun onInterrupt() {}
 

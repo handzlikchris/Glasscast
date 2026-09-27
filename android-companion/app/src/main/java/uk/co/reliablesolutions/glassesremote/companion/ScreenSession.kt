@@ -2,9 +2,11 @@ package uk.co.reliablesolutions.glassesremote.companion
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Point
+import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.util.Log
-import android.view.WindowManager
+import android.view.Display
 import org.json.JSONObject
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -27,6 +29,7 @@ import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import kotlin.math.abs
 
 /**
  * One phone session: the screen (MediaProjection, whole display) as a WebRTC video track, and the
@@ -41,6 +44,7 @@ class ScreenSession(
     consent: Intent,
     private val signal: (JSONObject) -> Unit,
     private val post: (() -> Unit) -> Unit,
+    private val postDelayed: (Long, () -> Unit) -> Unit,
     private val onEnded: (String) -> Unit,
 ) {
     companion object {
@@ -50,6 +54,8 @@ class ScreenSession(
         private const val MAX_BITRATE_BPS = 2_500_000
         /** Glasses input per second (a pinch-drag sends nothing; taps and swipes are few). */
         private const val MAX_INPUT_PER_SECOND = 60
+        /** Window changes come in bursts while a pop-up is dragged: refit once they settle a little. */
+        private const val REFIT_DELAY_MS = 120L
 
         @Volatile
         private var initialized = false
@@ -70,6 +76,10 @@ class ScreenSession(
     private val source: VideoSource
     private val track: VideoTrack
     private val crop = CropProcessor()
+    private val prefs = Prefs(context)
+    /** The crop follows the top floating app window (Fit on the glasses). */
+    private var follow = prefs.followWindow
+    private var refitPending = false
     private val pc: PeerConnection
     private val channel: DataChannel
     private val screenWidth: Int
@@ -86,9 +96,14 @@ class ScreenSession(
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
             .createPeerConnectionFactory()
 
-        val bounds = context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
-        screenWidth = bounds.width()
-        screenHeight = bounds.height()
+        // The display's real pixels: what the capture covers and what gestures and window bounds use.
+        val display = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+        val size = Point()
+        @Suppress("DEPRECATION")
+        display.getRealSize(size)
+        screenWidth = size.x
+        screenHeight = size.y
+        crop.region = prefs.region
 
         capturer = ScreenCapturerAndroid(consent, object : MediaProjection.Callback() {
             // The user tapped the status-bar chip's Stop, the phone locked, or another app took over.
@@ -124,6 +139,9 @@ class ScreenSession(
         channel = pc.createDataChannel("input", DataChannel.Init().apply { ordered = true })
         channel.registerObserver(ChannelObserver())
 
+        watchWindows()
+        if (follow) refit()
+
         pc.createOffer(object : SdpAdapter() {
             override fun onCreateSuccess(sdp: SessionDescription) {
                 pc.setLocalDescription(object : SdpAdapter() {
@@ -149,7 +167,10 @@ class ScreenSession(
     fun close() {
         if (closed) return
         closed = true
-        InputService.instance?.keepScreenOn(false)
+        InputService.instance?.let { input ->
+            input.keepScreenOn(false)
+            input.onWindowsChanged = null
+        }
         runCatching { capturer.stopCapture() }
         runCatching { channel.close() }
         pc.dispose()
@@ -193,7 +214,16 @@ class ScreenSession(
         when (command) {
             is InputCommand.Ping -> send(JSONObject().put("type", "pong").put("t", command.t))
             is InputCommand.SetRegion -> {
-                crop.region = Region(command.x, command.y, command.width, command.height)
+                follow = false
+                prefs.followWindow = false
+                setRegion(Region(command.x, command.y, command.width, command.height))
+            }
+            is InputCommand.FitWindow -> {
+                follow = true
+                prefs.followWindow = true
+                watchWindows()
+                refit()
+                // Answer even when nothing changed, so the glasses see Fit took.
                 sendScreen()
             }
             is InputCommand.Tap -> input?.tap(screenX(command.x), screenY(command.y))
@@ -207,6 +237,45 @@ class ScreenSession(
         }
     }
 
+    private fun setRegion(region: Region) {
+        crop.region = region
+        prefs.region = region
+        sendScreen()
+    }
+
+    /** Listens for window changes (the accessibility service may have started after the session). */
+    private fun watchWindows() {
+        InputService.instance?.onWindowsChanged = {
+            post {
+                if (!closed && follow && !refitPending) {
+                    refitPending = true
+                    handlerDelay { refitPending = false; refit() }
+                }
+            }
+        }
+    }
+
+    private fun handlerDelay(block: () -> Unit) = postDelayed(REFIT_DELAY_MS) { if (!closed) block() }
+
+    /** Crops to the floating app window, or the whole screen when there is none. */
+    private fun refit() {
+        if (!follow) return
+        val bounds = InputService.instance?.floatingAppWindow(screenWidth, screenHeight)
+        val region = if (bounds == null) {
+            Region.FULL
+        } else {
+            val x = bounds.left.coerceIn(0, screenWidth).toDouble() / screenWidth
+            val y = bounds.top.coerceIn(0, screenHeight).toDouble() / screenHeight
+            val right = bounds.right.coerceIn(0, screenWidth).toDouble() / screenWidth
+            val bottom = bounds.bottom.coerceIn(0, screenHeight).toDouble() / screenHeight
+            Region(x, y, right - x, bottom - y)
+        }
+        if (!same(region, crop.region)) setRegion(region)
+    }
+
+    private fun same(a: Region, b: Region): Boolean =
+        abs(a.x - b.x) < 0.002 && abs(a.y - b.y) < 0.002 && abs(a.width - b.width) < 0.002 && abs(a.height - b.height) < 0.002
+
     private fun screenX(x: Double): Float = ((crop.region.x + x * crop.region.width) * screenWidth).toFloat()
 
     private fun screenY(y: Double): Float = ((crop.region.y + y * crop.region.height) * screenHeight).toFloat()
@@ -217,7 +286,7 @@ class ScreenSession(
             JSONObject().put("type", "screen").put("width", screenWidth).put("height", screenHeight).put(
                 "region",
                 JSONObject().put("x", r.x).put("y", r.y).put("width", r.width).put("height", r.height),
-            ),
+            ).put("follow", follow),
         )
     }
 

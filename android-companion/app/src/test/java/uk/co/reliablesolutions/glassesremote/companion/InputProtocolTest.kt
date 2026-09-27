@@ -17,6 +17,7 @@ class InputProtocolTest {
         assertEquals(InputCommand.TypeText("hello"), InputProtocol.parse("""{"type":"typeText","text":"hello"}"""))
         assertEquals(InputCommand.Key(KeyName.ENTER), InputProtocol.parse("""{"type":"key","key":"Enter"}"""))
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
+        assertEquals(InputCommand.FitWindow, InputProtocol.parse("""{"type":"fitWindow"}"""))
     }
 
     @Test
@@ -51,6 +52,7 @@ class InputProtocolTest {
             """{"type":"launch","package":"com.example"}""",
             """{"type":"swipe","x1":0,"y1":0,"x2":1,"y2":1}""",
             """{"x":1}""",
+            """{"type":"fitWindow","package":"com.example"}""",
         ).forEach { assertNull(it, InputProtocol.parse(it)) }
     }
 }

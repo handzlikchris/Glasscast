@@ -29,6 +29,17 @@ class Prefs(context: Context) {
     var token: String?
         get() = sp.getString("token", null)
         set(value) = sp.edit().putString("token", value).apply()
+
+    /** The last crop chosen on the glasses, so the next session starts there. */
+    var region: Region
+        get() = sp.getString("region", null)?.split(',')?.mapNotNull { it.toDoubleOrNull() }
+            ?.takeIf { it.size == 4 }?.let { Region(it[0], it[1], it[2], it[3]) } ?: Region.FULL
+        set(value) = sp.edit().putString("region", "${value.x},${value.y},${value.width},${value.height}").apply()
+
+    /** The crop follows the top app window (Fit on the glasses). */
+    var followWindow: Boolean
+        get() = sp.getBoolean("followWindow", false)
+        set(value) = sp.edit().putBoolean("followWindow", value).apply()
 }
 
 /** OkHttp sends no Origin header, which the PC's companion socket requires (web pages always send one). */

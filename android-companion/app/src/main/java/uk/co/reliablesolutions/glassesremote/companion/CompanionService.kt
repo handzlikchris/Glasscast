@@ -213,6 +213,7 @@ class CompanionService : Service() {
                 data,
                 signal = { link?.send(it) },
                 post = { block -> handler.post(block) },
+                postDelayed = { ms, block -> handler.postDelayed(block, ms) },
                 onEnded = { reason ->
                     Log.i(TAG, "phone session ended: $reason")
                     endSession(tell = "ended")
