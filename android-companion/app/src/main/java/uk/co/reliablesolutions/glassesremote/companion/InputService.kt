@@ -6,10 +6,13 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.graphics.PointF
+import android.accessibilityservice.InputMethod
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -221,7 +224,19 @@ class InputService : AccessibilityService() {
      * replace a field's whole text, so this reads it, splices, writes it back and moves the cursor.
      * False when nothing editable has focus.
      */
+    /**
+     * Types text. First as a keyboard would (Android 13+: this service is also an input method, see
+     * flagInputMethodEditor), into whatever has keyboard input right now: that reaches views that
+     * draw their own text, such as a remote desktop client's screen with its keyboard open. Else
+     * into the text field on screen through accessibility.
+     */
     fun typeText(text: String): Boolean {
+        keyboardInput()?.let { input ->
+            input.commitText(text, 1, null)
+            // Lengths only: typed text never goes into the log.
+            Log.i(TAG, "typeText: ${text.length} chars as a keyboard into ${editorName()}")
+            return true
+        }
         val node = editableTarget()
         if (node == null) {
             Log.i(TAG, "typeText: no text field on screen")
@@ -237,6 +252,13 @@ class InputService : AccessibilityService() {
     }
 
     fun key(key: KeyName): Boolean {
+        keyboardInput()?.let { input ->
+            val code = if (key == KeyName.ENTER) KeyEvent.KEYCODE_ENTER else KeyEvent.KEYCODE_DEL
+            input.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+            input.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+            Log.i(TAG, "key $key as a keyboard into ${editorName()}")
+            return true
+        }
         val node = editableTarget()
         if (node == null) {
             Log.i(TAG, "key $key: no text field on screen")
@@ -319,6 +341,18 @@ class InputService : AccessibilityService() {
         Log.i(TAG, "text field had no input focus; using ${field.className} of ${fields.size} (focus $focused)")
         return field
     }
+
+    /** The keyboard connection to whatever has keyboard input now (Android 13+), or null. */
+    private fun keyboardInput(): InputMethod.AccessibilityInputConnection? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && inputMethod?.currentInputStarted == true) {
+            inputMethod?.currentInputConnection
+        } else {
+            null
+        }
+
+    /** The app whose editor has keyboard input, for the log (a package name, no content). */
+    private fun editorName(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) inputMethod?.currentInputEditorInfo?.packageName ?: "?" else "?"
 
     private fun collectEditable(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, budget: IntArray) {
         if (--budget[0] < 0) return

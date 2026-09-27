@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Gestures, global actions, the focused text field, and window bounds (Fit follows a pop-up window). -->
+<!-- Gestures, global actions, the focused text field, window bounds (Fit follows a pop-up window),
+     and typing as a keyboard would (flagInputMethodEditor, Android 13+). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowsChanged|typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagInputMethodEditor"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_description"
