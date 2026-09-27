@@ -14,6 +14,11 @@ Neural Band gestures, switch between configured apps, and type through the glass
 voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**,
 or (for 24 h after such an approval) the **device token** of the glasses that were approved.
 
+**Phone mode (branch `feat/phone-mode`, 2026-09-27):** the first screen asks **PC or Phone**.
+Phone controls the user's Android phone (Samsung S25) through a companion app in
+`android-companion/` (MediaProjection + AccessibilityService); the PC only relays WebRTC
+signalling. Design, protocols, status: **`architecture/phone-mode.md`**.
+
 - **Plan / design / decisions / setup / status** live in a shared page:
   https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV (read it with the Artifact tool, action `read`).
   Update it **in place** when decisions change. Never create a new plan artifact. (Its status
@@ -60,13 +65,18 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
                         around the cast area on the PC monitor), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
+  Phone/                phone mode: CompanionEndpoint (/ws/companion), CompanionRegistry (phone pairing,
+                        token hash, live connection), CompanionLink, CompanionProtocol, PhoneRelay
 client-web/             glasses client (600×600)
   build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
   src/rtc.ts            receive-only RTCPeerConnection (video + audio elements) + stats
   src/audio.ts          ♪ setting (localStorage), stereo=1 answer fix-up, V/A bandwidth label
   src/audioOutput.ts    plays the PC's sound through Web Audio (a muted <audio> keeps it flowing)
+  src/App.tsx           first screen (PC or Phone; last choice in target.ts), pairing, sessions, ended
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
+  src/PhoneScreen.tsx   phone session: phone's frame, local cursor, taps/swipes/nav/text over the
+                        DataChannel (phoneRtc.ts, phoneProtocol.ts)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
@@ -75,8 +85,9 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display,scrollPrefs}.ts  pure logic with *.test.ts
   src/overlay.ts        canvas: cursor, region box, pan-edge glow
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
+android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 44 checks)
+                        browser/drive.mjs (headless Chrome, 45 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -88,8 +99,9 @@ architecture/           one doc per feature area (files, flows, rules, tests); s
 
 ```powershell
 dotnet build GlassesRemote.sln
-dotnet test                                     # ~250 server tests, ~22 s
-cd client-web; npm test; npx tsc --noEmit; npm run build   # ~99 client tests, typecheck, dist/
+dotnet test                                     # ~270 server tests, ~23 s
+cd client-web; npm test; npx tsc --noEmit; npm run build   # ~110 client tests, typecheck, dist/
+cd android-companion; .\gradlew.bat assembleDebug testDebugUnitTest   # companion app (see its README)
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
 .\tools\bin\caddy.exe run --config deploy\Caddyfile          # public HTTPS
@@ -262,7 +274,8 @@ tight padding, check a screenshot when adding buttons). Model in
 
 ## Security invariants — do not break
 
-- Only public ports: TCP 443 (→ Caddy 8443) and UDP 50000. App listens on loopback (except the
+- Only public ports: TCP 443 (→ Caddy 8443) and UDP 50000 (phone mode adds none: its media goes
+  phone ↔ glasses). App listens on loopback (except the
   dev `lan` profile). RDP, admin endpoints, shells, file APIs: never.
 - No session without a human clicking **Approve** on the PC, or a device token from such an
   approval less than 24 h ago. **Never** add auto-approve, a bypass flag, or a network approval
@@ -280,9 +293,9 @@ tight padding, check a screenshot when adding buttons). Model in
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, and the device token (`connection.ts`, localStorage;
-  never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); only a
-  page (re)load resumes by itself.
+- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, the last target (PC/Phone), and the device token (`connection.ts`, localStorage;
+  never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); after a
+  page (re)load one pinch on the first screen (last target focused) resumes.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
   outside Development.
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
@@ -295,6 +308,13 @@ tight padding, check a screenshot when adding buttons). Model in
   Never launch processes. The e2e harness records switches and must never move real windows.
 - Strict CSP (`script-src 'self'`, no inline/eval). Keep the client free of inline scripts/styles
   in `index.html`; React `style` props are fine (they go through the CSSOM).
+- **Phone mode:** the PC relays only signalling (offer, answer, ICE, start/stop) and never the
+  phone's video or the glasses' input for it; any input message in a phone session is a
+  violation. The companion pairs once through the same Approve popup; its 256-bit token is
+  hashed on the PC (`companion-grant.json`), forgettable in the tray. `/ws/companion` refuses any
+  request with an `Origin` header (web pages). Every phone session needs Android's
+  screen-capture consent tapped **on the phone**. The companion parses DataChannel input as
+  strictly as `ControlProtocol`, never launches apps, and typed text never presses Enter.
 - Approve popup: Reject is the focused/Cancel button, no AcceptButton. The cast-area frame and the
   session banner are excluded from capture (`WDA_EXCLUDEFROMCAPTURE`) and never take focus.
 
@@ -437,6 +457,12 @@ tight padding, check a screenshot when adding buttons). Model in
 - Don't commit binaries, `appsettings.Local.json`, logs, or build output (`.gitignore` covers them).
 
 ## Status and next steps (as of 2026-09-25)
+
+- **Phone mode (2026-09-27, branch `feat/phone-mode`):** PC side (companion pairing,
+  `/ws/companion`, `PhoneRelay`) and glasses side (PC/Phone first screen, `PhoneScreen`) built and
+  tested (server tests with a fake companion, client tests, e2e 45/45). The Android companion is
+  written but **not built** (Gradle 9.1 not downloaded) and nothing has run on the S25. Next
+  steps and questions: `architecture/phone-mode.md`.
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.

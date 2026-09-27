@@ -1,7 +1,8 @@
 # Phone mode: controlling the Android phone from the glasses
 
-Status: **being built on branch `feat/phone-mode`** (started 2026-09-27). Nothing has run on the
-S25 yet. The research notes below come from docs and web sources, not from the device.
+Status (2026-09-27, branch `feat/phone-mode`): **P1 and P2 built and tested; P3 written but not
+built** (Gradle 9.1 not downloaded yet). Nothing has run on the S25. The research notes below
+come from docs and web sources, not from the device.
 
 The first screen of the glasses app asks **PC or Phone**. PC is everything that exists today.
 Phone connects to an **Android companion app** on the user's Samsung S25 (unrooted, no ADB at
@@ -146,6 +147,40 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
   reflexive candidates), then a TURN relay on the PC.
 - **Build tools on this PC:** Android SDK platforms up to 35, build-tools 35, JDK 17, AGP 9.0.0
   and Gradle 9.1.0 in the Gradle cache. The companion targets SDK 35, min SDK 30.
+
+## Files
+
+| File | Role |
+| --- | --- |
+| `server/Phone/CompanionEndpoint.cs` | `/ws/companion`: no-Origin check, 3 s first message, pair or auth, then the connection's receive loop (ping, rate limit, 45 s heartbeat) |
+| `server/Phone/CompanionRegistry.cs` | Companion pairing (one request, rate limits, popup events), the token hash (`companion-grant.json`), the live connection, `WaitForLinkAsync` |
+| `server/Phone/CompanionLink.cs` | One authenticated companion connection; the running session's inbox |
+| `server/Phone/CompanionProtocol.cs` | Strict parser for the companion's messages; `PhoneState` |
+| `server/Phone/PhoneRelay.cs` | A glasses session with `target:"phone"`: waits for the companion, relays, ends both sides |
+| `server/Ui/ApprovePopup.cs`, `TrayApp.cs` | The same popup approves a phone; tray **Forget phone** |
+| `client-web/src/App.tsx`, `target.ts` | The PC/Phone first screen; the last choice in localStorage |
+| `client-web/src/PhoneScreen.tsx` | The phone session: video, local cursor, gestures, bar, Type |
+| `client-web/src/phoneRtc.ts` | Answerer with trickled candidates and the phone's DataChannel |
+| `client-web/src/phoneProtocol.ts` | DataChannel messages, parser, frame mapping, swipes (tested) |
+| `android-companion/` | The companion app (see its README) |
+
+Tests: `tests/Phone/CompanionProtocolTests.cs`, `tests/Phone/PhoneEndpointTests.cs` (fake
+companion over real sockets: pairing, auth, relay both ways, violations, decline, loss, timeout,
+forget, replace), `client-web/src/phoneProtocol.test.ts`, `protocol.test.ts` (relay messages),
+`android-companion/.../InputProtocolTest.kt`. The e2e drive presses PC on the first screen; it
+has no phone path yet.
+
+## Next steps
+
+1. Build the companion (needs Gradle 9.1 downloaded, maybe build-tools 36 for AGP 9) and run its
+   unit tests. Fix what the compiler finds: the libwebrtc and accessibility code is unchecked.
+2. P0 on the S25 (the user): install, allow restricted settings, accessibility on, pair, Start;
+   then Phone on the glasses, at home on Wi-Fi first, then on 5G. Read the glasses' status bar
+   (`live (local|remote)`) and `adb logcat -s ScreenSession CompanionService`.
+3. A fake phone for the e2e harness (SIPSorcery offering a test pattern and a DataChannel,
+   recording input), so the phone path is tested end to end without the phone.
+4. P4: send `setRegion` from the glasses (a Region mode, and "fit to the app's window" from
+   accessibility window bounds); rotation.
 
 ## Questions for the user
 
