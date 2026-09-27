@@ -36,7 +36,7 @@ import {
   type NavTarget,
 } from './focusnav';
 import { SwipeReader, pcSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
-import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
+import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, TapThenHold, type GestureEvent } from './gestures';
 import { bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
 import { AudioOutput, type OutputState } from './audioOutput';
 import { loadBrightness, nextBrightness, saveBrightness, type Brightness } from './display';
@@ -113,11 +113,9 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<Session | null>(null);
   const gestures = useRef(new GestureTracker(DEFAULT_GESTURES));
-  /** Turns a pinch kept still into a hold (then moving drags with the button down). */
-  const dragHoldTimer = useRef<number | null>(null);
-  /** Where the current press started (stage px): a hold released still taps there. */
-  const pressAt = useRef({ x: 0, y: 0 });
   const handleGestureRef = useRef<(event: GestureEvent) => void>(() => {});
+  /** The PC's left button is held (tap-and-a-half drag or hold). */
+  const buttonDown = useRef(false);
   const scroll = useRef(new ScrollAccumulator());
   const pendingMove = useRef<Point | null>(null);
   const moveScheduled = useRef(false);
@@ -130,13 +128,10 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const lastPointerAt = useRef(-Infinity);
   const lastEnterAt = useRef(-Infinity);
   const pointerType = useRef('');
+  /** Spots the second pinch of a quick pair: in Pointer mode it's armed (tap-and-a-half). */
   const tapThenHold = useRef(new TapThenHold());
+  /** An armed pinch kept still HOLD_DRAG_MS holds the button (gestures.hold). */
   const holdTimer = useRef<number | null>(null);
-  /**
-   * A press that started right after a pinch. Movement is ignored for it: it ends either as a
-   * quick second tap (released before HOLD_MS) or, held that long, as "go to the controls".
-   */
-  const secondPress = useRef<{ id: number; x: number; y: number; held: boolean } | null>(null);
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
@@ -451,8 +446,8 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     if (button) focusPinned(button);
   };
 
-  /** Pinch, then pinch and hold: put focus on the current mode's button. */
-  const focusControls = (how = 'pinch, hold') => {
+  /** Back from the view: put focus on the current mode's likely next button. */
+  const focusControls = (how: string) => {
     setNav('controls');
     keyFocus.current = true;
     focusModeButton(menuFocusFor(live.current.mode));
@@ -801,15 +796,16 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const handleGesture = (event: GestureEvent) => {
     const { mode: m, monitor: mon, region: r, draft: d, cursor: c, content: box } = live.current;
 
-    // A hold released without moving is a slow pinch: a tap, as it was before holds existed.
-    if (event.kind === 'holdEnd') {
-      const at = pressAt.current;
-      handleGesture({ kind: 'tap', x: at.x, y: at.y });
+    // Tap-and-a-half (Pointer mode): the second pinch held still presses the button there;
+    // letting go releases it (a click held that long).
+    if (event.kind === 'hold') {
+      clearPendingClick();
+      pressButton();
+      setLastInput('button held: move to drag');
       return;
     }
-    if (event.kind === 'hold') {
-      releasePendingClick();
-      if (m === 'pointer') setLastInput('hold: move to drag with the button down');
+    if (event.kind === 'holdEnd') {
+      releaseButton();
       return;
     }
 
@@ -827,14 +823,15 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         return;
       }
     } else if (event.kind === 'dragStart') {
-      releasePendingClick();
-      setLastInput(event.held && m === 'pointer' ? 'drag with the button down' : `drag (${pointerType.current})`);
-      if (event.held && m === 'pointer' && box) {
-        // Press where the cursor is now, before any of this drag's moves.
-        flushRegion();
-        flushMove();
-        if (!c) send({ type: 'move', ...toNormalized(centreOf(box), box) });
-        send({ type: 'mouseButton', button: 'left', down: true });
+      if (event.held && m === 'pointer') {
+        // Tap-and-a-half: the first pinch doesn't click; the button goes down here, before this
+        // drag's moves, and comes up when the pinch ends.
+        clearPendingClick();
+        pressButton();
+        setLastInput('drag with the button down');
+      } else {
+        releasePendingClick();
+        setLastInput(`drag (${pointerType.current})`);
       }
     }
 
@@ -906,7 +903,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         // Land the final region before the final cursor position.
         flushRegion();
         flushMove();
-        if (event.held) send({ type: 'mouseButton', button: 'left', down: false });
+        if (event.held) releaseButton();
       } else if (event.kind === 'tap') {
         // Make sure Windows' cursor is where ours is before clicking.
         flushRegion();
@@ -937,6 +934,24 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
+  /** Presses the left button where the cursor is (once), after any moves still queued. */
+  const pressButton = () => {
+    const { cursor: c, content: box } = live.current;
+    if (buttonDown.current || !box) return;
+    flushRegion();
+    flushMove();
+    if (!c) send({ type: 'move', ...toNormalized(centreOf(box), box) });
+    send({ type: 'mouseButton', button: 'left', down: true });
+    buttonDown.current = true;
+  };
+
+  const releaseButton = () => {
+    if (!buttonDown.current) return;
+    flushMove();
+    send({ type: 'mouseButton', button: 'left', down: false });
+    buttonDown.current = false;
+  };
+
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     // Keep focus (and its ring) on the button the swipe landed on.
     e.preventDefault();
@@ -945,39 +960,25 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = toLocal(e);
 
-    // A pinch right after a pinch: hold back the first one's click until this one is decided.
+    // A pinch right after a pinch: hold back the first one's click until this one is decided
+    // (a quick release: double-click; a drag or a hold: tap-and-a-half, no first click).
     if (typeof pendingClick.current === 'number') {
       clearTimeout(pendingClick.current);
       pendingClick.current = 'waiting';
     }
-    if (tapThenHold.current.pressStarted(performance.now())) {
-      const press = { id: e.pointerId, x: p.x, y: p.y, held: false };
-      secondPress.current = press;
-      clearHold();
+    const second = tapThenHold.current.pressStarted(performance.now());
+    const armed = second && live.current.mode === 'pointer';
+    gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp, armed);
+    clearHold();
+    if (armed) {
+      const id = e.pointerId;
       holdTimer.current = window.setTimeout(() => {
         holdTimer.current = null;
-        if (secondPress.current !== press) return;
-        press.held = true;
-        clearPendingClick();
-        focusControls();
-      }, HOLD_MS);
-      return;
+        gestures.current.hold(id).forEach(handleGestureRef.current);
+      }, HOLD_DRAG_MS);
     }
-    gestures.current.down(e.pointerId, p.x, p.y, e.timeStamp);
-    pressAt.current = p;
-    clearDragHold();
-    const id = e.pointerId;
-    dragHoldTimer.current = window.setTimeout(() => {
-      dragHoldTimer.current = null;
-      gestures.current.hold(id).forEach(handleGestureRef.current);
-    }, HOLD_DRAG_MS);
-  };
-  const clearDragHold = () => {
-    if (dragHoldTimer.current !== null) clearTimeout(dragHoldTimer.current);
-    dragHoldTimer.current = null;
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (secondPress.current?.id === e.pointerId) return; // wobble during pinch-then-hold
     const p = toLocal(e);
     lastPointer.current = p;
     gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
@@ -990,23 +991,14 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     lastPointerAt.current = performance.now();
     clearHold();
-    clearDragHold();
-    const press = secondPress.current;
-    if (press?.id === e.pointerId) {
-      secondPress.current = null;
-      // Released before the hold time: a quick second tap (a double-click in Pointer mode).
-      if (!press.held) handleGesture({ kind: 'tap', x: press.x, y: press.y });
-      return;
-    }
     const p = toLocal(e);
     gestures.current.up(e.pointerId, p.x, p.y, e.timeStamp).forEach(handleGesture);
   };
   const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
     clearHold();
-    clearDragHold();
-    if (secondPress.current?.id === e.pointerId) secondPress.current = null;
-    releasePendingClick();
     gestures.current.cancel(e.pointerId).forEach(handleGesture);
+    releasePendingClick();
+    releaseButton();
   };
 
   // ---- render ----

@@ -2,9 +2,10 @@
 // here, and input sent straight to the phone on the DataChannel. The PC only relays signalling.
 //
 // Controls, kept close to the PC session's:
-// - On the view: pinch-drag moves the cursor; a pinch taps there, two quick ones double-tap; a
-//   pinch held still 0.4 s puts a finger down at the cursor, which then follows the drag until
-//   release (drag and drop, selecting, a long press when held without moving). Swipes (swipes.ts, shared with PC sessions):
+// - On the view (pinches as on a laptop touchpad, as in a PC session): pinch-drag moves the
+//   cursor; a pinch taps there, two quick ones double-tap; a pinch then a second pinch held
+//   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
+//   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
 //   up/down scroll around the cursor, left/right page (after a 0.3 s wait for a second swipe),
 //   right twice opens Type, left twice presses the phone's Back.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
@@ -97,6 +98,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
   const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
   const touchSentAt = useRef(0);
+  /** A finger is down on the phone (tap-and-a-half). */
+  const touchDown = useRef(false);
   const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
   const swipes = useRef(
     new SwipeReader(
@@ -395,8 +398,9 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
 
   // ---- gestures on the view ----
   // A pinch taps at the cursor; a second within DOUBLE_TAP_MS makes it a double tap (so a single
-  // tap goes that much later, as a click does in a PC session). A pinch held still HOLD_DRAG_MS puts
-  // the finger down at the cursor; it follows the drag and lifts on release (drag, long press).
+  // tap goes that much later, as a click does in a PC session). That second pinch is armed: if it
+  // moves, or stays down HOLD_DRAG_MS, the finger goes down at the cursor (no first tap), follows
+  // the drag and lifts on release (drag and drop, selecting, a long press).
   const clearPendingTap = () => {
     if (pendingTap.current) clearTimeout(pendingTap.current.timer);
     pendingTap.current = null;
@@ -411,6 +415,9 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   };
 
   const touch = (phase: 'down' | 'move' | 'up') => {
+    if (phase === 'down' && touchDown.current) return;
+    if (phase !== 'down' && !touchDown.current) return;
+    touchDown.current = phase !== 'up';
     touchSentAt.current = performance.now();
     send({ type: 'touch', phase, ...atCursor() }, phase === 'down' ? 'finger down: move to drag' : phase === 'up' ? 'finger up' : 'drag');
   };
@@ -446,11 +453,16 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
         }
         break;
       case 'hold':
-        flushTap();
+        clearPendingTap();
         touch('down');
         break;
       case 'dragStart':
-        if (!event.held) flushTap();
+        if (event.held) {
+          clearPendingTap();
+          touch('down');
+        } else {
+          flushTap();
+        }
         break;
       case 'drag':
         cursor.current = clampToFrame({
@@ -459,7 +471,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
         });
         drawCursor();
         // The finger follows, a few times a second is plenty (the phone smooths between).
-        if (tracker.current.holding && performance.now() - touchSentAt.current >= TOUCH_MOVE_MS) touch('move');
+        if (touchDown.current && performance.now() - touchSentAt.current >= TOUCH_MOVE_MS) touch('move');
         break;
       case 'dragEnd':
         if (event.held) touch('up');
@@ -479,9 +491,14 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     const current = focusRef.current;
     if (current !== 'view' && current !== 'region') return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    tracker.current.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
+    // The second pinch of a quick pair (a tap is waiting): armed, tap-and-a-half.
+    const armed = current === 'view' && pendingTap.current !== null;
+    // Its first tap waits until this pinch is decided: a quick release makes a double tap, a drag
+    // or a hold drops it.
+    if (armed) clearTimeout(pendingTap.current!.timer);
+    tracker.current.down(e.pointerId, e.clientX, e.clientY, e.timeStamp, armed);
     clearHoldTimer();
-    if (current === 'region') return;
+    if (!armed) return;
     const id = e.pointerId;
     holdTimer.current = setTimeout(() => {
       holdTimer.current = null;
@@ -501,6 +518,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const onPointerCancel = (e: ReactPointerEvent) => {
     clearHoldTimer();
     tracker.current.cancel(e.pointerId).forEach(handleGesture);
+    // A first tap paused for a second pinch that never finished goes out on its own.
+    flushTap();
   };
 
   const handleGestureRef = useRef(handleGesture);

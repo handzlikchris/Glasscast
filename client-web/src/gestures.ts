@@ -6,10 +6,12 @@
 // threshold is a tap; anything that travels further is a drag. On a laptop the
 // same code runs with mouse or trackpad drags.
 //
-// Hold (when the caller calls hold() HOLD_DRAG_MS after the press): a pinch kept still that
-// long becomes a "hold". Moving after that is a held drag (the mouse button or the finger stays
-// down: select text, drag a window, drag on the phone); releasing without moving ends the hold.
-// Moving before it is a plain drag (the cursor moves, nothing is pressed).
+// Tap-and-a-half, as on a laptop touchpad: the second pinch of a quick pair is "armed" (the
+// caller passes armed to down()). An armed press that moves is a held drag (the mouse button or
+// the finger stays down: select text, drag a window, drag on the phone); one kept still for
+// HOLD_DRAG_MS (the caller calls hold()) holds the button where it is, and releasing ends the
+// hold; one released quickly without moving is a tap (the second of a double tap). A press that
+// isn't armed never holds: moving it only moves the cursor.
 
 export interface GestureOptions {
   /** Movement (view px) beyond which a press becomes a drag. */
@@ -20,16 +22,16 @@ export interface GestureOptions {
 
 export const DEFAULT_GESTURES: GestureOptions = { tapThreshold: 10, tapMaxMs: 500 };
 
-/** A pinch kept still this long becomes a hold: moving after it drags with the button/finger down. */
+/** An armed pinch (the second of a pair) kept still this long holds the button/finger down. */
 export const HOLD_DRAG_MS = 400;
 
 export type GestureEvent =
-  /** `held`: the press was held still first, so the drag keeps the button or finger down. */
+  /** `held`: an armed press (tap-and-a-half), so the drag keeps the button or finger down. */
   | { kind: 'dragStart'; x: number; y: number; held?: true }
   | { kind: 'drag'; dx: number; dy: number }
   | { kind: 'dragEnd'; held?: true }
   | { kind: 'tap'; x: number; y: number }
-  /** Held still for HOLD_DRAG_MS: press the button / put the finger down at the start point. */
+  /** An armed press held still for HOLD_DRAG_MS: press the button / put the finger down there. */
   | { kind: 'hold'; x: number; y: number }
   /** A hold released without moving. */
   | { kind: 'holdEnd' };
@@ -43,6 +45,8 @@ interface Press {
   startTime: number;
   dragging: boolean;
   held: boolean;
+  /** The second pinch of a tap-and-a-half: its drag holds the button. */
+  armed: boolean;
 }
 
 /** Tracks one pointer at a time; extra pointers are ignored. */
@@ -51,9 +55,9 @@ export class GestureTracker {
 
   constructor(private readonly options: GestureOptions = DEFAULT_GESTURES) {}
 
-  down(id: number, x: number, y: number, time: number): void {
+  down(id: number, x: number, y: number, time: number, armed = false): void {
     if (this.press) return;
-    this.press = { id, startX: x, startY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false };
+    this.press = { id, startX: x, startY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false, armed };
   }
 
   move(id: number, x: number, y: number): GestureEvent[] {
@@ -64,7 +68,7 @@ export class GestureTracker {
     if (!p.dragging) {
       if (Math.hypot(x - p.startX, y - p.startY) <= this.options.tapThreshold) return [];
       p.dragging = true;
-      events.push(p.held ? { kind: 'dragStart', x: p.startX, y: p.startY, held: true } : { kind: 'dragStart', x: p.startX, y: p.startY });
+      events.push(p.held || p.armed ? { kind: 'dragStart', x: p.startX, y: p.startY, held: true } : { kind: 'dragStart', x: p.startX, y: p.startY });
     }
 
     // The first drag event includes the movement inside the threshold, so the
@@ -103,12 +107,12 @@ export class GestureTracker {
   }
 
   /**
-   * Call HOLD_DRAG_MS after down(): if the press is still down and hasn't moved, it becomes a hold
-   * (and a later move a held drag). Does nothing otherwise.
+   * Call HOLD_DRAG_MS after an armed down(): if the press is still down and hasn't moved, it
+   * becomes a hold. Does nothing otherwise (not armed, moved, released).
    */
   hold(id: number): GestureEvent[] {
     const p = this.press;
-    if (!p || p.id !== id || p.dragging || p.held) return [];
+    if (!p || p.id !== id || !p.armed || p.dragging || p.held) return [];
     p.held = true;
     return [{ kind: 'hold', x: p.startX, y: p.startY }];
   }
@@ -120,7 +124,7 @@ export class GestureTracker {
 }
 
 function dragEnd(p: Press): GestureEvent {
-  return p.held ? { kind: 'dragEnd', held: true } : { kind: 'dragEnd' };
+  return p.held || p.armed ? { kind: 'dragEnd', held: true } : { kind: 'dragEnd' };
 }
 
 /** Longest gap between a tap and the next press for the two to count as one gesture (ms). */

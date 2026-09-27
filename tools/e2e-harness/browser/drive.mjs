@@ -294,31 +294,34 @@ try {
     afterSwipe.x === Math.max(0, beforeSwipe.x - Math.round(beforeSwipe.width / 4)) && afterSwipe.y === beforeSwipe.y,
     `x ${beforeSwipe.x} -> ${afterSwipe.x}, width ${beforeSwipe.width}`);
 
-  // Pinch, then pinch and hold (a tap, then a press held still past the hold time).
-  // The hand wobbles during the hold (40 px here); that must not count as a drag.
-  const pinchThenHold = async () => {
+  // 11. Tap-and-a-half, as on a touchpad: a pinch, then a second pinch that moves drags with the
+  //     button held (no click first); a second pinch held still presses and releases in place.
+  const dragAfterTap = async (moveBy) => {
     await page.mouse.click(300, 300);
     await sleep(100);
     await page.mouse.down();
-    await page.mouse.move(340, 320, { steps: 5 });
-    await sleep(700);
+    if (moveBy) {
+      await page.mouse.move(300 + moveBy, 320, { steps: 6 });
+      await sleep(100);
+    } else {
+      await sleep(700);
+    }
     await page.mouse.up();
-    await sleep(200);
+    await sleep(600);
   };
+  const buttonActions = async (fn) => {
+    const before = (await input()).length;
+    await fn();
+    return (await input()).slice(before).filter((a) => !a.startsWith('move ')).join('|');
+  };
+  const tapDrag = await buttonActions(() => dragAfterTap(60));
+  const tapHold = await buttonActions(() => dragAfterTap(0));
+  const focusAfterTapHold = await page.evaluate(() => document.activeElement?.tagName ?? null);
+  check('pinch, then pinch and move drags with the button held; pinch, then pinch held: press and release',
+    tapDrag === 'down Left|up Left' && tapHold === 'down Left|up Left' && focusAfterTapHold === 'BODY',
+    `drag: ${tapDrag} · held still: ${tapHold} · focus ${focusAfterTapHold}`);
 
-  // 11. Pinch, then pinch-hold puts focus on the likely next mode (Type, from Pointer);
-  //     swipes then stay on the controls.
-  await pinchThenHold();
-  const heldFocus = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
-  const beforeControlsSwipe = await regionAt();
-  await page.keyboard.press('ArrowRight');
-  await sleep(300);
-  const afterControlsSwipe = await regionAt();
-  check('pinch, then pinch-hold from Pointer focuses Type', heldFocus === 'type' &&
-    afterControlsSwipe.x === beforeControlsSwipe.x, `focus ${heldFocus}`);
-
-  // 12. Pointer mode: a pinch clicks after a short wait, two quick pinches double-click,
-  //     and pinch-then-hold clicks nothing.
+  // 12. Pointer mode: a pinch clicks after a short wait, two quick pinches double-click.
   await tapBar('button[data-mode="pointer"]'); // back to Pointer, swipes on the view
   await sleep(300);
   const clicksIn = async (fn) => {
@@ -333,14 +336,8 @@ try {
     await sleep(100);
     await page.mouse.click(320, 300);
   });
-  const beforeHold = (await input()).length;
-  const held = await clicksIn(pinchThenHold);
-  const heldMoves = (await input()).slice(beforeHold).filter((a) => a.startsWith('move ')).length;
-  const heldToType = await page.evaluate(() => document.activeElement?.dataset?.mode ?? null);
   check('in Pointer mode a pinch clicks once and two quick pinches double-click', single === 1 && double === 2,
     `single ${single}, double ${double}`);
-  check('in Pointer mode a wobbly pinch-then-hold focuses Type without clicking or moving',
-    held === 0 && heldMoves === 0 && heldToType === 'type', `clicks ${held}, moves ${heldMoves}, focus ${heldToType}`);
 
   // 13. The whole Type round trip by pinches alone (taps on the video): Type → text box →
   //     (composer) → Send text → Pointer focused → Pointer.
@@ -353,7 +350,9 @@ try {
     await page.mouse.click(300, 150);
     await sleep(400);
   };
-  await pinch(); // presses Type (focused by step 12's pinch-then-hold)
+  await page.evaluate(() => history.back()); // Back from the view: the controls, Type focused
+  await sleep(300);
+  await pinch(); // presses Type
   const afterType = await page.evaluate(() => document.activeElement?.tagName ?? null);
   await page.keyboard.type('from the composer');
   await sleep(700); // past the hold on the text box
@@ -489,30 +488,6 @@ try {
   await sleep(300);
   const modeAfterBackFromType = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   check('Back from Type returns to Pointer mode', modeAfterBackFromType === 'pointer', modeAfterBackFromType);
-
-  // 17c. Pinch, hold still 0.4 s, then move: a drag with the button held (select text, move a
-  //      window). A pinch held still and let go without moving is still a click.
-  await press('button[data-mode="pointer"]');
-  await sleep(200);
-  const beforeHeld = (await input()).length;
-  await page.mouse.move(300, 300);
-  await page.mouse.down();
-  await sleep(600);
-  await page.mouse.move(360, 340, { steps: 6 });
-  await sleep(150);
-  await page.mouse.up();
-  await sleep(500);
-  const heldDrag = (await input()).slice(beforeHeld).map((a) => (a.startsWith('move ') ? 'move' : a));
-  const heldPlain = heldDrag.filter((a, i) => a !== 'move' || heldDrag[i - 1] !== 'move');
-  const beforeSlow = (await input()).length;
-  await page.mouse.down();
-  await sleep(550);
-  await page.mouse.up();
-  await sleep(600);
-  const slow = (await input()).slice(beforeSlow).filter((a) => !a.startsWith('move '));
-  check('pinch, hold still, move: a drag with the button down; held and let go still: a click',
-    heldPlain.filter((a, i) => !(i === 0 && a === 'move')).join('|') === 'down Left|move|up Left' && slow.join('|') === 'click Left',
-    `held: ${heldPlain.join('|')} · slow: ${slow.join('|')}`);
 
   await press('button[data-mode="pointer"]');
   await sleep(100);
