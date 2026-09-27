@@ -7,8 +7,10 @@
 // - The device token: after an approval the PC remembers these glasses for a while (24 h) and
 //   gives them a device token, so a restart of the page or a lost connection can start a new
 //   session without another approval. It is kept in localStorage (the page has a strict CSP and
-//   no third-party code), swapped for a new one on every use, and dropped when the PC refuses it
-//   or ends the session itself.
+//   no third-party code), swapped for a new one on every use, and dropped when it expires or the
+//   PC closes a session for breaking the rules (the PC forgets the glasses then too). A refused
+//   resume keeps it: the PC answers "busy" (a pairing waiting on the PC) exactly like "unknown
+//   token", and a token it really no longer knows just fails again until it expires.
 import { parseServerMessage, type ClientMessage, type ServerMessage } from './protocol';
 
 let heldToken: string | null = null;
@@ -122,9 +124,11 @@ export class Session {
       const message = parseServerMessage(String(event.data));
       if (message?.type === 'authFailed') {
         this.close();
-        if (resuming) forgetDevice();
+        // Not forgetDevice(): the refusal may only mean the PC was busy (see the top of this file).
         this.handlers.onClose(
-          resuming ? 'The PC no longer remembers these glasses. Pair again.' : 'The PC refused the session. Pair again.',
+          resuming
+            ? "The PC didn't take these glasses back just now. Reconnect to try again, or pair again."
+            : 'The PC refused the session. Pair again.',
         );
       } else if (message?.type === 'authenticated') {
         if (message.deviceToken && message.deviceTokenExpiresAt) {
