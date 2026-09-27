@@ -108,6 +108,9 @@ sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers
     {
         var peer = _real.Create(codec);
         _latest = peer as SipsorceryMediaPeer;
+        // Every stream crosses a sequence-number wrap early, so the checks after it (resends
+        // included) run in the second SRTP rollover epoch.
+        _latest?.StartNearSequenceWrap();
         if (DropStartOfNext && peer is SipsorceryMediaPeer real)
         {
             DropStartOfNext = false;
