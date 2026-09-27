@@ -45,7 +45,8 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
                         RegionMath, RegionStore, CastArea (region of the active session), AppShortcuts
   Media/                FramePump, SipsorceryMediaPeer, SdpCandidates, SdpFeedback, MfH264Encoder, Nv12,
                         Vp8 encoder, H264Rtp (packetizer) + RtpPacer (spreads packets out; uses
-                        Windows/PreciseSleep), StatsLog (daily JSONL of glasses + PC media figures)
+                        Windows/PreciseSleep), SentPackets + RtcpNack (resend what the glasses NACK),
+                        StatsLog (daily JSONL of glasses + PC media figures)
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
                         NativeMethods
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
@@ -64,7 +65,7 @@ client-web/             glasses client (600×600)
   src/{protocol,geometry,gestures,controls,display}.ts  pure logic with *.test.ts
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 35 checks)
+                        browser/drive.mjs (headless Chrome, 36 checks)
 spikes/webrtc/          M0 spike: unauthenticated test pattern, timestamp barcode latency meter
 deploy/                 Caddyfile, Caddyfile.spike, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
@@ -76,7 +77,7 @@ tools/bin/caddy.exe     local Caddy binary (git-ignored)
 
 ```powershell
 dotnet build GlassesRemote.sln
-dotnet test                                     # ~158 server tests, ~13 s
+dotnet test                                     # ~166 server tests, ~13 s
 cd client-web; npm test; npx tsc --noEmit; npm run build   # ~82 client tests, typecheck, dist/
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
@@ -180,7 +181,8 @@ tight padding, check a screenshot when adding buttons). Model in
   size), split into `PC→here` (capture, encode, pacing, network) and `buffer+show` (jitter buffer,
   decode, render); `clock ±n` is the clock-offset error. Then the receiver's counters (jitter
   buffer, decode, bitrate, lost, NACK, PLI, freezes, dropped) and the PC's pump figures
-  (capture, encode, `send` = wait in the pacer until a frame's last packet left). The
+  (capture, encode, `send` = wait in the pacer until a frame's last packet left) and
+  `PC resent n of m NACKed`. The
   status bar's `ms` is only the control socket's ping. Not included: the wait for the next capture
   tick (0–50 ms at 20 fps) and the glasses' display scan-out.
 - **How it works:** the PC's `mediaStats` lists `[rtp, capturedAtUnixMs, bytes]` per frame sent;
@@ -191,7 +193,8 @@ tight padding, check a screenshot when adding buttons). Model in
   side for every session (panel open or not): `kind` = `glasses` (their figures; `framesShown` 0
   means no per-frame timing in that browser; `plis` = keyframe requests it sent, cumulative),
   `pc` (capture/encode/`sendMs` timings, frame KB, keyframes forced and `keyframeRequests` =
-  PLI/FIR received; compare with the glasses' `plis`) and `event` (start,
+  PLI/FIR received, compare with the glasses' `plis`; `nacked` = packets the glasses NACKed,
+  `resent` = those sent again, compare with the glasses' `nacks`/`lostTotal`) and `event` (start,
   setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
 - **Keep it accurate.** The user and future agents diagnose from these figures, so a change that
   affects them updates the measurement and this section in the same piece of work:
@@ -264,12 +267,17 @@ tight padding, check a screenshot when adding buttons). Model in
   (`MF_LOW_LATENCY` / `CODECAPI_AVLowLatencyMode`) **before** setting media types, or the encoder
   silently buffers every frame. `ICodecAPI` is declared by hand (Vortice doesn't wrap it).
 - **Keyframe requests:** SIPSorcery's offer lists only `transport-cc`; `SdpFeedback` adds
-  `nack pli`/`ccm fir` or Chrome's PLIs don't come through. Plain `nack` stays out (no
-  retransmission). It also adds `a=rtcp-rsize`: a few seconds in, Chrome puts a REMB into every
+  `nack pli`/`ccm fir` or Chrome's PLIs don't come through. It also adds `a=rtcp-rsize`: a few seconds in, Chrome puts a REMB into every
   receiver report, and SIPSorcery keeps only one feedback item per report, so PLIs sent inside a
   report vanished (glasses: 124 sent, 2 heard). With rsize a PLI comes first in its own packet,
-  read from the unencrypted SRTCP header. After a mid-stream loss Chrome waits a while before
-  asking (a periodic keyframe often arrives first); on a start it asks at once.
+  read from the unencrypted SRTCP header. After a mid-stream loss Chrome first NACKs (up to ~28
+  times over a few seconds) and only then asks; on a start it asks at once.
+- **NACK (retransmission):** plain `nack` is offered for H.264 only (VP8 goes through SIPSorcery's
+  SendVideo, which keeps nothing). Resends reuse the original sequence number (no RTX). NACKs
+  arrive in packets of their own (rsize), which SIPSorcery drops as unmatched, but it has already
+  decrypted the channel's buffer **in place** when our handler runs (it subscribed first), so we
+  read them there (`RtcpNack.IsReadable` checks, else a copy is decrypted). SIPSorcery's own NACK
+  parse keeps only the first FCI; `RtcpNack` reads them all.
 - **Pacing:** H.264 frames are packetized by `H264Rtp` and sent by `RtpPacer` at
   `Media:PacingKbps` (6000) or faster to stay within `MaxPacingDelayMs` (150). Sent in one burst,
   keyframes (35-75 packets) lost ~26% of packets over mobile data. `Thread.Sleep` only wakes on
@@ -278,9 +286,10 @@ tight padding, check a screenshot when adding buttons). Model in
 - **SIPSorcery:** media port must be **even**; `RTCConfiguration.X_BindAddress` pins the adapter;
   browsers' mDNS `.local` candidates are unusable and ignored; "DTLS packet received … no DTLS
   transport available" warnings at startup are a harmless race.
-- **Keyframes:** `FramePump` forces them only when the source size changes (and every 2 s),
-  not when the region moves; edge panning would otherwise send a keyframe every 100 ms. The
-  encoder's own GOP is `KeyframeIntervalSeconds` too (it was a fixed 2 s before 2026-09-27).
+- **Keyframes:** `FramePump` forces them when the source size changes, on request (PLI) and
+  every `KeyframeIntervalSeconds` (10 s; 2 s before NACK), not when the region moves; edge
+  panning would otherwise send a keyframe every 100 ms. The encoder's own GOP follows the same
+  setting (it was a fixed 2 s before 2026-09-27).
 - **ASP.NET config:** `Urls` in `appsettings.json` overrides launchSettings `applicationUrl`;
   set `Urls` as an environment variable in a profile instead.
 - **Client:** no `<StrictMode>` (double effects would open two sessions for one token);
@@ -362,10 +371,10 @@ tight padding, check a screenshot when adding buttons). Model in
   the task". `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
   mic via Meta's DAT) is planned but **on hold** at the user's request.
 - **Latency over mobile data (2026-09-27):** the session showed ~26% packet loss, all in the
-  seconds keyframes went out, and only 1 in 5 frames shown. Done: pacing (`RtpPacer`) and PLIs
-  heard again (`rtcp-rsize`); not yet confirmed on the glasses. If that isn't enough, next in
-  order: NACK + retransmission (keep recent packets, resend on NACK, then offer plain `nack`);
-  gradual intra refresh or a keyframe size cap instead of 40-90 KB keyframes every 2 s;
+  seconds keyframes went out, and only 1 in 5 frames shown. Pacing (`RtpPacer`) and heard PLIs
+  (`rtcp-rsize`) cut the loss to ~4% on the glasses, with 1-2 s stalls left when a keyframe lost
+  packets. Then NACK retransmission and keyframes every 10 s; not yet confirmed on the glasses.
+  If that isn't enough, next: gradual intra refresh or a keyframe size cap (40-90 KB now);
   bitrate adapting to Chrome's REMB estimate (it arrives in every receiver report); and
   as a last resort a TCP path (WebSocket + WebCodecs, if the glasses' WebView has it), like RDP.
 - Ideas queued: live PC frame while dragging in Region; "video not connecting" hint after ~15 s;
