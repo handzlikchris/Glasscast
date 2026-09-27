@@ -30,7 +30,16 @@ public sealed class FakePeer : IMediaPeer
 
     public bool Disposed { get; private set; }
 
-    public Task<string> CreateOfferAsync() => Task.FromResult("v=0\r\nfake-offer\r\n");
+    /// <summary>Whether the last offer included the PC's LAN address (glasses at home).</summary>
+    public bool? OfferedLan { get; private set; }
+
+    public Task<string> CreateOfferAsync(bool offerLan)
+    {
+        OfferedLan = offerLan;
+        return Task.FromResult("v=0\r\nfake-offer\r\n");
+    }
+
+    public System.Net.IPEndPoint? RemoteMediaEndPoint { get; set; }
 
     public bool ApplyAnswer(string sdp)
     {

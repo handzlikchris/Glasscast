@@ -155,6 +155,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
             _logger.LogInformation("Media peer state: {State}", state);
             if (state == RTCPeerConnectionState.connected)
             {
+                if (RemoteMediaEndPoint is { } remote)
+                {
+                    _logger.LogInformation("Media path: {Remote} ({Path})", remote, MediaPaths.IsLan(remote.Address) ? "LAN" : "internet");
+                }
                 Connected?.Invoke();
             }
             else if (state is RTCPeerConnectionState.failed or RTCPeerConnectionState.closed)
@@ -194,7 +198,9 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
 
     public bool IsConnected => _peer.connectionState == RTCPeerConnectionState.connected;
 
-    public async Task<string> CreateOfferAsync()
+    public IPEndPoint? RemoteMediaEndPoint => _peer.GetRtpChannel()?.NominatedEntry?.RemoteCandidate?.DestinationEndPoint;
+
+    public async Task<string> CreateOfferAsync(bool offerLan)
     {
         var offer = _peer.createOffer();
         await _peer.setLocalDescription(offer);
@@ -203,8 +209,9 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             _logger.LogWarning("No Media:PublicIp configured and LAN candidates are off: the glasses have no address to reach");
         }
+        var lanIp = offerLan && IPAddress.TryParse(_options.BindAddress, out var bound) ? bound : null;
         return SdpFeedback.AddFeedback(
-            SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates));
+            SdpCandidates.Rewrite(offer.sdp, publicIp, _options.MediaPort, _options.IncludeLanCandidates, lanIp));
     }
 
     public bool ApplyAnswer(string sdp)

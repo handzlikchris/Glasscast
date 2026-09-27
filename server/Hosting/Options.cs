@@ -60,8 +60,16 @@ public sealed class MediaOptions
     /// <summary>Fixed UDP port for WebRTC media, forwarded on the router. Must be even (SIPSorcery requires it).</summary>
     public int MediaPort { get; set; } = 50000;
 
-    /// <summary>Also advertise LAN addresses (for testing on the home network).</summary>
+    /// <summary>Also advertise all of SIPSorcery's LAN addresses (for testing on the home network).</summary>
     public bool IncludeLanCandidates { get; set; }
+
+    /// <summary>
+    /// Glasses connecting from <see cref="PublicIp"/> itself are behind this router (at home):
+    /// their offer also carries <see cref="BindAddress"/>:<see cref="MediaPort"/>, ranked above
+    /// the public address, so the video goes straight over the LAN when it can. Away from home
+    /// only the public address is offered, so the LAN address never leaves the house.
+    /// </summary>
+    public bool LanWhenHome { get; set; } = true;
 
     /// <summary>"H264" (Windows Media Foundation, falls back to VP8 if unavailable) or "VP8".</summary>
     public string Codec { get; set; } = "H264";

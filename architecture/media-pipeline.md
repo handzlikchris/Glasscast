@@ -19,7 +19,8 @@ RTP packetizer → pacer → SIPSorcery SRTP on fixed UDP 50000 → the glasses'
 | `server/Media/SentPackets.cs` | Ring of the last 4096 packets (3 s, one resend per 50 ms, same SRTP epoch only). |
 | `server/Media/RtcpNack.cs` | Reads every FCI of every generic NACK in a (decrypted) RTCP packet. |
 | `server/Media/BitrateController.cs` | Loss-based target (cut on >10% loss, +8% on <2% while busy), `[MinKbps, TargetKbps]`, starts at `StartKbps`. |
-| `server/Media/SdpCandidates.cs` | Offer rewrite: drop LAN candidates (unless enabled), add `PublicIp:MediaPort` as the top host candidate. |
+| `server/Media/SdpCandidates.cs` | Offer rewrite: drop SIPSorcery's own candidates (unless enabled), add `BindAddress` first for glasses at home, then `PublicIp:MediaPort`. |
+| `server/Media/MediaPaths.cs` | Is a client at home (same public IP), is an address private (the LAN path). |
 | `server/Media/SdpFeedback.cs` | Adds `nack` (H.264 only), `nack pli`, `ccm fir`, `rtcp-rsize` to the offer. |
 | `server/Media/LinkTest.cs` | Diagnostic noise pattern at stepped bitrates (see [stats-and-diagnostics.md](stats-and-diagnostics.md)). |
 | `client-web/src/rtc.ts` | `VideoReceiver` (receive-only `RTCPeerConnection`, no ICE servers), `watchFrames` (rVFC). |
@@ -70,6 +71,14 @@ own decrypt, so it matters which one sees a packet first (see the review's SRTCP
 - The offer carries one host candidate: the router's public IP and port 50000
   (`Media:PublicIp`, `MediaPort`, must be even). The browser's checks come in through the port
   forward and SIPSorcery learns the browser as peer-reflexive. No STUN/TURN.
+- **LAN path at home** (`Media:LanWhenHome`, on): glasses whose control socket comes from
+  `PublicIp` itself are behind this router, so their offer also carries `BindAddress:MediaPort`
+  (`lan1`, priority 2130706431) above the public one (`pub1`, 2130706175). The browser checks
+  the LAN address first; SIPSorcery (controlling) nominates the first pair that succeeds, so
+  the video skips the router hairpin when it can and falls back to the public path when it
+  can't (glasses relayed by a phone on mobile data, a guest network). Away from home the LAN
+  address is never offered. `MediaPaths` holds the home and private-address checks; the
+  chosen path is logged ("Media path: … (LAN|internet)") and written as a `mediaPath` event.
 - `Media:BindAddress` pins the socket to the Ethernet adapter the router forwards to;
   without it, replies may leave through Wi-Fi and never connect (`ServerApp.WarnIfMultiHomed`).
 - The browser's own candidates are mostly mDNS `.local` names; the server can't resolve them
@@ -82,7 +91,8 @@ own decrypt, so it matters which one sees a packet first (see the review's SRTCP
 `Codec` (H264/VP8), `FramesPerSecond` 20, `TargetKbps` 2500 (max), `MinKbps` 300,
 `StartKbps` 1000, `KeyframeIntervalSeconds` 10, `RequestedKeyframeMinGapMs` 1500,
 `PacingKbps` 6000 (0 = no pacing), `MaxPacingDelayMs` 150, `FrameWidth/Height` 600,
-`LinkTestOnStart` + steps, `PublicIp`, `BindAddress`, `MediaPort`, `IncludeLanCandidates`.
+`LinkTestOnStart` + steps, `PublicIp`, `BindAddress`, `MediaPort`, `IncludeLanCandidates`,
+`LanWhenHome`.
 
 ## History worth knowing (why it is like this)
 

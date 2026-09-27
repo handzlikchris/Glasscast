@@ -136,7 +136,9 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names),
    then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
    `Media:PublicIp`:`MediaPort` as a host candidate; the browser's checks come in through the port
-   forward and SIPSorcery learns it as peer-reflexive.
+   forward and SIPSorcery learns it as peer-reflexive. Glasses at home (their control socket
+   comes from `PublicIp`) also get `BindAddress`, ranked first, so the video can stay on the LAN
+   (`Media:LanWhenHome`, `MediaPaths`).
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
    (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`
@@ -213,8 +215,8 @@ tight padding, check a screenshot when adding buttons). Model in
   PLI/FIR received, compare with the glasses' `plis`; `nacked` = packets the glasses NACKed,
   `resent` = those sent again, compare with the glasses' `nacks`/`lostTotal`; `targetKbps` = the
   encoder's adapted target, `rembKbps`/`lossPct` = the glasses' last RTCP estimate and loss,
-  `linkTestKbps` = link test step, 0 outside it) and `event` (start,
-  setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
+  `linkTestKbps` = link test step, 0 outside it) and `event` (start with `lanOffered`,
+  mediaPath with `lan` = whether the video went over the LAN, setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
 - **Link test (diagnostic):** run the server with `Media__LinkTestOnStart=true` (env var, or
   `Media:LinkTestOnStart` in appsettings.Local.json) and every session starts with ~15 s of a
   noise pattern at 500/1000/2000/4000/8000 kbit/s. Compare the `pc` `kbps` with the glasses'

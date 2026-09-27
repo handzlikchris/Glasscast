@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.WebSockets;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Desktop;
@@ -25,7 +26,8 @@ public sealed record SessionServices(
     AlertLog Alerts,
     StatsLog Stats,
     TimeProvider Time,
-    ILogger<ControlSession> Logger);
+    ILogger<ControlSession> Logger,
+    IOptions<MediaOptions> Media);
 
 /// <summary>
 /// One authenticated session: WebRTC signalling, video, and input, until the
@@ -61,6 +63,12 @@ public sealed class ControlSession
         using var encoder = _s.Encoders.Create();
         using var peer = _s.Peers.Create(encoder.Codec);
         peer.Closed += () => SafeCancel(cts);
+        // Which way the video went: over the LAN (glasses at home took the LAN address) or the internet.
+        peer.Connected += () => _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
+        {
+            ["event"] = "mediaPath",
+            ["lan"] = peer.RemoteMediaEndPoint is { } remote ? MediaPaths.IsLan(remote.Address) : null,
+        });
 
         var closeStatus = WebSocketCloseStatus.NormalClosure;
         var closeReason = "session ended";
@@ -76,7 +84,11 @@ public sealed class ControlSession
                 codec = encoder.Codec,
             }, ct);
 
-            await _io.SendAsync(new { type = "rtcOffer", sdp = await peer.CreateOfferAsync() }, ct);
+            // Glasses behind this router (at home) may reach the PC's LAN address: offer it first.
+            var media = _s.Media.Value;
+            var home = media.LanWhenHome
+                && MediaPaths.IsHome(_lease.RemoteAddress, IPAddress.TryParse(media.PublicIp, out var publicIp) ? publicIp : null);
+            await _io.SendAsync(new { type = "rtcOffer", sdp = await peer.CreateOfferAsync(offerLan: home) }, ct);
 
             _s.Stats.Write(_lease.Id, "event", new Dictionary<string, object?>
             {
@@ -85,6 +97,7 @@ public sealed class ControlSession
                 ["mode"] = ControlProtocol.ModeName(controller.Mode),
                 ["region"] = $"{controller.Region.Width}x{controller.Region.Height}",
                 ["resumed"] = _lease.Resumed,
+                ["lanOffered"] = home,
             });
 
             _lastInputTimestamp = _lastMessageTimestamp = _s.Time.GetTimestamp();

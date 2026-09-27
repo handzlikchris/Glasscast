@@ -127,7 +127,7 @@ public sealed class EndpointTests : IAsyncLifetime
         Assert.Contains(lines, l => l.GetProperty("kind").GetString() == "pc" && l.GetProperty("frameMaxKb").GetDouble() >= 0);
         var events = lines.Where(l => l.GetProperty("kind").GetString() == "event")
             .Select(l => l.GetProperty("event").GetString()).ToArray();
-        Assert.Equal(["start", "switchApp"], events);
+        Assert.Equal(["start", "mediaPath", "switchApp"], events); // mediaPath once the answer connects the peer
         Assert.All(lines, l => Assert.Equal(glasses.GetProperty("session").GetString(), l.GetProperty("session").GetString()));
         Assert.Empty(_host.Input.Actions);
     }
@@ -353,6 +353,27 @@ public sealed class EndpointTests : IAsyncLifetime
         await session.WaitForCloseAsync(); // nothing sent from here on
         Assert.Equal("no heartbeat", session.Socket.CloseStatusDescription);
         await WaitUntil(() => host.Coordinator.ActiveSession is null && host.CastArea.Current is null);
+    }
+
+    // Glasses behind the router (at home) get the PC's LAN address in their offer; others don't.
+    // TestServer connections carry no remote address (IPAddress.None), so configuring that as the
+    // public IP stands in for glasses connecting from the router's own address.
+    [Theory]
+    [InlineData("255.255.255.255", true, true)]
+    [InlineData("203.0.113.45", true, false)]
+    [InlineData("255.255.255.255", false, false)]
+    public async Task Only_glasses_at_home_are_offered_the_lan_path(string publicIp, bool lanWhenHome, bool offered)
+    {
+        await using var host = new TestServerHost(new()
+        {
+            ["Media:PublicIp"] = publicIp,
+            ["Media:LanWhenHome"] = lanWhenHome.ToString(),
+        });
+        var token = await host.PairAsync();
+        using var session = await host.StartSessionAsync(token);
+
+        await WaitUntil(() => host.Peers.Created.Count == 1 && host.Peers.Created[0].OfferedLan is not null);
+        Assert.Equal(offered, host.Peers.Created[0].OfferedLan);
     }
 
     // Brief test 10: tokens never reach the logs.

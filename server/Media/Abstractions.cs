@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace GlassesRemote.Server.Media;
 
 /// <summary>Encodes raw BGRA frames for the WebRTC track.</summary>
@@ -35,8 +37,14 @@ public interface IMediaPeer : IDisposable
 
     bool IsConnected { get; }
 
-    /// <summary>Creates the SDP offer (with our public-IP candidate) to send to the glasses.</summary>
-    Task<string> CreateOfferAsync();
+    /// <summary>
+    /// Creates the SDP offer (with our public-IP candidate) to send to the glasses; with
+    /// <paramref name="offerLan"/> the PC's LAN address too, first (glasses at home).
+    /// </summary>
+    Task<string> CreateOfferAsync(bool offerLan);
+
+    /// <summary>Where the video goes once connected (the glasses' side of the chosen pair), else null.</summary>
+    IPEndPoint? RemoteMediaEndPoint { get; }
 
     bool ApplyAnswer(string sdp);
 
