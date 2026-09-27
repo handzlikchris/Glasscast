@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Glasses Remote</string>
+    <string name="accessibility_description">Lets your Meta Ray-Ban Display glasses tap, swipe, go Back or Home and type on this phone during a session you started and allowed on the phone. It does nothing outside such a session.</string>
+</resources>
