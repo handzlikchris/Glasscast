@@ -2,14 +2,14 @@
 
 Guide for AI agents (and humans) picking up this repo. Read this first, then `README.md`.
 Before changing a feature, read its doc in **`architecture/`** (index: `architecture/README.md`):
-pairing and auth, session and protocol, media pipeline, stats, input and desktop, glasses
+pairing and auth, session and protocol, media pipeline, audio, stats, input and desktop, glasses
 client, PC UI, deployment, testing. Each names its files, flows, rules and tests; keep the doc
 current in the same piece of work.
 
 ## What this is
 
 A proof of concept that lets a **Meta Ray-Ban Display** web app control this Windows PC:
-view a region of the primary monitor over WebRTC video, move/click/scroll the mouse with
+view a region of the primary monitor over WebRTC video (with the PC's sound), move/click/scroll the mouse with
 Neural Band gestures, switch between configured apps, and type through the glasses'
 voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**,
 or (for 24 h after such an approval) the **device token** of the glasses that were approved.
@@ -29,6 +29,7 @@ or (for 24 h after such an approval) the **device token** of the glasses that we
 | Server | .NET 10 (`net10.0-windows`, SDK pinned in `global.json`), ASP.NET Core + WinForms, one process as the logged-in user |
 | WebRTC | SIPSorcery 10.0.16, send-only video, fixed UDP port, no STUN/TURN |
 | Video | H.264 via Windows Media Foundation software encoder (Vortice.MediaFoundation 3.8.3); VP8 (libvpx via SIPSorceryMedia.Encoders) fallback |
+| Audio | WASAPI loopback (NAudio.Wasapi 2.2.1) → Opus (Concentus, via SIPSorcery) on a second track, same port |
 | Capture / input | GDI `CopyFromScreen`; `SendInput` (P/Invoke); window switching via EnumWindows/SetWindowPos |
 | Client | React 19, Vite 8 (Rolldown), TypeScript 7 (native `tsc`), Vitest 4 |
 | Proxy | Caddy 2.11 (stock) terminates TLS, Let's Encrypt via TLS-ALPN |
@@ -52,16 +53,18 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
                         Vp8 encoder, H264Rtp (packetizer) + RtpPacer (spreads packets out; uses
                         Windows/PreciseSleep), SentPackets + RtcpNack (resend what the glasses NACK), RtcpReadable,
                         BitrateController (target from the glasses' loss), LinkTest (diagnostic),
-                        StatsLog (daily JSONL of glasses + PC media figures)
+                        StatsLog (daily JSONL of glasses + PC media figures); audio: AudioPump,
+                        AudioTimeline, OpusAudioEncoder, SdpStreams (separate msids)
   Windows/              Win32 implementations: SendInput, GDI capture, keep-awake, Win32WindowSwitcher,
-                        NativeMethods
+                        LoopbackAudioCapture (WASAPI), NativeMethods
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
                         around the cast area on the PC monitor), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
 client-web/             glasses client (600×600)
   build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
-  src/rtc.ts            receive-only RTCPeerConnection + stats
+  src/rtc.ts            receive-only RTCPeerConnection (video + audio elements) + stats
+  src/audio.ts          ♪ setting (localStorage), stereo=1 answer fix-up, V/A bandwidth label
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: swipe actions, Back targets, tap routing (pure, tested)
@@ -72,7 +75,7 @@ client-web/             glasses client (600×600)
   src/overlay.ts        canvas: cursor, region box, pan-edge glow
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 39 checks)
+                        browser/drive.mjs (headless Chrome, 44 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -84,8 +87,8 @@ architecture/           one doc per feature area (files, flows, rules, tests); s
 
 ```powershell
 dotnet build GlassesRemote.sln
-dotnet test                                     # ~177 server tests, ~19 s
-cd client-web; npm test; npx tsc --noEmit; npm run build   # ~84 client tests, typecheck, dist/
+dotnet test                                     # ~250 server tests, ~22 s
+cd client-web; npm test; npx tsc --noEmit; npm run build   # ~99 client tests, typecheck, dist/
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
 .\tools\bin\caddy.exe run --config deploy\Caddyfile          # public HTTPS
@@ -132,8 +135,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    within 3 s. The approval token is single-use, SHA-256 stored, consumed on use, dies with the
    session. `authenticated` then carries a **device token** (`deviceToken`, `deviceTokenExpiresAt`):
    the glasses resume with it later without the popup (see the security invariants).
-3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names),
-   then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
+3. Server sends `hello` (monitor, region, starting mode = **pointer**, codec, app shortcut names,
+   `audio` = whether the offer carries the PC's sound), then `rtcOffer`. The offer's SDP is rewritten (`SdpCandidates`) to advertise
    `Media:PublicIp`:`MediaPort` as a host candidate; the browser's checks come in through the port
    forward and SIPSorcery learns it as peer-reflexive. The offer also carries `BindAddress`,
    ranked first, so the video stays on the LAN when the glasses can reach it (`Media:OfferLan`,
@@ -141,7 +144,8 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 4. Control messages (`ControlProtocol.cs` ⇄ `client-web/src/protocol.ts`, keep in sync):
    `setMode`, `setRegion`, `move` (absolute 0..1 in the view, not dx/dy), `click`, `scroll`
    (browser deltaY sign, ≤ 1200 per message), `typeText`, `key` (allowlist), `switchApp`
-   (slot 1-9), `ping`, `rtcAnswer`, `iceCandidate`, `stats` (numbers-only allowlist, for the stats
+   (slot 1-9), `setAudio` (`enabled` bool: the ♪ setting, sent after `hello` and on each toggle),
+   `ping`, `rtcAnswer`, `iceCandidate`, `stats` (numbers-only allowlist, for the stats
    log; not input for the idle timeout). Server → client: `pairCode`, `paired`,
    `pairFailed`, `authFailed`, `authenticated`, `hello`, `rtcOffer`, `region`, `appSwitch`
    (switched/notRunning/failed), `pong`, `mediaStats` (about once a second: pump timings and
@@ -152,13 +156,17 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
    `RegionStore` across sessions and mirrored to `CastArea`, which the tray draws on the monitor.
 6. Geometry is mirrored: `RegionMath.cs` ⇄ `geometry.ts` (letterbox fit, clamp to monitor, min 160 px).
    Frames are always 600×600 with the source letterboxed.
-7. App shortcuts: `Apps:Shortcuts` in `appsettings.Local.json` (name + process and/or window-title
+7. **Audio** (`architecture/audio.md`): with `Audio:Enabled` (default) the offer also carries a
+   send-only Opus track (stereo, FEC, 40 kbit/s), bundled on port 50000. `AudioPump` (own thread)
+   captures the default output device by WASAPI loopback and sends 20 ms packets straight out
+   (not through the pacer). Off until the glasses' `setAudio`; off = nothing captured or sent.
+8. App shortcuts: `Apps:Shortcuts` in `appsettings.Local.json` (name + process and/or window-title
    text). `switchApp` brings that app's most recent window to the front and fits its visible frame
    to the cast area (`Win32WindowSwitcher`, compensating for invisible resize borders).
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · Look · Stats** (one row;
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · ♪ · Look · Stats** (one row;
 tight padding, check a screenshot when adding buttons). Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
@@ -185,8 +193,13 @@ tight padding, check a screenshot when adding buttons). Model in
 - **App buttons:** the current app is highlighted (moves only on a confirmed switch).
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
+- **♪ the PC's sound** (only when `hello.audio`): on by default, kept in localStorage. Off mutes
+  at once and stops the PC capturing and sending (bandwidth back to the video); never turned
+  off automatically (user's choice, 2026-09-27). `♪ tap`: the browser refused to start sound
+  without a gesture (after a reload); the next pinch or swipe starts it.
 - The status bar's yellow text is a "last input" readout, useful for on-device debugging.
-  `live (local)` / `live (remote)` says whether the video comes over the LAN or the internet.
+  `live (local)` / `live (remote)` says whether the video comes over the LAN or the internet;
+  `V n · A n kbps` what video and audio use (payload received; `A off` with ♪ off).
 - **Leaving the app ends the session:** hidden for 5 s (`HIDDEN_MS`, Page Visibility), the client
   closes it; a page frozen outright stops pinging and the PC closes it after
   `Session:HeartbeatTimeout` (15 s, any message counts). Either way the cast frame and banner go,
@@ -202,7 +215,8 @@ tight padding, check a screenshot when adding buttons). Model in
   (capture, encode, `send` = wait in the pacer until a frame's last packet left), `PC target n
   kbps · REMB · loss% · resent n of m` (plus `RTCP unreadable n` when the PC couldn't decrypt
   some of the glasses' RTCP), and a `net` line (connection type, ICE network type,
-  the browser's bandwidth estimate, UDP rtt). `LINK TEST n kbps` heads it during a link test. The
+  the browser's bandwidth estimate, UDP rtt), and with sound an `audio` line (kbps, lost,
+  concealed ms, jitter buffer, the PC's send rate). `LINK TEST n kbps` heads it during a link test. The
   status bar's `ms` is only the control socket's ping. Not included: the wait for the next capture
   tick (0–50 ms at 20 fps) and the glasses' display scan-out.
 - **How it works:** the PC's `mediaStats` lists `[rtp, capturedAtUnixMs, bytes]` per frame sent;
@@ -213,15 +227,18 @@ tight padding, check a screenshot when adding buttons). Model in
   side for every session (panel open or not): `kind` = `glasses` (their figures; `framesShown` 0
   means no per-frame timing in that browser; `plis` = keyframe requests it sent, cumulative;
   `netType`/`iceNetType` = codes 1 wifi, 2 cellular, 3 bluetooth, 4 ethernet, 5 vpn, 6 wimax,
-  7 other, 8 none, 0 unknown, null = not reported; `downlinkMbps`, `rttMs`),
+  7 other, 8 none, 0 unknown, null = not reported; `downlinkMbps`, `rttMs`; `audioKbps`,
+  `audioLost`, `audioConcealedMs` = sound the decoder made up, not counting the PC's DTX silence,
+  `audioBufferMs`),
   `pc` (capture/encode/`sendMs` timings, frame KB, keyframes forced and `keyframeRequests` =
   PLI/FIR received, compare with the glasses' `plis`; `nacked` = packets the glasses NACKed,
   `resent` = those sent again, compare with the glasses' `nacks`/`lostTotal`; `rtcpUnreadable` =
   RTCP packets from the glasses SIPSorcery couldn't decrypt, so their NACKs/PLIs/loss went
   unheard (each logged as a warning with source, sender SSRC and the clear SRTCP trailer); `targetKbps` = the
   encoder's adapted target, `rembKbps`/`lossPct` = the glasses' last RTCP estimate and loss,
-  `linkTestKbps` = link test step, 0 outside it) and `event` (start with `lanOffered`,
-  mediaPath with `lan` = whether the video went over the LAN, setMode, switchApp, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
+  `linkTestKbps` = link test step, 0 outside it, `audioOn` 1/0, `audioKbps` Opus payload sent,
+  `audioPackets`) and `event` (start with `lanOffered`, mediaPath with `lan` = whether the video
+  went over the LAN, setMode, switchApp, setAudio with `on`, end). The e2e harness writes to `%TEMP%\glasses-e2e-stats` instead.
 - **Link test (diagnostic):** run the server with `Media__LinkTestOnStart=true` (env var, or
   `Media:LinkTestOnStart` in appsettings.Local.json) and every session starts with ~15 s of a
   noise pattern at 500/1000/2000/4000/8000 kbit/s. Compare the `pc` `kbps` with the glasses'
@@ -260,7 +277,7 @@ tight padding, check a screenshot when adding buttons). Model in
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name, and the device token (`connection.ts`, localStorage;
+- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, and the device token (`connection.ts`, localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); only a
   page (re)load resumes by itself.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
@@ -268,6 +285,8 @@ tight padding, check a screenshot when adding buttons). Model in
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
   coordinates clamped, rate-limited; invalid input closes the session and raises an alert.
 - Typed text never presses Enter (newlines are flattened); Enter is a separate key message.
+- Sound flows one way only: what the PC plays, to an authenticated session, while the glasses
+  have ♪ on (the banner then says "sound on"). No microphone, and nothing from the glasses.
 - App shortcuts are configured only on the PC. The glasses send a slot number, never a process
   name or path, and the server only activates and resizes windows that are already open.
   Never launch processes. The e2e harness records switches and must never move real windows.
@@ -332,6 +351,14 @@ tight padding, check a screenshot when adding buttons). Model in
   dropped every later packet (video frozen for good, ICE fine). `SentPackets` only resends
   packets of the current epoch; every packet 65535 must be encrypted exactly once, so never skip
   a sequence number without sending it. The e2e harness starts streams at 65495 to cross a wrap.
+- **Audio (Opus/WebRTC):** Concentus has no DTX in general-audio (CELT) mode, and plain gaps
+  in silence were concealed as loss by Chrome (~400 ms/s "concealed"); the pump sends a 1-byte
+  header-only packet when silence starts and every 400 ms instead, as WebRTC does. Chrome decodes
+  Opus in mono unless its own answer says `stereo=1` (`withStereoOpus` adds it). Audio and video
+  must be in separate msids (`SdpStreams`), or Chrome would delay the video for lip sync.
+  SIPSorcery puts the audio m-line first. Audio and the pacer's video share `_sendLock` (one
+  SRTP transport); audio packets are never resent or skipped (SRTP rollover, as for video).
+  `RtcpReadable` must accept either SSRC, or the glasses' audio reports count as unreadable.
 - **Keyframes:** `FramePump` forces them when the source size changes, on request (PLI) and
   every `KeyframeIntervalSeconds` (10 s; 2 s before NACK), not when the region moves; edge
   panning would otherwise send a keyframe every 100 ms. The encoder's own GOP follows the same
@@ -407,6 +434,9 @@ tight padding, check a screenshot when adding buttons). Model in
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.
+- **Audio (2026-09-27):** built and passing in the harness (tone, toggle, wrap, remembered
+  setting) and loopback checked on this PC. **Not yet tried on the glasses**: whether the WebView
+  plays WebRTC audio and through which speakers, `♪ tap` after a reload.
 - Unconfirmed on the device: whether the composer opens automatically on entering Type; the Pan
   toggle (user reported it not working before the always-visible bar; no readout yet).
 - Pending: external port scan, decode cost on the glasses, pinch-drag
