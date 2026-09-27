@@ -3,25 +3,39 @@ using GlassesRemote.Server.Pairing;
 namespace GlassesRemote.Server.Ui;
 
 /// <summary>
-/// Pops up when glasses ask to pair. You compare the code with the one shown on
-/// the glasses and click Approve. Reject is the focused button and the Cancel
+/// Pops up when glasses (or the phone companion app) ask to pair. You compare the code with
+/// the one shown on the device and click Approve. Reject is the focused button and the Cancel
 /// button, so Enter, Space or Esc pressed while typing elsewhere can only reject.
 /// Closing the window rejects too.
 /// </summary>
 internal sealed class ApprovePopup : Form
 {
     private readonly PairingRequest _request;
-    private readonly PairingCoordinator _coordinator;
+    private readonly Func<string, bool> _approve;
+    private readonly Func<string, bool> _reject;
     private readonly Label _countdown;
     private readonly System.Windows.Forms.Timer _timer;
     private bool _decided;
 
+    /// <summary>The glasses' request.</summary>
     public ApprovePopup(PairingRequest request, PairingCoordinator coordinator)
+        : this(request, "Glasses pairing request", "Approve only if this code matches the one on your glasses:",
+            coordinator.DeviceGrantLifetime > TimeSpan.Zero
+                ? $"Approving also lets these glasses reconnect without asking for {coordinator.DeviceGrantLifetime.TotalHours:0} h. "
+                  + "Forget in the tray menu undoes that."
+                : null,
+            coordinator.Approve, coordinator.Reject)
+    {
+    }
+
+    public ApprovePopup(PairingRequest request, string title, string introText, string? note,
+        Func<string, bool> onApprove, Func<string, bool> onReject)
     {
         _request = request;
-        _coordinator = coordinator;
+        _approve = onApprove;
+        _reject = onReject;
 
-        Text = "Glasses pairing request";
+        Text = title;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -29,13 +43,12 @@ internal sealed class ApprovePopup : Form
         TopMost = true;
         ShowInTaskbar = true;
         AutoScaleMode = AutoScaleMode.Dpi;
-        var remembers = coordinator.DeviceGrantLifetime > TimeSpan.Zero;
-        ClientSize = new Size(420, remembers ? 300 : 260);
+        ClientSize = new Size(420, note is not null ? 300 : 260);
         Font = new Font("Segoe UI", 10f);
 
         var intro = new Label
         {
-            Text = "Approve only if this code matches the one on your glasses:",
+            Text = introText,
             AutoSize = false,
             Location = new Point(20, 16),
             Size = new Size(380, 24),
@@ -87,12 +100,11 @@ internal sealed class ApprovePopup : Form
         approve.Click += (_, _) => Decide(approve: true);
 
         Controls.AddRange([intro, code, origin, _countdown, reject, approve]);
-        if (remembers)
+        if (note is not null)
         {
             Controls.Add(new Label
             {
-                Text = $"Approving also lets these glasses reconnect without asking for {coordinator.DeviceGrantLifetime.TotalHours:0} h. "
-                       + "End session or Forget in the tray menu undoes that.",
+                Text = note,
                 ForeColor = SystemColors.GrayText,
                 Location = new Point(20, 240),
                 Size = new Size(380, 44),
@@ -131,7 +143,7 @@ internal sealed class ApprovePopup : Form
         if (!_decided)
         {
             _decided = true;
-            _coordinator.Reject(_request.Id);
+            _reject(_request.Id);
         }
         _timer.Stop();
         base.OnFormClosing(e);
@@ -147,11 +159,11 @@ internal sealed class ApprovePopup : Form
         _decided = true;
         if (approve)
         {
-            _coordinator.Approve(_request.Id);
+            _approve(_request.Id);
         }
         else
         {
-            _coordinator.Reject(_request.Id);
+            _reject(_request.Id);
         }
         Close();
     }

@@ -2,6 +2,7 @@ using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Hosting;
 using GlassesRemote.Server.Pairing;
+using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Ui;
 
 namespace GlassesRemote.Server;
@@ -25,6 +26,7 @@ public static class Program
             app.Services.GetRequiredService<PairingCoordinator>(),
             app.Services.GetRequiredService<AlertLog>(),
             app.Services.GetRequiredService<CastArea>(),
+            app.Services.GetRequiredService<CompanionRegistry>(),
             requestShutdown: lifetime.StopApplication);
         using var stopping = lifetime.ApplicationStopping.Register(tray.RequestExit);
 

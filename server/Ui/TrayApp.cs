@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Pairing;
+using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Windows;
 
 namespace GlassesRemote.Server.Ui;
@@ -28,6 +29,8 @@ internal sealed class TrayApp : ApplicationContext
     private readonly CastFrame _frame = new();
     private readonly ToolStripMenuItem _showFrame;
     private readonly ToolStripMenuItem _forget;
+    private readonly CompanionRegistry _companion;
+    private readonly ToolStripMenuItem _forgetPhone;
     private readonly AlertThrottle _throttle = new(TimeProvider.System, TimeSpan.FromMinutes(1));
     private readonly System.Windows.Forms.Timer _flushTimer = new() { Interval = 10_000 };
     private readonly TerminateHotkey _hotkey;
@@ -36,11 +39,14 @@ internal sealed class TrayApp : ApplicationContext
     private readonly Icon _activeIcon = TrayIcons.Dot(Color.FromArgb(40, 170, 80));
 
     private ApprovePopup? _popup;
+    private ApprovePopup? _phonePopup;
     private AlertsForm? _alertsForm;
 
-    public TrayApp(PairingCoordinator coordinator, AlertLog alerts, CastArea castArea, Action requestShutdown)
+    public TrayApp(PairingCoordinator coordinator, AlertLog alerts, CastArea castArea, CompanionRegistry companion,
+        Action requestShutdown)
     {
         _coordinator = coordinator;
+        _companion = companion;
         _alerts = alerts;
         _castArea = castArea;
         _requestShutdown = requestShutdown;
@@ -55,6 +61,8 @@ internal sealed class TrayApp : ApplicationContext
         _showFrame.CheckedChanged += (_, _) => UpdateFrame(_castArea.Current);
         _forget = new ToolStripMenuItem("Forget remembered glasses", null, (_, _) => _coordinator.ForgetDevice("forgotten from the tray"));
         UpdateForget(_coordinator.RememberedDeviceExpiresAt);
+        _forgetPhone = new ToolStripMenuItem("Forget phone", null, (_, _) => _companion.Forget("forgotten from the tray"));
+        UpdatePhone();
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
         [
@@ -62,6 +70,7 @@ internal sealed class TrayApp : ApplicationContext
             new ToolStripSeparator(),
             _terminate,
             _forget,
+            _forgetPhone,
             _showFrame,
             new ToolStripMenuItem("Recent alerts…", null, (_, _) => ShowAlerts()),
             new ToolStripSeparator(),
@@ -93,11 +102,18 @@ internal sealed class TrayApp : ApplicationContext
         _castArea.Changed += OnCastAreaChanged;
         _castArea.AudioChanged += OnAudioChanged;
         _alerts.Raised += OnAlert;
+        _companion.RequestOpened += OnPhoneRequestOpened;
+        _companion.RequestClosed += OnPhoneRequestClosed;
+        _companion.Changed += OnPhoneChanged;
 
         // A pairing request may already be pending if the host started first.
         if (_coordinator.PendingRequest is { } pending)
         {
             OnRequestOpened(pending);
+        }
+        if (_companion.PendingRequest is { } phonePending)
+        {
+            OnPhoneRequestOpened(phonePending);
         }
     }
 
@@ -128,6 +144,38 @@ internal sealed class TrayApp : ApplicationContext
     });
 
     private void OnDeviceGrantChanged(DateTimeOffset? expiresAt) => Ui(() => UpdateForget(expiresAt));
+
+    /// <summary>The phone companion app asks to pair: same popup, its own code.</summary>
+    private void OnPhoneRequestOpened(CompanionPairRequest pending) => Ui(() =>
+    {
+        _phonePopup?.Dismiss();
+        _phonePopup = new ApprovePopup(pending.Request, "Phone pairing request",
+            $"Approve only if this code matches the one on your phone ({pending.Name}):",
+            "Approving lets the glasses control this phone through its companion app. The phone still asks "
+            + "before every session. Forget phone in the tray menu undoes it.",
+            _companion.Approve, _companion.Reject);
+        _phonePopup.FormClosed += (_, _) => _phonePopup = null;
+        _phonePopup.Show();
+    });
+
+    private void OnPhoneRequestClosed(CompanionPairRequest pending) => Ui(() =>
+    {
+        if (_phonePopup?.RequestId == pending.Request.Id)
+        {
+            _phonePopup.Dismiss();
+        }
+    });
+
+    private void OnPhoneChanged() => Ui(UpdatePhone);
+
+    private void UpdatePhone()
+    {
+        var name = _companion.PairedName;
+        _forgetPhone.Enabled = name is not null;
+        _forgetPhone.Text = name is null
+            ? "No phone paired"
+            : $"Forget phone ({name}, {(_companion.Current is null ? "offline" : "connected")})";
+    }
 
     /// <summary>Remembered glasses reconnect without the popup until then; this undoes that.</summary>
     private void UpdateForget(DateTimeOffset? expiresAt)
@@ -235,9 +283,13 @@ internal sealed class TrayApp : ApplicationContext
         _castArea.Changed -= OnCastAreaChanged;
         _castArea.AudioChanged -= OnAudioChanged;
         _alerts.Raised -= OnAlert;
+        _companion.RequestOpened -= OnPhoneRequestOpened;
+        _companion.RequestClosed -= OnPhoneRequestClosed;
+        _companion.Changed -= OnPhoneChanged;
         _flushTimer.Stop();
         _hotkey.Dispose();
         _popup?.Dismiss();
+        _phonePopup?.Dismiss();
         _alertsForm?.Close();
         _banner.Close();
         _frame.Close();
