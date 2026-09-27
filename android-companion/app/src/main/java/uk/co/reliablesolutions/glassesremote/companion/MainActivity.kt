@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
 import android.view.View
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -72,7 +73,14 @@ class MainActivity : Activity() {
         button("Start") { CompanionService.start(this) }
         button("Stop") { CompanionService.stop(this) }
 
-        setContentView(ScrollView(this).apply { addView(column) })
+        // Android 15+ draws apps edge to edge: keep the content clear of the status and navigation bars.
+        val scroll = ScrollView(this).apply { addView(column) }
+        scroll.setOnApplyWindowInsetsListener { view, insets ->
+            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        setContentView(scroll)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
