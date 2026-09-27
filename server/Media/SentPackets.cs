@@ -4,13 +4,14 @@ namespace GlassesRemote.Server.Media;
 
 /// <summary>
 /// The last packets sent, by sequence number, so the ones the glasses NACK can be sent again.
-/// Only recent ones: after about a second the glasses have given up on them (and asked for a
-/// keyframe instead). Each is resent at most once per <see cref="MinResendGap"/>: the glasses
-/// repeat a NACK roughly once per round trip until the packet arrives.
+/// Up to 3 s old: on a congested link NACKs arrived over a second after the packet was sent,
+/// when a 1 s window had already dropped it. Each is resent at most once per
+/// <see cref="MinResendGap"/>: the glasses repeat a NACK roughly once per round trip until the
+/// packet arrives. 4096 slots cover 3 s up to ~16 Mbit/s.
 /// </summary>
-public sealed class SentPackets(int capacity = 1024)
+public sealed class SentPackets(int capacity = 4096)
 {
-    public static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(1);
+    public static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(3);
 
     public static readonly TimeSpan MinResendGap = TimeSpan.FromMilliseconds(50);
 

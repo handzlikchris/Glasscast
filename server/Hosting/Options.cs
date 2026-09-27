@@ -72,9 +72,10 @@ public sealed class MediaOptions
 
     /// <summary>
     /// Keyframes the glasses ask for (PLI/FIR) are sent at once, but no closer together than this:
-    /// they repeat the request every ~200 ms until one arrives, and each keyframe is 50-90 KB.
+    /// they repeat the request every ~200 ms until one arrives, and each keyframe is 40-90 KB. At
+    /// 500 ms, on a struggling link, requested keyframes came 1-2 a second and made it worse.
     /// </summary>
-    public int RequestedKeyframeMinGapMs { get; set; } = 500;
+    public int RequestedKeyframeMinGapMs { get; set; } = 1500;
 
     /// <summary>
     /// H.264 packets go out at this rate at least instead of a frame at a time (see RtpPacer):

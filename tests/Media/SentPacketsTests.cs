@@ -32,7 +32,7 @@ public sealed class SentPacketsTests
         Assert.Single(sent.TakeForResend([5], Second));
         Assert.Empty(sent.TakeForResend([5], Second + Second / 100)); // 10 ms later
         Assert.Single(sent.TakeForResend([5], Second + Second / 10)); // 100 ms later
-        Assert.Empty(sent.TakeForResend([5], 3 * Second));
+        Assert.Empty(sent.TakeForResend([5], 5 * Second));
     }
 
     [Fact]
