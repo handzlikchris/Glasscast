@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { frameRect, parsePhoneMessage, phoneText, scrollSwipe, toFrame } from './phoneProtocol';
+import {
+  frameRect,
+  moveRegion,
+  parsePhoneMessage,
+  phoneText,
+  regionOnView,
+  scrollSwipe,
+  squareAround,
+  squareRegion,
+  toFrame,
+  zoomRegion,
+} from './phoneProtocol';
 
 describe('parsePhoneMessage', () => {
   it('accepts the three phone messages', () => {
@@ -8,7 +19,9 @@ describe('parsePhoneMessage', () => {
       width: 1080,
       height: 2340,
       region: { x: 0, y: 0.1, width: 1, height: 0.5 },
+      follow: false,
     });
+    expect(parsePhoneMessage('{"type":"screen","width":1,"height":1,"region":{"x":0,"y":0,"width":1,"height":1},"follow":true}')).toMatchObject({ follow: true });
     expect(parsePhoneMessage('{"type":"result","of":"typeText","ok":false}')).toEqual({ type: 'result', of: 'typeText', ok: false });
     expect(parsePhoneMessage('{"type":"pong","t":5}')).toEqual({ type: 'pong', t: 5 });
   });
@@ -64,5 +77,51 @@ describe('phoneText', () => {
     const pieces = phoneText('a'.repeat(1200));
     expect(pieces.map((p) => p.length)).toEqual([500, 500, 200]);
     expect(phoneText('  \n ')).toEqual([]);
+  });
+});
+
+describe('choosing a region', () => {
+  const s25 = { width: 1080, height: 2340 };
+  const px = (r: { width: number; height: number }) => [Math.round(r.width * s25.width), Math.round(r.height * s25.height)];
+
+  it('makes squares in phone pixels, kept on the screen', () => {
+    const top = squareRegion(s25, { x: 0.5, y: 0 }, 1);
+    expect(px(top)).toEqual([1080, 1080]);
+    expect(top.y).toBe(0);
+    const bottom = squareRegion(s25, { x: 0.9, y: 1 }, 0.5);
+    expect(px(bottom)).toEqual([540, 540]);
+    expect(bottom.x + bottom.width).toBeCloseTo(1);
+    expect(bottom.y + bottom.height).toBeCloseTo(1);
+  });
+
+  it('zooms around the centre within limits', () => {
+    const start = squareRegion(s25, { x: 0.5, y: 0.5 }, 0.8);
+    const smaller = zoomRegion(s25, start, 0.5);
+    expect(px(smaller)).toEqual([432, 432]);
+    expect(smaller.x + smaller.width / 2).toBeCloseTo(0.5);
+    expect(px(zoomRegion(s25, start, 10))).toEqual([1080, 1080]);
+    expect(px(zoomRegion(s25, start, 0.01))).toEqual([270, 270]);
+  });
+
+  it('moves and stays on the screen', () => {
+    const r = squareRegion(s25, { x: 0.5, y: 0.5 }, 0.5);
+    expect(moveRegion(r, 1, 1)).toMatchObject({ x: 1 - r.width, y: 1 - r.height });
+    expect(moveRegion(r, -1, -1)).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it('squares off any crop around its centre', () => {
+    const window = { x: 0.1, y: 0.2, width: 0.8, height: 0.3 };
+    const square = squareAround(s25, window);
+    expect(px(square)[0]).toBe(px(square)[1]);
+    expect(square.y + square.height / 2).toBeCloseTo(0.35);
+  });
+
+  it('places a region on the letterboxed full frame', () => {
+    expect(regionOnView({ x: 0.5, y: 0.25, width: 0.5, height: 0.25 }, { x: 161, y: 0, width: 277, height: 600 })).toEqual({
+      x: 299.5,
+      y: 150,
+      width: 138.5,
+      height: 150,
+    });
   });
 });

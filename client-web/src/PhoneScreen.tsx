@@ -4,23 +4,50 @@
 // Controls, kept close to the PC session's:
 // - On the view: pinch-drag moves the cursor, a pinch taps there, a longer pinch (held still)
 //   long-presses; swipes scroll (up/down) or page (left/right) around the cursor.
-// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · End. Swipe
-//   left/right along it, pinch to press; up/down or Back return to the view.
+// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
+//   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the composer's text goes into the phone's focused text field; Enter is separate.
+// - Region: the whole phone screen with a square box; drag moves it, swipe up/down zooms, a pinch
+//   uses it, Back cancels. Fit: the phone crops to its top app window (a Samsung pop-up view
+//   window made square) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Session } from './connection';
 import { GestureTracker } from './gestures';
 import type { Point, Rect } from './geometry';
-import { frameRect, phoneText, scrollSwipe, toFrame, type FromPhone, type PhoneNav, type SwipeDirection, type ToPhone } from './phoneProtocol';
+import {
+  FULL_REGION,
+  frameRect,
+  moveRegion,
+  phoneText,
+  regionOnView,
+  scrollSwipe,
+  squareAround,
+  toFrame,
+  zoomRegion,
+  type FromPhone,
+  type PhoneNav,
+  type PhoneRegion,
+  type SwipeDirection,
+  type ToPhone,
+} from './phoneProtocol';
 import { PhoneLink } from './phoneRtc';
 import { usePinchPressesFocused } from './pinchPress';
-import type { PhoneState, ServerMessage } from './protocol';
+import type { PhoneState, ServerMessage, Size } from './protocol';
 
 interface Props {
   onEnded(reason: string): void;
 }
 
-type Focus = 'view' | 'bar' | 'type';
+type Focus = 'view' | 'bar' | 'type' | 'region';
+
+/** Region mode: the box being placed, and the crop to go back to on Back. */
+interface Choosing {
+  box: PhoneRegion;
+  before: { region: PhoneRegion; follow: boolean };
+}
+
+/** Swipe up zooms in (a smaller box), down zooms out. */
+const ZOOM_STEP = 1.25;
 
 const PING_MS = 2000;
 /** Hidden this long (the app left), the session ends, as in a PC session. */
@@ -52,6 +79,11 @@ const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
 export function PhoneScreen({ onEnded }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const phoneScreen = useRef<Size | null>(null);
+  const phoneRegion = useRef<PhoneRegion>(FULL_REGION);
+  const following = useRef(false);
+  const choosing = useRef<Choosing | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
@@ -74,9 +106,10 @@ export function PhoneScreen({ onEnded }: Props) {
   const [path, setPath] = useState<'local' | 'remote' | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
+  const [follow, setFollow] = useState(false);
 
-  // Outside the view a pinch presses the focused button, wherever the glasses' pointer is.
-  usePinchPressesFocused(focus !== 'view');
+  // On the bar and in Type a pinch presses the focused button, wherever the glasses' pointer is.
+  usePinchPressesFocused(focus === 'bar' || focus === 'type');
 
   const drawCursor = () => {
     const el = cursorRef.current;
@@ -97,6 +130,22 @@ export function PhoneScreen({ onEnded }: Props) {
   };
 
   const atCursor = () => toFrame(cursor.current, frame.current);
+
+  /** The Region box over the whole screen's frame (which the phone sends while choosing). */
+  const drawBox = () => {
+    const el = boxRef.current;
+    const choice = choosing.current;
+    if (!el) return;
+    if (!choice) {
+      el.style.display = 'none';
+      return;
+    }
+    const r = regionOnView(choice.box, frame.current);
+    el.style.display = 'block';
+    el.style.transform = `translate(${r.x}px, ${r.y}px)`;
+    el.style.width = `${r.width}px`;
+    el.style.height = `${r.height}px`;
+  };
 
   // ---- connection ----
   useEffect(() => {
@@ -140,7 +189,16 @@ export function PhoneScreen({ onEnded }: Props) {
       },
       onChannel: setChannelOpen,
       onMessage: (message: FromPhone) => {
-        if (message.type === 'screen') setScreen(`${message.width}×${message.height}`);
+        if (message.type === 'screen') {
+          phoneScreen.current = { width: message.width, height: message.height };
+          // While choosing, the phone shows the whole screen; the crop to keep is the box.
+          if (!choosing.current) phoneRegion.current = message.region;
+          following.current = message.follow;
+          setFollow(message.follow);
+          const w = Math.round(message.region.width * message.width);
+          const h = Math.round(message.region.height * message.height);
+          setScreen(message.follow ? `window ${w}×${h}` : `${w}×${h}`);
+        }
         else if (message.type === 'result') setLastInput(`${message.of === 'key' ? 'key' : 'text'} ${message.ok ? 'sent' : 'had no text field'}`);
       },
     });
@@ -183,16 +241,55 @@ export function PhoneScreen({ onEnded }: Props) {
       frame.current = frameRect({ width: video.videoWidth, height: video.videoHeight });
       cursor.current = clampToFrame(cursor.current);
       drawCursor();
+      drawBox();
     };
     video.addEventListener('resize', onResize);
     drawCursor();
     return () => video.removeEventListener('resize', onResize);
   }, []);
 
-  // ---- focus: view, bar, type ----
+  // ---- region ----
+  const startRegion = () => {
+    const screenSize = phoneScreen.current;
+    if (!screenSize) {
+      setLastInput('phone not connected yet');
+      return;
+    }
+    choosing.current = {
+      box: squareAround(screenSize, phoneRegion.current),
+      before: { region: phoneRegion.current, follow: following.current },
+    };
+    send({ type: 'setRegion', ...FULL_REGION }, 'choosing a region');
+    setFocus('region');
+    drawBox();
+  };
+
+  const finishRegion = (use: boolean) => {
+    const choice = choosing.current;
+    choosing.current = null;
+    drawBox();
+    setFocus('view');
+    if (!choice) return;
+    if (use) {
+      phoneRegion.current = choice.box;
+      send({ type: 'setRegion', ...choice.box }, 'region set');
+    } else if (choice.before.follow) {
+      send({ type: 'fitWindow' }, 'region cancelled');
+    } else {
+      send({ type: 'setRegion', ...choice.before.region }, 'region cancelled');
+    }
+  };
+
+  const fitWindow = () => {
+    send({ type: 'fitWindow' }, 'fit to window');
+    setFocus('view');
+  };
+
+  // ---- focus: view, bar, type, region ----
   const back = () => {
     const current = focusRef.current;
-    setFocus(current === 'view' ? 'bar' : 'view');
+    if (current === 'region') finishRegion(false);
+    else setFocus(current === 'view' ? 'bar' : 'view');
   };
   const backRef = useRef(back);
   backRef.current = back;
@@ -232,6 +329,13 @@ export function PhoneScreen({ onEnded }: Props) {
         if (!direction) return;
         e.preventDefault();
         send(scrollSwipe(direction, atCursor()), `swipe ${direction}`);
+      } else if (current === 'region') {
+        const screenSize = phoneScreen.current;
+        const choice = choosing.current;
+        if (!screenSize || !choice || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+        e.preventDefault();
+        choice.box = zoomRegion(screenSize, choice.box, e.key === 'ArrowUp' ? 1 / ZOOM_STEP : ZOOM_STEP);
+        drawBox();
       } else if (current === 'bar') {
         const buttons = Array.from(barRef.current?.querySelectorAll('button') ?? []);
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
@@ -255,10 +359,12 @@ export function PhoneScreen({ onEnded }: Props) {
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    if (focusRef.current !== 'view') return;
+    const current = focusRef.current;
+    if (current !== 'view' && current !== 'region') return;
     e.currentTarget.setPointerCapture(e.pointerId);
     tracker.current.down(e.pointerId, e.clientX, e.clientY, e.timeStamp);
     cancelLongPress();
+    if (current === 'region') return;
     const state = { fired: false, timer: setTimeout(() => {
       state.fired = true;
       send({ type: 'longPress', ...atCursor() }, 'long press');
@@ -269,7 +375,11 @@ export function PhoneScreen({ onEnded }: Props) {
   const onPointerMove = (e: ReactPointerEvent) => {
     for (const event of tracker.current.move(e.pointerId, e.clientX, e.clientY)) {
       if (event.kind === 'dragStart') cancelLongPress();
-      if (event.kind === 'drag') {
+      if (event.kind === 'drag' && choosing.current) {
+        const f = frame.current;
+        choosing.current.box = moveRegion(choosing.current.box, event.dx / f.width, event.dy / f.height);
+        drawBox();
+      } else if (event.kind === 'drag') {
         cursor.current = clampToFrame({
           x: cursor.current.x + event.dx * POINTER_GAIN,
           y: cursor.current.y + event.dy * POINTER_GAIN,
@@ -284,7 +394,9 @@ export function PhoneScreen({ onEnded }: Props) {
     const fired = longPress.current?.fired ?? false;
     longPress.current = null;
     for (const event of tracker.current.up(e.pointerId, e.clientX, e.clientY, e.timeStamp)) {
-      if (event.kind === 'tap' && !fired) send({ type: 'tap', ...atCursor() }, 'tap');
+      if (event.kind !== 'tap' || fired) continue;
+      if (focusRef.current === 'region') finishRegion(true);
+      else send({ type: 'tap', ...atCursor() }, 'tap');
     }
   };
 
@@ -334,7 +446,7 @@ export function PhoneScreen({ onEnded }: Props) {
   const connected = media === 'connected' && channelOpen;
 
   return (
-    <div className="stage look-lifted phone-stage">
+    <div className={`stage look-lifted phone-stage${focus === 'region' ? ' choosing' : ''}`}>
       <video ref={videoRef} autoPlay playsInline muted />
       <div
         className="gesture-layer"
@@ -344,6 +456,7 @@ export function PhoneScreen({ onEnded }: Props) {
         onPointerCancel={onPointerCancel}
       />
       <div ref={cursorRef} className="phone-cursor" />
+      <div ref={boxRef} className="phone-region" />
 
       <div ref={barRef} className={`toolbar top${focus === 'view' ? ' dimmed' : ''}`}>
         {NAV_BUTTONS.map(({ action, label }) => (
@@ -353,6 +466,12 @@ export function PhoneScreen({ onEnded }: Props) {
         ))}
         <button type="button" aria-pressed={focus === 'type'} onClick={() => setFocus(focus === 'type' ? 'view' : 'type')}>
           Type
+        </button>
+        <button type="button" onClick={startRegion}>
+          Region
+        </button>
+        <button type="button" aria-pressed={follow} onClick={fitWindow}>
+          Fit
         </button>
         <button type="button" onClick={endSession}>
           End
@@ -384,7 +503,9 @@ export function PhoneScreen({ onEnded }: Props) {
         <span>{connected ? `live (${path ?? '…'})` : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
-        <span className="input-trace">{lastInput}</span>
+        <span className="input-trace">
+          {focus === 'region' ? 'drag moves · swipe ↑↓ zooms · pinch uses · Back cancels' : lastInput}
+        </span>
       </div>
     </div>
   );
