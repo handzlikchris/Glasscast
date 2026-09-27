@@ -1,0 +1,101 @@
+// The WebRTC side of a phone session. The phone's companion app offers a video track (its screen)
+// and a DataChannel "input"; the PC only relays the offer, the answer and the ICE candidates.
+// No STUN/TURN yet: the phone's own addresses are the candidates, and on the go the glasses'
+// traffic already goes out through the phone (architecture/phone-mode.md, P0).
+import { mediaPath } from './mediaStats';
+import type { ClientMessage } from './protocol';
+import { parsePhoneMessage, type FromPhone, type ToPhone } from './phoneProtocol';
+
+export interface PhoneLinkEvents {
+  onState(state: RTCPeerConnectionState): void;
+  onChannel(open: boolean): void;
+  onMessage(message: FromPhone): void;
+}
+
+export class PhoneLink {
+  private readonly pc = new RTCPeerConnection({ iceServers: [] });
+  private channel: RTCDataChannel | null = null;
+  private remoteSet = false;
+  private readonly pendingCandidates: RTCIceCandidateInit[] = [];
+
+  constructor(
+    private readonly signal: (message: ClientMessage) => void,
+    video: HTMLVideoElement,
+    private readonly events: PhoneLinkEvents,
+  ) {
+    this.pc.ontrack = (event) => {
+      if (event.track.kind === 'video') video.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+    };
+    this.pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.signal({
+          type: 'iceCandidate',
+          candidate: event.candidate.candidate,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        });
+      }
+    };
+    this.pc.onconnectionstatechange = () => this.events.onState(this.pc.connectionState);
+    this.pc.ondatachannel = (event) => {
+      if (event.channel.label !== 'input') return;
+      const channel = event.channel;
+      this.channel = channel;
+      channel.onopen = () => this.events.onChannel(true);
+      channel.onclose = () => this.events.onChannel(false);
+      channel.onmessage = (e) => {
+        const message = typeof e.data === 'string' ? parsePhoneMessage(e.data) : null;
+        if (message) this.events.onMessage(message);
+      };
+      if (channel.readyState === 'open') this.events.onChannel(true);
+    };
+  }
+
+  async handleOffer(sdp: string): Promise<void> {
+    await this.pc.setRemoteDescription({ type: 'offer', sdp });
+    this.remoteSet = true;
+    for (const candidate of this.pendingCandidates.splice(0)) await this.addCandidate(candidate);
+    const answer = await this.pc.createAnswer();
+    await this.pc.setLocalDescription(answer);
+    this.signal({ type: 'rtcAnswer', sdp: this.pc.localDescription!.sdp });
+  }
+
+  /** The phone's trickled candidates; held until its offer is in place. */
+  async addCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.remoteSet) {
+      this.pendingCandidates.push(candidate);
+      return;
+    }
+    try {
+      await this.pc.addIceCandidate(candidate);
+    } catch {
+      // A candidate this browser can't use (e.g. another address family): the others may do.
+    }
+  }
+
+  /** Sends on the DataChannel; false while it isn't open (the input is dropped, not queued). */
+  send(message: ToPhone): boolean {
+    if (this.channel?.readyState !== 'open') return false;
+    this.channel.send(JSON.stringify(message));
+    return true;
+  }
+
+  /** Whether the chosen candidate pair reaches the phone over a LAN address, once known. */
+  async path(): Promise<'local' | 'remote' | null> {
+    const report = await this.pc.getStats();
+    let pairId: string | null = null;
+    const byId = new Map<string, Record<string, unknown>>();
+    report.forEach((s: Record<string, unknown>) => {
+      byId.set(s.id as string, s);
+      if (s.type === 'transport' && typeof s.selectedCandidatePairId === 'string') pairId = s.selectedCandidatePairId;
+    });
+    const pair = pairId ? byId.get(pairId) : null;
+    const remote = pair ? byId.get(pair.remoteCandidateId as string) : null;
+    return mediaPath(remote?.address ?? remote?.ip);
+  }
+
+  close(): void {
+    this.channel?.close();
+    this.pc.close();
+  }
+}

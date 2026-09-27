@@ -294,3 +294,52 @@ textarea:focus-visible {
   text-align: center;
   padding: 40px;
 }
+
+/* ---------- phone session ---------- */
+
+/* The phone's frame keeps its own shape (portrait, or the crop's): letterbox it. */
+.phone-stage video {
+  object-fit: contain;
+}
+
+/* The cursor lives on the glasses only; the phone gets a tap where it is. */
+.phone-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #000;
+  pointer-events: none;
+}
+
+/* ---------- PC or phone ---------- */
+
+.choose {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 40px;
+}
+
+.choose .targets {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+}
+
+.choose .targets button {
+  min-width: 170px;
+  min-height: 110px;
+  font-size: 26px;
+}
+
+.choose p {
+  color: var(--muted);
+  margin: 0;
+}

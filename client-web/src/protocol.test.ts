@@ -109,6 +109,20 @@ describe('parseServerMessage', () => {
     expect(parseServerMessage(stats(JSON.stringify(Array(121).fill([1, 2, 3]))))).toBeNull();
   });
 
+  it('parses the phone relay messages', () => {
+    expect(parseServerMessage('{"type":"phoneStatus","state":"asking"}')).toEqual({ type: 'phoneStatus', state: 'asking' });
+    expect(parseServerMessage('{"type":"phoneStatus","state":"hacked"}')).toBeNull();
+    expect(parseServerMessage('{"type":"iceCandidate","candidate":"candidate:1 1 udp 1 10.0.0.2 5 typ host","sdpMid":"0","sdpMLineIndex":0}')).toEqual({
+      type: 'iceCandidate',
+      candidate: 'candidate:1 1 udp 1 10.0.0.2 5 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    });
+    expect(parseServerMessage('{"type":"iceCandidate","candidate":"c"}')).toEqual({ type: 'iceCandidate', candidate: 'c', sdpMid: null, sdpMLineIndex: null });
+    expect(parseServerMessage('{"type":"iceCandidate","candidate":5}')).toBeNull();
+    expect(parseServerMessage('{"type":"iceCandidate","candidate":"c","sdpMid":7}')).toBeNull();
+  });
+
   it('drops malformed or unknown messages', () => {
     expect(parseServerMessage('not json')).toBeNull();
     expect(parseServerMessage('{"type":"pairCode","code":5}')).toBeNull();

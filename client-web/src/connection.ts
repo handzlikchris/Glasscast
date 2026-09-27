@@ -11,7 +11,7 @@
 //   PC closes a session for breaking the rules (the PC forgets the glasses then too). A refused
 //   resume keeps it: the PC answers "busy" (a pairing waiting on the PC) exactly like "unknown
 //   token", and a token it really no longer knows just fails again until it expires.
-import { parseServerMessage, type ClientMessage, type ServerMessage } from './protocol';
+import { parseServerMessage, type ClientMessage, type ServerMessage, type SessionTarget } from './protocol';
 
 let heldToken: string | null = null;
 
@@ -147,13 +147,17 @@ export class Session {
     };
   }
 
-  /** Uses the token from the last successful pairing, or else the remembered device's token. */
-  static open(handlers: SessionHandlers): Session {
+  /**
+   * Uses the token from the last successful pairing, or else the remembered device's token. A phone
+   * session says so in the first message; the PC then only relays between the glasses and the phone.
+   */
+  static open(handlers: SessionHandlers, target: SessionTarget = 'pc'): Session {
     const token = heldToken;
     heldToken = null;
-    if (token) return new Session({ type: 'authenticate', token }, handlers);
+    const phone = target === 'phone' ? { target } : {};
+    if (token) return new Session({ type: 'authenticate', token, ...phone }, handlers);
     const device = loadDevice();
-    if (device) return new Session({ type: 'resume', token: device.token }, handlers);
+    if (device) return new Session({ type: 'resume', token: device.token, ...phone }, handlers);
     throw new Error('Not paired');
   }
 
@@ -184,6 +188,16 @@ function describeClose(event: CloseEvent): string {
       return "The PC's video stopped with an error. Reconnect to try again.";
     case 'server error':
       return 'The PC hit an error and closed the session. Reconnect to try again.';
+    case 'phone offline':
+      return "The phone's companion app isn't connected. Open it on the phone, then Reconnect.";
+    case 'phone declined':
+      return 'Screen sharing was cancelled on the phone.';
+    case 'phone ended':
+      return 'The phone stopped sharing its screen (Stop, or the phone locked).';
+    case 'phone not ready':
+      return "The phone didn't start sharing in time. Tap Start on the phone's prompt next time.";
+    case 'phone busy':
+      return 'The phone is already in another session.';
     default:
       return 'The connection to the PC was lost.';
   }
