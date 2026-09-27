@@ -154,12 +154,12 @@ tight padding, check a screenshot when adding buttons). Model in
 **controls** (swipes move focus, a pinch presses the focused control).
 
 - **Pointer mode (default).** Pinch-drag moves the cursor; pinch clicks (waits 350 ms for a second
-  pinch → double-click). Swipes are shortcuts: **up/down scroll** 9 notches, **right → Type**,
+  pinch → double-click). Swipes are shortcuts: **up/down scroll** 3 notches (default), **right → Type**,
   **left → next app** (1 → 2 → … → 1). The view is **locked** by default: the cursor goes up to
   the edges, and pushing past the top/bottom edge starts **hold-to-scroll** (`edgeScrollStep`):
   steady scrolling until the drag ends or comes back in. It also starts when the glasses' own
   pointer is pushed against the display edge, since it then reports no more movement. **↕** sets
-  the scroll strength per app (9/5/3/2/1 notches per swipe; edge scrolling at half that per
+  the scroll strength per app (9/5/3/2/1 notches per swipe, default 3; edge scrolling at half that per
   second), kept in localStorage by app name. The **Pan** toggle makes swipes move the view by a quarter screen instead, and pushing
   the cursor past an edge slides the view (edge panning).
 - **Back** (middle-finger pinch): from the view → the controls (focus on Type from Pointer, Pointer

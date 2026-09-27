@@ -387,11 +387,11 @@ try {
   const pressedApp = await page.$eval('button[data-app][aria-pressed="true"]', (el) => el.dataset.app);
   check('the current app button is highlighted', pressedApp === '1', `app ${pressedApp}`);
   check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
-    swipeActions.join('|') === 'wheel -1080|wheel 1080|switch Browser|switch Claude' && modeAfterRight === 'type',
+    swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
 
-  // 17b. Scroll strength (↕) is per app: one press takes the current app (Claude) from 9 notches a
-  //      swipe to 5. Four more presses wrap it back round to 9 for the steps after this one.
+  // 17b. Scroll strength (↕) is per app: one press takes the current app (Claude) from the default
+  //      3 notches a swipe to 2. Four more presses wrap it back round to 3 for the steps after this one.
   await press('button[data-mode="pointer"]');
   await sleep(200);
   await tapBar('button[data-scroll]');
@@ -404,8 +404,8 @@ try {
   const gentle = (await input()).slice(beforeGentle).filter((a) => a.startsWith('wheel '));
   for (let i = 0; i < 4; i++) await tapBar('button[data-scroll]');
   const restored = await page.$eval('button[data-scroll]', (el) => el.dataset.scroll);
-  check('the scroll strength button makes swipes scroll less for this app', scrollLabel === '↕ 5' &&
-    gentle.join('|') === 'wheel -600' && restored === '9', `${scrollLabel}, ${gentle.join('|')}, back to ${restored}`);
+  check('the scroll strength button makes swipes scroll less for this app', scrollLabel === '↕ 2' &&
+    gentle.join('|') === 'wheel -240' && restored === '3', `${scrollLabel}, ${gentle.join('|')}, back to ${restored}`);
 
   // Back from Type (or from the mode bar) goes home to Pointer.
   await page.evaluate(() => history.back());

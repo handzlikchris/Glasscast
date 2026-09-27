@@ -4,8 +4,8 @@
 /** Wheel notches one swipe scrolls by. */
 export const SCROLL_LEVELS = [9, 5, 3, 2, 1] as const;
 export type ScrollLevel = (typeof SCROLL_LEVELS)[number];
-/** Nine notches, as before per-app levels, which suits a terminal. */
-export const DEFAULT_SCROLL_LEVEL: ScrollLevel = 9;
+/** Three notches until the app is set otherwise (the user's pick on the glasses, 2026-09-27). */
+export const DEFAULT_SCROLL_LEVEL: ScrollLevel = 3;
 
 const NOTCH = 120;
 const STORAGE_KEY = 'glasses.scrollLevels';

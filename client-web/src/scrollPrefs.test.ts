@@ -7,10 +7,10 @@ describe('scroll levels', () => {
     expect(nextScrollLevel(1)).toBe(9);
   });
 
-  it('are per app, nine notches until set', () => {
-    const levels = { Browser: 3 as const };
-    expect(levelFor(levels, 'Browser')).toBe(3);
-    expect(levelFor(levels, 'Claude')).toBe(9);
+  it('are per app, three notches until set', () => {
+    const levels = { Browser: 5 as const };
+    expect(levelFor(levels, 'Browser')).toBe(5);
+    expect(levelFor(levels, 'Claude')).toBe(3);
     expect(swipeUnits(3)).toBe(360);
     expect(edgeUnitsPerSecond(3)).toBe(180);
   });
