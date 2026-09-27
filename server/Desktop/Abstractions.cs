@@ -27,6 +27,9 @@ public interface IInputInjector
 
     void Click(MouseButton button);
 
+    /// <summary>Presses (down) or releases a button without the other half: a held drag.</summary>
+    void Button(MouseButton button, bool down);
+
     /// <summary>Wheel movement in Windows units (120 per notch); positive scrolls up.</summary>
     void Wheel(int delta);
 

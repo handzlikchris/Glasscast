@@ -88,6 +88,8 @@ sealed class RecordingInput : IInputInjector
 
     public void Click(MouseButton button) => Actions.Enqueue($"click {button}");
 
+    public void Button(MouseButton button, bool down) => Actions.Enqueue($"{(down ? "down" : "up")} {button}");
+
     public void Wheel(int delta) => Actions.Enqueue($"wheel {delta}");
 
     public void TypeText(string text) => Actions.Enqueue($"type {text}");

@@ -191,4 +191,18 @@ public sealed class ControlProtocolTests
         Parse<IceCandidateMessage>("{\"type\":\"iceCandidate\",\"candidate\":\"x\",\"sdpMid\":null,\"sdpMLineIndex\":null}");
         Rejected("{\"type\":\"iceCandidate\",\"candidate\":\"x\",\"sdpMLineIndex\":99}");
     }
+
+    [Fact]
+    public void Mouse_button_messages_are_strict()
+    {
+        Assert.True(ControlProtocol.TryParse("""{"type":"mouseButton","button":"left","down":true}""", out var down, out _));
+        Assert.Equal(new MouseButtonMessage(MouseButton.Left, true), down);
+        Assert.True(ControlProtocol.TryParse("""{"type":"mouseButton","button":"left","down":false}""", out var up, out _));
+        Assert.Equal(new MouseButtonMessage(MouseButton.Left, false), up);
+
+        Assert.False(ControlProtocol.TryParse("""{"type":"mouseButton","button":"right","down":true}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse("""{"type":"mouseButton","button":"left","down":1}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse("""{"type":"mouseButton","button":"left"}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse("""{"type":"mouseButton","button":"left","down":true,"x":1}""", out _, out _));
+    }
 }

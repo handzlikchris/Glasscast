@@ -12,6 +12,8 @@ public sealed class FakeInput : IInputInjector
 
     public void Click(MouseButton button) => Record($"click {button}");
 
+    public void Button(MouseButton button, bool down) => Record($"{(down ? "down" : "up")} {button}");
+
     public void Wheel(int delta) => Record($"wheel {delta}");
 
     public void TypeText(string text) => Record($"type {text}");

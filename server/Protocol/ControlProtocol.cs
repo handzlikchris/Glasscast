@@ -99,6 +99,7 @@ public static class ControlProtocol
                 "setRegion" => ParseSetRegion(root),
                 "move" => ParseMove(root),
                 "click" => ParseClick(root),
+                "mouseButton" => ParseMouseButton(root),
                 "scroll" => ParseScroll(root),
                 "typeText" => ParseTypeText(root),
                 "key" => ParseKey(root),
@@ -228,6 +229,11 @@ public static class ControlProtocol
     private static ControlMessage? ParseClick(JsonElement e) =>
         Only(e, "button") && Str(e, "button", 8, out var button) && button == "left"
             ? new ClickMessage(MouseButton.Left)
+            : null;
+
+    private static ControlMessage? ParseMouseButton(JsonElement e) =>
+        Only(e, "button", "down") && Str(e, "button", 8, out var button) && button == "left" && Bool(e, "down", out var down)
+            ? new MouseButtonMessage(MouseButton.Left, down)
             : null;
 
     private static ControlMessage? ParseScroll(JsonElement e) =>

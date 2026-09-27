@@ -151,6 +151,8 @@ public sealed class ControlSession
         }
         finally
         {
+            // A drag the glasses never finished (connection lost mid-drag) must not leave the button down.
+            controller.ReleaseButton();
             if (_lease.Ended.IsCancellationRequested)
             {
                 // Replaced: the same glasses reconnected. Terminated: ended on the PC.

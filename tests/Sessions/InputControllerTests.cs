@@ -102,4 +102,43 @@ public sealed class InputControllerTests : IDisposable
         _controller.Handle(new SetModeMessage(ViewMode.Overview));
         Assert.Equal(new PixelRect(0, 0, 2560, 1440), _controller.CurrentSource);
     }
+
+    [Fact]
+    public void A_held_drag_presses_moves_and_releases_the_button()
+    {
+        _controller.Handle(new MoveMessage(0.25, 0.25));
+        Assert.Equal(HandleResult.Handled, _controller.Handle(new MouseButtonMessage(MouseButton.Left, true)));
+        _controller.Handle(new MoveMessage(0.75, 0.75));
+        Assert.Equal(HandleResult.Handled, _controller.Handle(new MouseButtonMessage(MouseButton.Left, false)));
+
+        Assert.Equal(["move 250,350", "down Left", "move 549,649", "up Left"], _input.Actions);
+    }
+
+    [Fact]
+    public void Button_messages_out_of_order_are_ignored()
+    {
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new MouseButtonMessage(MouseButton.Left, false)));
+        _controller.Handle(new MouseButtonMessage(MouseButton.Left, true));
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new MouseButtonMessage(MouseButton.Left, true)));
+        // No click on top of a held button.
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new ClickMessage(MouseButton.Left)));
+
+        Assert.Equal(1, _input.Actions.Count(a => a == "down Left"));
+        Assert.DoesNotContain("click Left", _input.Actions);
+    }
+
+    [Fact]
+    public void Leaving_pointer_mode_or_the_session_releases_a_held_button()
+    {
+        _controller.Handle(new MouseButtonMessage(MouseButton.Left, true));
+        _controller.Handle(new SetModeMessage(ViewMode.Type));
+        Assert.Equal("up Left", _input.Actions.Last());
+        Assert.Equal(HandleResult.IgnoredForMode, _controller.Handle(new MouseButtonMessage(MouseButton.Left, true)));
+
+        _controller.Handle(new SetModeMessage(ViewMode.Pointer));
+        _controller.Handle(new MouseButtonMessage(MouseButton.Left, true));
+        _controller.ReleaseButton();
+        _controller.ReleaseButton();
+        Assert.Equal(2, _input.Actions.Count(a => a == "up Left"));
+    }
 }

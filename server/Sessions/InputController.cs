@@ -26,6 +26,7 @@ public sealed class InputController
     private readonly PixelSize _monitor;
     private readonly object _gate = new();
     private (int X, int Y)? _cursor;
+    private bool _buttonDown;
 
     public InputController(IInputInjector input, RegionStore store, PixelSize monitor, CaptureRegion? savedRegion)
     {
@@ -64,6 +65,10 @@ public sealed class InputController
             {
                 case SetModeMessage m:
                     Mode = m.Mode;
+                    if (Mode != ViewMode.Pointer)
+                    {
+                        ReleaseButtonLocked();
+                    }
                     return HandleResult.Handled;
 
                 case SetRegionMessage m:
@@ -77,9 +82,19 @@ public sealed class InputController
                     _cursor = target;
                     return HandleResult.Handled;
 
-                case ClickMessage m when Mode == ViewMode.Pointer:
+                case ClickMessage m when Mode == ViewMode.Pointer && !_buttonDown:
                     EnsureCursorInRegion();
                     _input.Click(m.Button);
+                    return HandleResult.Handled;
+
+                case MouseButtonMessage { Down: true } m when Mode == ViewMode.Pointer && !_buttonDown:
+                    EnsureCursorInRegion();
+                    _input.Button(m.Button, true);
+                    _buttonDown = true;
+                    return HandleResult.Handled;
+
+                case MouseButtonMessage { Down: false } when _buttonDown:
+                    ReleaseButtonLocked();
                     return HandleResult.Handled;
 
                 case ScrollMessage m when Mode is ViewMode.Pointer or ViewMode.Scroll:
@@ -100,6 +115,25 @@ public sealed class InputController
                     return HandleResult.IgnoredForMode;
             }
         }
+    }
+
+    /// <summary>Lets go of a held button (the session is ending): nothing stays pressed on the PC.</summary>
+    public void ReleaseButton()
+    {
+        lock (_gate)
+        {
+            ReleaseButtonLocked();
+        }
+    }
+
+    private void ReleaseButtonLocked()
+    {
+        if (!_buttonDown)
+        {
+            return;
+        }
+        _buttonDown = false;
+        _input.Button(MouseButton.Left, false);
     }
 
     /// <summary>Wheel and click go to whatever is under the cursor, so make sure that's inside the region.</summary>

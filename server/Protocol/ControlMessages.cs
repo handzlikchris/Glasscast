@@ -67,6 +67,13 @@ public sealed record MoveMessage(double X, double Y) : ControlMessage;
 public sealed record ClickMessage(MouseButton Button) : ControlMessage;
 
 /// <summary>
+/// Presses or releases a mouse button (pinch, hold still, then move: a drag with the button held,
+/// to select text or move a window). The PC releases it on its own when the mode changes or the
+/// session ends.
+/// </summary>
+public sealed record MouseButtonMessage(MouseButton Button, bool Down) : ControlMessage;
+
+/// <summary>
 /// Wheel movement in Windows wheel units (120 per notch), clamped. Positive scrolls
 /// down, like a browser's deltaY.
 /// </summary>

@@ -50,6 +50,9 @@ public sealed class Win32InputInjector : IInputInjector
     public void Click(MouseButton button) =>
         Send(Mouse(MOUSEEVENTF_LEFTDOWN), Mouse(MOUSEEVENTF_LEFTUP));
 
+    public void Button(MouseButton button, bool down) =>
+        Send(Mouse(down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP));
+
     public void Wheel(int delta) =>
         Send(Mouse(MOUSEEVENTF_WHEEL, data: unchecked((uint)delta)));
 
