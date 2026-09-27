@@ -443,23 +443,48 @@ try {
   check('the hidden mode bar lets taps through to the desktop',
     hiddenRegion.opacity === '0' && tapClicks === 1 && modeAfterHiddenTap === 'pointer',
     `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
-  // 18a. A packet lost mid-stream: the browser asks for a keyframe (PLI) and the PC hears it. By now
-  //      Chrome adds a bandwidth estimate (REMB) to its RTCP reports, and a PLI inside such a report
-  //      went unseen; with reduced-size RTCP it comes in a packet of its own.
+  // 18a. A packet lost mid-stream is NACKed by the browser and sent again by the PC, so the
+  //      picture carries on without a keyframe. Figures from the stats log, since the loss.
   const streamSession = statsLog().filter((l) => l.kind === 'event' && l.event === 'start').at(-1)?.session;
-  const lostAt = Date.now();
-  await fetch(`${BASE}/__harness/lose-packet`, { method: 'POST' });
-  let plisSent = 0;
-  let plisHeard = 0;
-  for (let waited = 0; waited < 8000 && (plisSent === 0 || plisHeard === 0); waited += 250) {
-    await sleep(250);
-    const lines = statsLog().filter((l) => l.session === streamSession);
-    const before = lines.filter((l) => l.kind === 'glasses' && Date.parse(l.t) < lostAt).at(-1)?.plis ?? 0;
-    plisSent = (lines.filter((l) => l.kind === 'glasses').at(-1)?.plis ?? 0) - before;
-    plisHeard = lines.filter((l) => l.kind === 'pc' && Date.parse(l.t) >= lostAt).reduce((sum, l) => sum + (l.keyframeRequests ?? 0), 0);
-  }
-  check('a packet lost mid-stream makes the browser ask for a keyframe and the PC hears it',
-    plisSent > 0 && plisHeard > 0, `browser sent ${plisSent}, PC heard ${plisHeard}`);
+  // Loses a packet, waits until done(figures) (10 s at most) plus settleMs, returns the figures.
+  const sinceLoss = async (url, done, settleMs = 0) => {
+    const lostAt = Date.now();
+    const lines = () => statsLog().filter((l) => l.session === streamSession);
+    const before = lines().filter((l) => l.kind === 'glasses').at(-1) ?? {};
+    await fetch(`${BASE}/__harness/${url}`, { method: 'POST' });
+    const figuresNow = () => {
+      const now = lines();
+      const glasses = now.filter((l) => l.kind === 'glasses').at(-1) ?? {};
+      const pc = now.filter((l) => l.kind === 'pc' && Date.parse(l.t) >= lostAt);
+      const sum = (key) => pc.reduce((total, l) => total + (l[key] ?? 0), 0);
+      return {
+        lost: (glasses.lostTotal ?? 0) - (before.lostTotal ?? 0),
+        nacks: (glasses.nacks ?? 0) - (before.nacks ?? 0),
+        plis: (glasses.plis ?? 0) - (before.plis ?? 0),
+        freezes: (glasses.freezes ?? 0) - (before.freezes ?? 0),
+        nacked: sum('nacked'),
+        resent: sum('resent'),
+        asked: sum('keyframeRequests'),
+      };
+    };
+    for (let waited = 0; waited < 10_000 && !done(figuresNow()); waited += 250) {
+      await sleep(250);
+    }
+    await sleep(settleMs);
+    return figuresNow();
+  };
+  // 1.5 s after the resend: long enough for a PLI to show up, had the picture stayed broken.
+  const resent = await sinceLoss('lose-packet', (f) => f.resent > 0, 1500);
+  check('a packet lost mid-stream is NACKed and resent, with no keyframe needed',
+    resent.nacks > 0 && resent.nacked > 0 && resent.resent > 0 && resent.plis === 0,
+    `browser nacks ${resent.nacks}, PC nacked ${resent.nacked} resent ${resent.resent}, plis ${resent.plis}, freezes ${resent.freezes}`);
+
+  // 18a'. A packet lost for good (not kept for resending): the browser gives up on it and asks for
+  //       a keyframe (PLI), and the PC hears it. By now Chrome adds a bandwidth estimate (REMB) to
+  //       its RTCP reports; a PLI inside such a report went unseen before reduced-size RTCP.
+  const forGood = await sinceLoss('lose-packet-for-good', (f) => f.plis > 0 && f.asked > 0);
+  check('a packet lost for good makes the browser ask for a keyframe and the PC hears it',
+    forGood.plis > 0 && forGood.asked > 0, `browser nacks ${forGood.nacks} plis ${forGood.plis}, PC heard ${forGood.asked}`);
 
   // 18b. Restarting the page reconnects without pairing: the PC remembers approved glasses for a
   //      while (device token). The old session is replaced if the PC hasn't noticed it's gone.
