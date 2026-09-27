@@ -30,6 +30,9 @@ public interface IMediaPeer : IDisposable
     /// </summary>
     event Action? KeyframeRequested;
 
+    /// <summary>The glasses' receiver reports: loss and bandwidth estimate. Raised on a network thread.</summary>
+    event Action<ReceiverFeedback>? FeedbackReceived;
+
     bool IsConnected { get; }
 
     /// <summary>Creates the SDP offer (with our public-IP candidate) to send to the glasses.</summary>

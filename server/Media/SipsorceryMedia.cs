@@ -124,6 +124,10 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         //   RTCP header isn't encrypted (SRTCP), so it's read here straight off the channel.
         _peer.OnReceiveReport += (_, media, report) =>
         {
+            if (media == SDPMediaTypesEnum.video)
+            {
+                OnReceiverReport(report);
+            }
             if (media == SDPMediaTypesEnum.video
                 && (report.ReceiverReport is not null || report.SenderReport is not null)
                 && report.Feedback?.Header is { } header
@@ -164,6 +168,28 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     public event Action? Closed;
 
     public event Action? KeyframeRequested;
+
+    public event Action<ReceiverFeedback>? FeedbackReceived;
+
+    /// <summary>
+    /// Chrome's regular compound reports: a receiver report block for our stream (fraction lost
+    /// since the last one) and, as the last feedback item, REMB (its bandwidth estimate).
+    /// </summary>
+    private void OnReceiverReport(RTCPCompoundPacket report)
+    {
+        var ours = _peer.VideoLocalTrack?.Ssrc;
+        var block = report.ReceiverReport?.ReceptionReports?.FirstOrDefault(r => r.SSRC == ours);
+        double? loss = block is null ? null : block.FractionLost / 256.0;
+        int? remb = null;
+        if (report.Feedback is { Header: { PacketType: RTCPReportTypesEnum.PSFB, PayloadFeedbackMessageType: PSFBFeedbackTypesEnum.AFB } } afb)
+        {
+            remb = (int)(((ulong)afb.BitrateMantissa << afb.BitrateExp) / 1000);
+        }
+        if (loss is not null || remb is not null)
+        {
+            FeedbackReceived?.Invoke(new ReceiverFeedback(loss, remb));
+        }
+    }
 
     public bool IsConnected => _peer.connectionState == RTCPeerConnectionState.connected;
 

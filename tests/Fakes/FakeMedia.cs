@@ -14,6 +14,11 @@ public sealed class FakePeer : IMediaPeer
 
     public event Action? KeyframeRequested;
 
+    public event Action<ReceiverFeedback>? FeedbackReceived;
+
+    /// <summary>Acts like the glasses' receiver report.</summary>
+    public void ReportFeedback(ReceiverFeedback feedback) => FeedbackReceived?.Invoke(feedback);
+
     public bool IsConnected { get; private set; }
 
     /// <summary>Acts like the glasses sending a PLI.</summary>
