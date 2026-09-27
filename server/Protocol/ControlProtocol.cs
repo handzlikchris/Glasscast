@@ -128,21 +128,50 @@ public static class ControlProtocol
         TryParse(Encoding.UTF8.GetBytes(json), out message, out error);
 
     private static ControlMessage? ParseAuthenticate(JsonElement e) =>
-        Only(e, "token") && Str(e, "token", MaxTokenLength, out var token)
-            ? new AuthenticateMessage(token)
+        Only(e, "token", "target") && Str(e, "token", MaxTokenLength, out var token) && Target(e, out var target)
+            ? new AuthenticateMessage(token, target)
             : null;
 
     private static ControlMessage? ParseResume(JsonElement e) =>
-        Only(e, "token") && Str(e, "token", MaxTokenLength, out var token)
-            ? new ResumeMessage(token)
+        Only(e, "token", "target") && Str(e, "token", MaxTokenLength, out var token) && Target(e, out var target)
+            ? new ResumeMessage(token, target)
             : null;
+
+    /// <summary>Optional "target": "pc" (the default) or "phone".</summary>
+    private static bool Target(JsonElement e, out SessionTarget target)
+    {
+        target = SessionTarget.Pc;
+        if (!e.TryGetProperty("target", out _))
+        {
+            return true;
+        }
+
+        if (!Str(e, "target", 8, out var name))
+        {
+            return false;
+        }
+
+        switch (name)
+        {
+            case "pc":
+                return true;
+            case "phone":
+                target = SessionTarget.Phone;
+                return true;
+            default:
+                return false;
+        }
+    }
 
     private static ControlMessage? ParseRtcAnswer(JsonElement e) =>
         Only(e, "sdp") && Str(e, "sdp", MaxSdpLength, out var sdp)
             ? new RtcAnswerMessage(sdp)
             : null;
 
-    private static ControlMessage? ParseIceCandidate(JsonElement e)
+    private static ControlMessage? ParseIceCandidate(JsonElement e) => ParseIce(e);
+
+    /// <summary>An ICE candidate's fields ("candidate", "sdpMid", "sdpMLineIndex"); shared with the companion's parser.</summary>
+    internal static IceCandidateMessage? ParseIce(JsonElement e)
     {
         if (!Only(e, "candidate", "sdpMid", "sdpMLineIndex") || !Str(e, "candidate", MaxCandidateLength, out var candidate))
         {
@@ -284,7 +313,7 @@ public static class ControlProtocol
         return sb.ToString().Trim();
     }
 
-    private static bool Only(JsonElement e, params string[] allowed)
+    internal static bool Only(JsonElement e, params string[] allowed)
     {
         foreach (var property in e.EnumerateObject())
         {
@@ -296,7 +325,7 @@ public static class ControlProtocol
         return true;
     }
 
-    private static bool Str(JsonElement e, string name, int maxLength, out string value)
+    internal static bool Str(JsonElement e, string name, int maxLength, out string value)
     {
         value = "";
         if (!e.TryGetProperty(name, out var p) || p.ValueKind != JsonValueKind.String)
@@ -308,7 +337,7 @@ public static class ControlProtocol
         return value.Length <= maxLength;
     }
 
-    private static bool Bool(JsonElement e, string name, out bool value)
+    internal static bool Bool(JsonElement e, string name, out bool value)
     {
         value = false;
         if (!e.TryGetProperty(name, out var p) || p.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
@@ -319,7 +348,7 @@ public static class ControlProtocol
         return true;
     }
 
-    private static bool Num(JsonElement e, string name, out double value)
+    internal static bool Num(JsonElement e, string name, out double value)
     {
         value = 0;
         return e.TryGetProperty(name, out var p)
@@ -328,7 +357,7 @@ public static class ControlProtocol
                && double.IsFinite(value);
     }
 
-    private static bool Int(JsonElement e, string name, out int value)
+    internal static bool Int(JsonElement e, string name, out int value)
     {
         value = 0;
         if (!e.TryGetProperty(name, out var p) || p.ValueKind != JsonValueKind.Number)

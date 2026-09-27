@@ -29,20 +29,27 @@ public enum KeyCommand
     WinShiftRight,
 }
 
+/// <summary>What a session controls: this PC, or the phone through its companion app.</summary>
+public enum SessionTarget
+{
+    Pc,
+    Phone,
+}
+
 /// <summary>A validated message from the glasses. Anything else is rejected before it gets here.</summary>
 public abstract record ControlMessage;
 
-public sealed record AuthenticateMessage(string Token) : ControlMessage
+public sealed record AuthenticateMessage(string Token, SessionTarget Target = SessionTarget.Pc) : ControlMessage
 {
     // Never print the token, even in debug output.
-    public override string ToString() => "AuthenticateMessage { Token = *** }";
+    public override string ToString() => $"AuthenticateMessage {{ Token = ***, Target = {Target} }}";
 }
 
 /// <summary>First message of a session from remembered glasses: their device token instead of an approval's token.</summary>
-public sealed record ResumeMessage(string Token) : ControlMessage
+public sealed record ResumeMessage(string Token, SessionTarget Target = SessionTarget.Pc) : ControlMessage
 {
     // Never print the token, even in debug output.
-    public override string ToString() => "ResumeMessage { Token = *** }";
+    public override string ToString() => $"ResumeMessage {{ Token = ***, Target = {Target} }}";
 }
 
 public sealed record RtcAnswerMessage(string Sdp) : ControlMessage;

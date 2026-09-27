@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.WebSockets;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Pairing;
+using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Protocol;
 using GlassesRemote.Server.Sessions;
 using Microsoft.Extensions.Options;
@@ -9,7 +10,8 @@ using Microsoft.Extensions.Options;
 namespace GlassesRemote.Server.Hosting;
 
 /// <summary>
-/// The only public endpoints: health check, pairing socket and session socket.
+/// The only public endpoints: health check, pairing socket and session socket (the phone
+/// companion's socket is in <see cref="CompanionEndpoint"/>).
 /// Failures are deliberately generic ("pairFailed" / "authFailed"): the client
 /// can't tell a busy server from a rejection, a timeout or a bad token.
 /// </summary>
@@ -77,7 +79,7 @@ public static class GlassesEndpoints
 
     private static async Task SessionAsync(HttpContext context, PairingCoordinator coordinator,
         IOptions<WebOptions> web, IOptions<ControlSessionOptions> session, AlertLog alerts, TimeProvider time,
-        SessionServices services)
+        SessionServices services, PhoneServices phone)
     {
         if (!await AcceptGuardAsync(context, web.Value, alerts))
         {
@@ -148,7 +150,21 @@ public static class GlassesEndpoints
                 deviceToken,
                 deviceTokenExpiresAt = lease.DeviceTokenExpiresAt!.Value.ToUnixTimeMilliseconds(),
             }, context.RequestAborted);
-        await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
+        var target = auth switch
+        {
+            AuthenticateMessage a => a.Target,
+            ResumeMessage r => r.Target,
+            _ => SessionTarget.Pc,
+        };
+        if (target == SessionTarget.Phone)
+        {
+            // The PC only relays signalling between the glasses and the phone's companion app.
+            await new PhoneRelay(io, lease, phone).RunAsync(context.RequestAborted);
+        }
+        else
+        {
+            await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
+        }
     }
 
     /// <summary>WebSocket upgrade and exact Origin match; a bad Origin is refused before accepting.</summary>

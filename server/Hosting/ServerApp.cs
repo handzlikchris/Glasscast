@@ -3,6 +3,7 @@ using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Media;
 using GlassesRemote.Server.Pairing;
+using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Sessions;
 using GlassesRemote.Server.Windows;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -46,6 +47,7 @@ public static class ServerApp
         services.Configure<MediaOptions>(config.GetSection(MediaOptions.SectionName));
         services.Configure<AudioOptions>(config.GetSection(AudioOptions.SectionName));
         services.Configure<AppShortcutOptions>(config.GetSection(AppShortcutOptions.SectionName));
+        services.Configure<CompanionOptions>(config.GetSection(CompanionOptions.SectionName));
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<AlertLog>();
@@ -69,6 +71,8 @@ public static class ServerApp
         services.AddSingleton<IMediaPeerFactory, MediaPeerFactory>();
         services.AddSingleton<FramePump>();
         services.AddSingleton<SessionServices>();
+        services.AddSingleton<CompanionRegistry>();
+        services.AddSingleton<PhoneServices>();
 
         // Caddy on the same machine is the only proxy we trust for the client's real IP.
         services.Configure<ForwardedHeadersOptions>(o =>
@@ -104,6 +108,7 @@ public static class ServerApp
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
         UseClientFiles(app);
         app.MapGlassesEndpoints();
+        app.MapCompanionEndpoint();
 
         return app;
     }

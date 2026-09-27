@@ -7,6 +7,7 @@ using GlassesRemote.Server.Desktop;
 using GlassesRemote.Server.Hosting;
 using GlassesRemote.Server.Media;
 using GlassesRemote.Server.Pairing;
+using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Tests.Fakes;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -31,6 +32,9 @@ public sealed class TestServerHost : IAsyncDisposable
     /// <summary>Where this host remembers approved glasses (a fresh temp file).</summary>
     public string DeviceGrantFile { get; } = Path.Combine(Path.GetTempPath(), $"grant-{Guid.NewGuid():N}.json");
 
+    /// <summary>Where this host remembers the paired phone (a fresh temp file).</summary>
+    public string CompanionGrantFile { get; } = Path.Combine(Path.GetTempPath(), $"companion-{Guid.NewGuid():N}.json");
+
     public TestServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
         var config = new Dictionary<string, string?>
@@ -41,6 +45,8 @@ public sealed class TestServerHost : IAsyncDisposable
             ["Desktop:RegionFile"] = _regionFile,
             ["Diagnostics:StatsDirectory"] = StatsDirectory,
             ["Pairing:DeviceGrantFile"] = DeviceGrantFile,
+            ["Companion:GrantFile"] = CompanionGrantFile,
+            ["Companion:AuthTimeout"] = "00:00:00.500",
             ["Media:FramesPerSecond"] = "30",
         };
         foreach (var (key, value) in settings ?? new())
@@ -89,6 +95,8 @@ public sealed class TestServerHost : IAsyncDisposable
     public PairingCoordinator Coordinator => _app.Services.GetRequiredService<PairingCoordinator>();
 
     public AlertLog Alerts => _app.Services.GetRequiredService<AlertLog>();
+
+    public CompanionRegistry Companion => _app.Services.GetRequiredService<CompanionRegistry>();
 
     public CastArea CastArea => _app.Services.GetRequiredService<CastArea>();
 
@@ -142,6 +150,7 @@ public sealed class TestServerHost : IAsyncDisposable
         await _app.DisposeAsync();
         File.Delete(_regionFile);
         File.Delete(DeviceGrantFile);
+        File.Delete(CompanionGrantFile);
         try
         {
             if (Directory.Exists(StatsDirectory))
