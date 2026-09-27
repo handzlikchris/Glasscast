@@ -9,6 +9,8 @@ import {
   SAME_PINCH_MS,
   swipeAction,
   SWIPE_SCROLL,
+  DOUBLE_SWIPE_MS,
+  isSecondLeftSwipe,
 } from './focusnav';
 
 describe('routeTap', () => {
@@ -110,5 +112,13 @@ describe('nextAppSlot', () => {
 
   it('has nothing to switch to without apps', () => {
     expect(nextAppSlot(1, 0)).toBeNull();
+  });
+});
+
+describe('double swipe left', () => {
+  it('switches only on a second left swipe soon after the first', () => {
+    expect(isSecondLeftSwipe(null, 1000)).toBe(false);
+    expect(isSecondLeftSwipe(1000, 1000 + DOUBLE_SWIPE_MS - 1)).toBe(true);
+    expect(isSecondLeftSwipe(1000, 1000 + DOUBLE_SWIPE_MS + 1)).toBe(false);
   });
 });

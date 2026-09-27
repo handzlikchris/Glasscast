@@ -28,6 +28,7 @@ import {
   enterIsSamePinch,
   menuFocusFor,
   backTarget,
+  isSecondLeftSwipe,
   nextAppSlot,
   swipeAction,
   type SwipeAction,
@@ -126,6 +127,8 @@ export function SessionScreen({ onEnded }: Props) {
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
   const swipeRef = useRef<(action: SwipeAction) => void>(() => {});
+  /** When the first of a double swipe left came (performance.now), or null. */
+  const leftSwipeAt = useRef<number | null>(null);
   /** The app last switched to (1-based); swipe left goes to the one after it. Assume app 1 at the start. */
   const currentApp = useRef(1);
   /** The app shown as current on its button: moves only when the PC confirms a switch. */
@@ -600,6 +603,8 @@ export function SessionScreen({ onEnded }: Props) {
   };
 
   const onSwipe = (action: SwipeAction) => {
+    // Any other swipe in between cancels a half-done double swipe left.
+    if (action.kind !== 'nextApp') leftSwipeAt.current = null;
     switch (action.kind) {
       case 'pan':
         nudge(action.dx, action.dy);
@@ -613,6 +618,13 @@ export function SessionScreen({ onEnded }: Props) {
         setLastInput('swipe → type');
         break;
       case 'nextApp': {
+        const now = performance.now();
+        if (!isSecondLeftSwipe(leftSwipeAt.current, now)) {
+          leftSwipeAt.current = now;
+          setLastInput('swipe left again to switch app');
+          break;
+        }
+        leftSwipeAt.current = null;
         const next = nextAppSlot(currentApp.current, apps.length);
         if (next === null) setLastInput('no apps set up on the PC');
         else switchApp(next, false);

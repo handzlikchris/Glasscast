@@ -384,17 +384,21 @@ try {
   check('Back: view → controls (focus held on Type through a reset) → Pointer, a doubled Back counts once',
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
-  // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, left cycles the apps
-  //     (1 → 2 → 1, starting after app 1 from step 15), right opens Type. With Pan on they move the view.
+  // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, a double swipe left (two
+  //     within 0.6 s) cycles the apps (1 → 2 → 1, starting after app 1 from step 15), a lone left
+  //     swipe does nothing, right opens Type. With Pan on they move the view.
   // A plain click(): focus was left on Type by the keyboard, so a mouse press here would be
   // treated like a pinch and press Type instead (the redirect working as intended).
   const press = (selector) => page.$eval(selector, (el) => el.click());
   await press('button[data-mode="pointer"]');
   await sleep(200);
   const actionsBefore = (await input()).length;
-  for (const key of ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowLeft']) {
+  // [key, wait after]: double left → Browser; a lone left that times out; double left → Claude.
+  const swipes = [['ArrowDown', 300], ['ArrowUp', 300], ['ArrowLeft', 150], ['ArrowLeft', 300],
+    ['ArrowLeft', 900], ['ArrowLeft', 150], ['ArrowLeft', 300]];
+  for (const [key, wait] of swipes) {
     await page.keyboard.press(key);
-    await sleep(300);
+    await sleep(wait);
   }
   // Switches carry the cast area; keep just "switch <app>".
   const swipeActions = (await input()).slice(actionsBefore).map((a) => (a.startsWith('switch ') ? a.split(' ').slice(0, 2).join(' ') : a));
@@ -403,7 +407,7 @@ try {
   const modeAfterRight = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
   const pressedApp = await page.$eval('button[data-app][aria-pressed="true"]', (el) => el.dataset.app);
   check('the current app button is highlighted', pressedApp === '1', `app ${pressedApp}`);
-  check('Pointer swipes: down/up scroll, left cycles apps, right opens Type',
+  check('Pointer swipes: down/up scroll, double left cycles apps (a lone left does not), right opens Type',
     swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
     `${swipeActions.join('|')} | right → ${modeAfterRight}`);
 

@@ -102,7 +102,8 @@ export type SwipeAction =
 /**
  * What a swipe does while swipes are on the view. In Pointer mode, unless Pan is on, swipes
  * are shortcuts: up/down scroll the window under the cursor, right opens Type, left switches
- * to the next app. With Pan on, and in View and Scroll modes, they move the view.
+ * to the next app (only as the second of two, see isSecondLeftSwipe). With Pan on, and in View
+ * and Scroll modes, they move the view.
  */
 export function swipeAction(key: string, mode: ViewMode, pan: boolean): SwipeAction | null {
   const step = Object.hasOwn(ARROW_STEPS, key) ? ARROW_STEPS[key] : undefined;
@@ -118,6 +119,17 @@ export function swipeAction(key: string, mode: ViewMode, pan: boolean): SwipeAct
     default:
       return { kind: 'nextApp' };
   }
+}
+
+/**
+ * Two left swipes within this switch the app. The band reads some down-swipes (scrolling) as
+ * left, and one stray left used to switch apps; a deliberate double swipe is hard to fake.
+ */
+export const DOUBLE_SWIPE_MS = 600;
+
+/** Whether a left swipe at `now` completes a double swipe begun at `firstAt` (null: none begun). */
+export function isSecondLeftSwipe(firstAt: number | null, now: number): boolean {
+  return firstAt !== null && now - firstAt <= DOUBLE_SWIPE_MS;
 }
 
 /** The app after `current` (1-based), wrapping round: 1 → 2 → … → count → 1. Null with no apps. */
