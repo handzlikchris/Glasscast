@@ -52,8 +52,8 @@ class ScreenSession(
         private const val FPS = 30
         /** Enough for a sharp 600-pixel screen of text; libwebrtc adapts below it. */
         private const val MAX_BITRATE_BPS = 2_500_000
-        /** Glasses input per second (a pinch-drag sends nothing; taps and swipes are few). */
-        private const val MAX_INPUT_PER_SECOND = 60
+        /** Glasses input per second (a held drag sends ~25 touch moves a second; the rest are few). */
+        private const val MAX_INPUT_PER_SECOND = 120
         /** Window changes come in bursts while a pop-up is dragged: refit once they settle a little. */
         private const val REFIT_DELAY_MS = 120L
 
@@ -170,6 +170,8 @@ class ScreenSession(
         InputService.instance?.let { input ->
             input.keepScreenOn(false)
             input.onWindowsChanged = null
+            // A finger still down (the glasses left mid-drag) comes up.
+            input.releaseTouch()
         }
         runCatching { capturer.stopCapture() }
         runCatching { channel.close() }
@@ -228,6 +230,8 @@ class ScreenSession(
             }
             is InputCommand.Tap -> input?.tap(screenX(command.x), screenY(command.y))
             is InputCommand.LongPress -> input?.longPress(screenX(command.x), screenY(command.y))
+            is InputCommand.DoubleTap -> input?.doubleTap(screenX(command.x), screenY(command.y))
+            is InputCommand.Touch -> input?.touch(command.phase, screenX(command.x), screenY(command.y))
             is InputCommand.Swipe -> input?.swipe(
                 screenX(command.x1), screenY(command.y1), screenX(command.x2), screenY(command.y2), command.ms,
             )

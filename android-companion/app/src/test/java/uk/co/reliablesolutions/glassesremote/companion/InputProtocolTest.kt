@@ -18,6 +18,11 @@ class InputProtocolTest {
         assertEquals(InputCommand.Key(KeyName.ENTER), InputProtocol.parse("""{"type":"key","key":"Enter"}"""))
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.FitWindow, InputProtocol.parse("""{"type":"fitWindow"}"""))
+        assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
+        assertEquals(
+            InputCommand.Touch(TouchPhase.MOVE, 0.25, 1.0),
+            InputProtocol.parse("""{"type":"touch","phase":"move","x":0.25,"y":3}"""),
+        )
     }
 
     @Test
@@ -53,6 +58,8 @@ class InputProtocolTest {
             """{"type":"swipe","x1":0,"y1":0,"x2":1,"y2":1}""",
             """{"x":1}""",
             """{"type":"fitWindow","package":"com.example"}""",
+            """{"type":"touch","phase":"hover","x":0,"y":0}""",
+            """{"type":"touch","phase":"down","x":0}""",
         ).forEach { assertNull(it, InputProtocol.parse(it)) }
     }
 }

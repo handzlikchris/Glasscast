@@ -8,10 +8,15 @@ enum class NavAction { BACK, HOME, RECENTS, NOTIFICATIONS }
 
 enum class KeyName { ENTER, BACKSPACE }
 
+enum class TouchPhase { DOWN, MOVE, UP }
+
 /** A validated message from the glasses on the DataChannel. Positions are 0..1 within the frame they see. */
 sealed interface InputCommand {
     data class Tap(val x: Double, val y: Double) : InputCommand
     data class LongPress(val x: Double, val y: Double) : InputCommand
+    data class DoubleTap(val x: Double, val y: Double) : InputCommand
+    /** A finger held down (a pinch held still), moved with the drag, lifted on release. */
+    data class Touch(val phase: TouchPhase, val x: Double, val y: Double) : InputCommand
     data class Swipe(val x1: Double, val y1: Double, val x2: Double, val y2: Double, val ms: Long) : InputCommand
     data class Nav(val action: NavAction) : InputCommand
     data class TypeText(val text: String) : InputCommand
@@ -43,6 +48,7 @@ object InputProtocol {
         "notifications" to NavAction.NOTIFICATIONS,
     )
     private val KEYS = mapOf("Enter" to KeyName.ENTER, "Backspace" to KeyName.BACKSPACE)
+    private val PHASES = mapOf("down" to TouchPhase.DOWN, "move" to TouchPhase.MOVE, "up" to TouchPhase.UP)
 
     fun parse(raw: String): InputCommand? {
         if (raw.isEmpty() || raw.length > MAX_MESSAGE_CHARS) return null
@@ -55,6 +61,8 @@ object InputProtocol {
         return when (type) {
             "tap" -> if (only(o, "x", "y")) point(o) { x, y -> InputCommand.Tap(x, y) } else null
             "longPress" -> if (only(o, "x", "y")) point(o) { x, y -> InputCommand.LongPress(x, y) } else null
+            "doubleTap" -> if (only(o, "x", "y")) point(o) { x, y -> InputCommand.DoubleTap(x, y) } else null
+            "touch" -> touch(o)
             "swipe" -> swipe(o)
             "nav" -> if (only(o, "action")) (o.opt("action") as? String)?.let(NAV::get)?.let { InputCommand.Nav(it) } else null
             "typeText" -> typeText(o)
@@ -99,6 +107,12 @@ object InputProtocol {
         val x = unit(o, "x") ?: return null
         val y = unit(o, "y") ?: return null
         return make(x, y)
+    }
+
+    private fun touch(o: JSONObject): InputCommand? {
+        if (!only(o, "phase", "x", "y")) return null
+        val phase = (o.opt("phase") as? String)?.let(PHASES::get) ?: return null
+        return point(o) { x, y -> InputCommand.Touch(phase, x, y) }
     }
 
     private fun swipe(o: JSONObject): InputCommand? {

@@ -5,7 +5,10 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.PixelFormat
+import android.graphics.PointF
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
@@ -32,11 +35,25 @@ class InputService : AccessibilityService() {
         /** Long enough for views that only react to a press they can see (a very short one can be missed). */
         private const val TAP_MS = 100L
         private const val LONG_PRESS_MS = 700L
+        /** Each piece of a held finger's movement takes this long (the glasses send ~25 a second). */
+        private const val TOUCH_SEGMENT_MS = 30L
+        /** Double tap: two taps this long, this far apart (inside Android's 40..300 ms double-tap window). */
+        private const val DOUBLE_TAP_TAP_MS = 50L
+        private const val DOUBLE_TAP_GAP_MS = 100L
+
         /** Nodes searched for a text field when none has input focus (a screen has a few hundred). */
         private const val MAX_NODES = 1500
     }
 
     private var keepAwake: View? = null
+    private val main = Handler(Looper.getMainLooper())
+
+    // The held finger (touch): one continued stroke, a piece at a time. Main thread only.
+    private var touchStroke: GestureDescription.StrokeDescription? = null
+    private var touchAt = PointF()
+    private var touchTarget: PointF? = null
+    private var touchEnding = false
+    private var touchBusy = false
 
     /** Called (on the main thread) when windows open, close, move or resize; set by a live session. */
     @Volatile
@@ -85,6 +102,102 @@ class InputService : AccessibilityService() {
     fun tap(x: Float, y: Float): Boolean = stroke(pointPath(x, y), TAP_MS)
 
     fun longPress(x: Float, y: Float): Boolean = stroke(pointPath(x, y), LONG_PRESS_MS)
+
+    fun doubleTap(x: Float, y: Float): Boolean {
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(pointPath(x, y), 0, DOUBLE_TAP_TAP_MS))
+            .addStroke(GestureDescription.StrokeDescription(pointPath(x, y), DOUBLE_TAP_TAP_MS + DOUBLE_TAP_GAP_MS, DOUBLE_TAP_TAP_MS))
+            .build()
+        return dispatchGesture(gesture, logCancelled("double tap"), null)
+    }
+
+    /**
+     * A finger held on the screen: down, then moved in short pieces as the glasses send its
+     * position (the newest wins while a piece is in flight), then lifted. Held without moving, it
+     * is Android's own long press. Any thread; the work happens on the main thread.
+     */
+    fun touch(phase: TouchPhase, x: Float, y: Float) = main.post {
+        when (phase) {
+            TouchPhase.DOWN -> {
+                touchStroke = null
+                touchBusy = false
+                touchEnding = false
+                touchTarget = null
+                touchAt = PointF(x, y)
+                val stroke = GestureDescription.StrokeDescription(pointPath(x, y), 0, 1, true)
+                touchStroke = stroke
+                dispatchTouch(stroke)
+            }
+            TouchPhase.MOVE -> if (touchStroke != null) {
+                touchTarget = PointF(x, y)
+                if (!touchBusy) nextTouchPiece()
+            }
+            TouchPhase.UP -> if (touchStroke != null) {
+                touchTarget = PointF(x, y)
+                touchEnding = true
+                if (!touchBusy) nextTouchPiece()
+            }
+        }
+    }
+
+    /** Lifts a held finger where it is (the session ended mid-drag). */
+    fun releaseTouch() = main.post {
+        if (touchStroke != null) {
+            touchEnding = true
+            if (!touchBusy) nextTouchPiece()
+        }
+    }
+
+    private fun nextTouchPiece() {
+        val stroke = touchStroke ?: return
+        val target = touchTarget
+        if (target == null && !touchEnding) return
+        val to = target ?: touchAt
+        touchTarget = null
+        val path = Path().apply {
+            moveTo(touchAt.x, touchAt.y)
+            lineTo(to.x, to.y)
+        }
+        val ending = touchEnding
+        val piece = stroke.continueStroke(path, 0, TOUCH_SEGMENT_MS, !ending)
+        touchAt = to
+        if (ending) {
+            touchStroke = null
+            touchEnding = false
+        } else {
+            touchStroke = piece
+        }
+        dispatchTouch(piece)
+    }
+
+    private fun dispatchTouch(stroke: GestureDescription.StrokeDescription) {
+        touchBusy = true
+        val sent = dispatchGesture(GestureDescription.Builder().addStroke(stroke).build(), object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                touchBusy = false
+                nextTouchPiece()
+            }
+
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                // Another gesture (a tap, a swipe) or the system took over: the finger is up.
+                Log.w(TAG, "held touch cancelled")
+                touchBusy = false
+                touchStroke = null
+                touchEnding = false
+            }
+        }, main)
+        if (!sent) {
+            Log.w(TAG, "held touch not dispatched")
+            touchBusy = false
+            touchStroke = null
+        }
+    }
+
+    private fun logCancelled(what: String) = object : GestureResultCallback() {
+        override fun onCancelled(gestureDescription: GestureDescription?) {
+            Log.w(TAG, "$what cancelled")
+        }
+    }
 
     fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long): Boolean {
         val path = Path().apply {
