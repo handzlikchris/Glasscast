@@ -1,7 +1,7 @@
 // Receive-only WebRTC video from the PC. The server sends the offer; we answer.
 // No STUN/TURN: the offer already carries the router's public address and the
 // forwarded media port, and our checks go straight there.
-import { networkCode, receiverStats, type InboundSnapshot, type NetworkInfo, type ReceiverStats, type ShownFrame } from './mediaStats';
+import { mediaPath, networkCode, receiverStats, type InboundSnapshot, type NetworkInfo, type ReceiverStats, type ShownFrame } from './mediaStats';
 import type { ClientMessage } from './protocol';
 
 export interface VideoStats {
@@ -10,6 +10,8 @@ export interface VideoStats {
   rttMs: number | null;
   receiver: ReceiverStats | null;
   network: NetworkInfo;
+  /** Over the LAN or the internet (the PC's address in the chosen pair), null until known. */
+  path: 'local' | 'remote' | null;
 }
 
 /** navigator.connection, where the browser has it (Chrome on Android does). */
@@ -67,6 +69,7 @@ export class VideoReceiver {
       codec: null,
       rttMs: null,
       receiver: null,
+      path: null,
       network: {
         type: networkCode(connection?.type),
         iceType: null,
@@ -106,6 +109,8 @@ export class VideoReceiver {
     }
     const local = pair ? byId.get(pair.localCandidateId as string) : null;
     result.network.iceType = networkCode(local?.networkType);
+    const pc = pair ? byId.get(pair.remoteCandidateId as string) : null;
+    result.path = mediaPath(pc?.address ?? pc?.ip);
     return result;
   }
 

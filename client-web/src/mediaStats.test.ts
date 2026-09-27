@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockSync, FrameLatency, networkCode, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
+import { ClockSync, FrameLatency, mediaPath, networkCode, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
 
 describe('ClockSync', () => {
   it('uses the ping with the quickest round trip', () => {
@@ -128,6 +128,14 @@ describe('statsLines', () => {
 
   it('says when there are no frame timings yet', () => {
     expect(statsLines(null, null, [])).toEqual(['e2e – (no frame timings yet)']);
+  });
+});
+
+describe('mediaPath', () => {
+  it('calls private addresses local and the rest remote', () => {
+    expect(['192.168.1.114', '10.1.2.3', '172.16.0.9', 'fd00::1'].map(mediaPath)).toEqual(['local', 'local', 'local', 'local']);
+    expect(['203.0.113.10', '172.32.0.1', '2a00:23c7::1'].map(mediaPath)).toEqual(['remote', 'remote', 'remote']);
+    expect([undefined, ''].map(mediaPath)).toEqual([null, null]);
   });
 });
 

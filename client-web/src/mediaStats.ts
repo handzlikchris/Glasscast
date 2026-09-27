@@ -223,6 +223,21 @@ export const networkCode = (name: unknown): number | null =>
 const networkName = (code: number | null) =>
   code === null ? '–' : (Object.keys(NETWORK_CODES).find((k) => NETWORK_CODES[k] === code) ?? 'unknown');
 
+/**
+ * Which way the video comes: 'local' when the PC's end of the chosen ICE pair is a private
+ * address (the PC offers its LAN address first to glasses at home), 'remote' through the
+ * internet, null before the pair is known.
+ */
+export function mediaPath(pcAddress: unknown): 'local' | 'remote' | null {
+  if (typeof pcAddress !== 'string' || pcAddress === '') return null;
+  const v4 = pcAddress.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 127 ? 'local' : 'remote';
+  }
+  return /^(fc|fd|fe80|::1$)/i.test(pcAddress) ? 'local' : 'remote';
+}
+
 /** PC stats messages kept for the panel: about the last 10 s. */
 export const PC_STATS_KEPT = MAX_WINDOW_MS / 1000;
 

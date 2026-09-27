@@ -97,6 +97,8 @@ interface Status {
   fps: number | null;
   rttMs: number | null;
   codec: string | null;
+  /** The video over the LAN or the internet (shown next to "live"). */
+  path: 'local' | 'remote' | null;
 }
 
 export function SessionScreen({ onEnded }: Props) {
@@ -156,7 +158,7 @@ export function SessionScreen({ onEnded }: Props) {
   const [look, setLook] = useState<Look>('lifted');
   const [brightness, setBrightness] = useState<Brightness>(loadBrightness);
   const [panEdge, setPanEdge] = useState<Point | null>(null);
-  const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null });
+  const [status, setStatus] = useState<Status>({ media: 'waiting', fps: null, rttMs: null, codec: null, path: null });
   /** Last input seen, shown in the status bar while we learn what the glasses send. */
   const [lastInput, setLastInput] = useState('');
   /** App shortcut names configured on the PC; button N switches to app N. */
@@ -270,7 +272,7 @@ export function SessionScreen({ onEnded }: Props) {
     const ping = setInterval(() => session.send({ type: 'ping', t: Date.now() }), PING_MS);
     const stats = setInterval(async () => {
       const s = await receiver!.stats();
-      setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec }));
+      setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec, path: s.path }));
       const now = performance.timeOrigin + performance.now();
       const summary = latency.current.summary(now);
       setStatsText(statsLines(summary, s.receiver, pcStats.current, s.network));
@@ -993,7 +995,7 @@ export function SessionScreen({ onEnded }: Props) {
 
       <footer className="status" aria-live="polite">
         <span className={mediaOk ? 'dot' : 'dot warn'}>●</span>
-        <span>{mediaOk ? 'live' : status.media === 'waiting' ? 'starting video…' : status.media}</span>
+        <span>{mediaOk ? (status.path ? `live (${status.path})` : 'live') : status.media === 'waiting' ? 'starting video…' : status.media}</span>
         <span>{status.fps !== null ? `${status.fps.toFixed(0)} fps` : '– fps'}</span>
         <span>{status.rttMs !== null ? `${status.rttMs} ms` : '– ms'}</span>
         <span>{status.codec ?? ''}</span>

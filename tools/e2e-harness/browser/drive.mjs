@@ -68,6 +68,8 @@ try {
   const statusText = await page.$eval('.status', (el) => el.textContent);
   const fps = Number(/(\d+) fps/.exec(statusText)?.[1] ?? 0);
   check('video is live', live && fps > 0, statusText.replace(/\s+/g, ' '));
+  // The harness's video pair runs over the LAN (its offer carries the PC's LAN addresses).
+  check('the status bar says the video is local', statusText.includes('live (local)'), statusText.replace(/\s+/g, ' '));
   const playing = await page.$eval('video', (v) => v.videoWidth > 0 && !v.paused);
   check('video element is playing 600px frames', playing);
   const lookLabel = await page.$eval('button[data-look]', (el) => el.dataset.look);
