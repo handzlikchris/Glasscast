@@ -28,16 +28,14 @@ import {
   enterIsSamePinch,
   menuFocusFor,
   backTarget,
-  isSecondLeftSwipe,
   nextAppSlot,
-  swipeAction,
-  type SwipeAction,
   SAME_BACK_MS,
   navAfterMode,
   routeTap,
   VIEW_NAV_MODES,
   type NavTarget,
 } from './focusnav';
+import { SwipeReader, pcSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_MS, TapThenHold, type GestureEvent } from './gestures';
 import { bandwidthLabel, loadAudioOn, saveAudioOn, type AudioState } from './audio';
 import { AudioOutput, type OutputState } from './audioOutput';
@@ -136,9 +134,14 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const secondPress = useRef<{ id: number; x: number; y: number; held: boolean } | null>(null);
   /** Pointer-mode click held back in case a second pinch follows: a timer, or 'waiting' while that pinch is down. */
   const pendingClick = useRef<number | 'waiting' | null>(null);
-  const swipeRef = useRef<(action: SwipeAction) => void>(() => {});
-  /** When the first of a double swipe left came (performance.now), or null. */
-  const leftSwipeAt = useRef<number | null>(null);
+  const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
+  /** Swipes on the view: up/down at once, left/right after a wait for a double (swipes.ts). */
+  const swipes = useRef(
+    new SwipeReader(
+      (gesture) => swipeRef.current(gesture),
+      (swipe) => setLastInput(waitingHint(swipe, 'pc')),
+    ),
+  );
   /** The app last switched to (1-based); swipe left goes to the one after it. Assume app 1 at the start. */
   const currentApp = useRef(1);
   /** The app shown as current on its button: moves only when the PC confirms a switch. */
@@ -497,14 +500,14 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         backRef.current();
         return;
       }
-      const { nav: target, mode: m, panSwipes: pan } = live.current;
+      const { nav: target, mode: m } = live.current;
       const onView = target === 'view' && VIEW_NAV_MODES.includes(m) && !(e.target instanceof HTMLTextAreaElement);
-      const action = onView ? swipeAction(e.key, m, pan) : null;
-      if (action) {
-        // A swipe acts on the view (pan, or a Pointer-mode shortcut) instead of moving the focus.
+      const swipe = onView ? swipeOf(e.key) : null;
+      if (swipe) {
+        // A swipe acts on the view (pan, or a shortcut) instead of moving the focus.
         e.preventDefault();
         e.stopPropagation();
-        swipeRef.current(action);
+        swipes.current.swipe(swipe);
         return;
       }
       if (e.key in ARROW_STEPS || e.key === 'Tab') keyFocus.current = true;
@@ -586,6 +589,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       stage.removeEventListener('pointerup', onPointerUpCapture, true);
       stage.removeEventListener('click', onClickCapture, true);
       document.removeEventListener('keydown', onKeyDown, true);
+      swipes.current.cancel();
       if (holdTimer.current !== null) clearTimeout(holdTimer.current);
       if (typeof pendingClick.current === 'number') clearTimeout(pendingClick.current);
     };
@@ -694,34 +698,32 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     sendRegion(moved);
   };
 
-  const onSwipe = (action: SwipeAction) => {
-    // Any other swipe in between cancels a half-done double swipe left.
-    if (action.kind !== 'nextApp') leftSwipeAt.current = null;
+  const onSwipe = (gesture: SwipeGesture) => {
+    const { nav: target, mode: m, panSwipes: pan } = live.current;
+    // A left/right that waited for a double may land after the swipes left the view.
+    if (target !== 'view' || !VIEW_NAV_MODES.includes(m)) return;
+    const action = pcSwipeAction(gesture, m, pan);
     switch (action.kind) {
       case 'pan':
         nudge(action.dx, action.dy);
         break;
       case 'scroll':
-        send({ type: 'scroll', dy: Math.sign(action.dy) * swipeUnits(currentScrollLevel()) });
-        setLastInput(`swipe → scroll ${action.dy < 0 ? 'up' : 'down'}`);
+        send({ type: 'scroll', dy: action.dir * swipeUnits(currentScrollLevel()) });
+        setLastInput(`swipe → scroll ${action.dir < 0 ? 'up' : 'down'}`);
         break;
       case 'type':
         setMode('type');
-        setLastInput('swipe → type');
+        setLastInput('swipe right twice → type');
         break;
       case 'nextApp': {
-        const now = performance.now();
-        if (!isSecondLeftSwipe(leftSwipeAt.current, now)) {
-          leftSwipeAt.current = now;
-          setLastInput('swipe left again to switch app');
-          break;
-        }
-        leftSwipeAt.current = null;
         const next = nextAppSlot(currentApp.current, apps.length);
         if (next === null) setLastInput('no apps set up on the PC');
         else switchApp(next, false);
         break;
       }
+      case 'none':
+        setLastInput(`swipe ${gesture}: nothing in Pointer mode`);
+        break;
     }
   };
   swipeRef.current = onSwipe;
@@ -730,7 +732,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     const next = !live.current.panSwipes;
     live.current.panSwipes = next;
     setPanSwipes(next);
-    setLastInput(next ? 'pan: swipes and edges move the view' : 'view locked; swipes: scroll, type, next app');
+    setLastInput(next ? 'pan: swipes and edges move the view' : 'view locked; swipes scroll, twice right Type, twice left next app');
     // In Pointer mode, straight back to swiping so the new meaning takes effect at once.
     if (live.current.mode === 'pointer') setNav('view');
   };

@@ -286,7 +286,7 @@ try {
   await sleep(200);
   const beforeSwipe = await regionAt();
   await page.keyboard.press('ArrowLeft');
-  await sleep(400);
+  await sleep(900); // a single left acts once the wait for a second one is over (swipes.ts)
   const afterSwipe = await regionAt();
   await tapBar('button[data-toggle="pan"]'); // Pan off again
   await sleep(200);
@@ -433,8 +433,9 @@ try {
     afterHistoryBack === 'type' && afterEscape === 'BODY' && afterDoubleBack === 'type' && stillInSession,
     `history.back ${afterHistoryBack}, Escape ${afterEscape}, both ${afterDoubleBack}`);
   // 17. Pointer-mode swipes are shortcuts by default: down/up scroll, a double swipe left (two
-  //     within 0.6 s) cycles the apps (1 → 2 → 1, starting after app 1 from step 15), a lone left
-  //     swipe does nothing, right opens Type. With Pan on they move the view.
+  //     within 0.5 s) cycles the apps (1 → 2 → 1, starting after app 1 from step 15), a lone left
+  //     swipe does nothing, right twice opens Type (one right alone doesn't). With Pan on single
+  //     swipes move the view.
   // A plain click(): focus was left on Type by the keyboard, so a mouse press here would be
   // treated like a pinch and press Type instead (the redirect working as intended).
   const press = (selector) => page.$eval(selector, (el) => el.click());
@@ -450,14 +451,21 @@ try {
   }
   // Switches carry the cast area; keep just "switch <app>".
   const swipeActions = (await input()).slice(actionsBefore).map((a) => (a.startsWith('switch ') ? a.split(' ').slice(0, 2).join(' ') : a));
+  const modeNow = () => page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  await page.keyboard.press('ArrowRight');
+  await sleep(900);
+  const modeAfterOneRight = await modeNow();
+  await page.keyboard.press('ArrowRight');
+  await sleep(150);
   await page.keyboard.press('ArrowRight');
   await sleep(300);
-  const modeAfterRight = await page.$eval('.status span:last-child', (el) => el.textContent.trim());
+  const modeAfterRight = await modeNow();
   const pressedApp = await page.$eval('button[data-app][aria-pressed="true"]', (el) => el.dataset.app);
   check('the current app button is highlighted', pressedApp === '1', `app ${pressedApp}`);
-  check('Pointer swipes: down/up scroll, double left cycles apps (a lone left does not), right opens Type',
-    swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' && modeAfterRight === 'type',
-    `${swipeActions.join('|')} | right → ${modeAfterRight}`);
+  check('Pointer swipes: down/up scroll, double left cycles apps, double right opens Type (lone ones do neither)',
+    swipeActions.join('|') === 'wheel -360|wheel 360|switch Browser|switch Claude' &&
+      modeAfterOneRight === 'pointer' && modeAfterRight === 'type',
+    `${swipeActions.join('|')} | one right → ${modeAfterOneRight}, two → ${modeAfterRight}`);
 
   // 17b. Scroll strength (↕) is per app: one press takes the current app (Claude) from the default
   //      3 notches a swipe to 2. Four more presses wrap it back round to 3 for the steps after this one.
@@ -490,7 +498,7 @@ try {
   const beforePan = await regionAt();
   const panInputBefore = (await input()).length;
   await page.keyboard.press('ArrowRight');
-  await sleep(400);
+  await sleep(900);
   const afterPan = await regionAt();
   const panInputs = (await input()).slice(panInputBefore).filter((a) => !a.startsWith('move '));
   check('with Pan on, Pointer swipes move the view instead',
@@ -650,13 +658,15 @@ try {
     bar.fits && chose && chooseFocus === 'PC' && !(await page.$('main.ended')),
     `bar ${bar.width}px fits ${bar.fits}, choice ${chose}, focus ${chooseFocus}`);
 
-  // 21. Phone session (no phone attached; the page works the same): swipe right opens Type with
+  // 21. Phone session (no phone attached; the page works the same): swipe right twice opens Type with
   //     the text box focused, and a pinch that lands beside it (the glasses' pointer is rarely on
   //     it) keeps the focus there and clicks the box, which is what opens the composer.
   await sleep(500);
   await page.focus('.choose button:nth-of-type(2)');
   await page.mouse.click(300, 560);
   const phoneStage = await page.waitForSelector('.phone-stage', { timeout: 10_000 }).then(() => true, () => false);
+  await page.keyboard.press('ArrowRight');
+  await sleep(150);
   await page.keyboard.press('ArrowRight');
   await page.waitForSelector('.type-panel textarea', { timeout: 3000 }).catch(() => {});
   const boxClicks = await page.evaluate(() => {
@@ -670,7 +680,7 @@ try {
     focused: document.activeElement?.tagName,
     clicks: window.__boxClicks,
   }));
-  check('phone Type: swipe right opens it, and a pinch beside the focused box clicks the box',
+  check('phone Type: swipe right twice opens it, and a pinch beside the focused box clicks the box',
     phoneStage && boxClicks && afterPinch.focused === 'TEXTAREA' && afterPinch.clicks === 1,
     `phone ${phoneStage}, box focused ${boxClicks}, after pinch ${afterPinch.focused} clicked ${afterPinch.clicks}`);
 } finally {

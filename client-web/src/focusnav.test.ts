@@ -7,10 +7,6 @@ import {
   nextAppSlot,
   routeTap,
   SAME_PINCH_MS,
-  swipeAction,
-  SWIPE_SCROLL,
-  DOUBLE_SWIPE_MS,
-  isSecondLeftSwipe,
 } from './focusnav';
 
 describe('routeTap', () => {
@@ -83,26 +79,6 @@ describe('backTarget', () => {
   });
 });
 
-describe('swipeAction', () => {
-  it('makes swipes shortcuts in Pointer mode: scroll, Type, next app', () => {
-    expect(swipeAction('ArrowUp', 'pointer', false)).toEqual({ kind: 'scroll', dy: -SWIPE_SCROLL });
-    expect(swipeAction('ArrowDown', 'pointer', false)).toEqual({ kind: 'scroll', dy: SWIPE_SCROLL });
-    expect(swipeAction('ArrowRight', 'pointer', false)).toEqual({ kind: 'type' });
-    expect(swipeAction('ArrowLeft', 'pointer', false)).toEqual({ kind: 'nextApp' });
-  });
-
-  it('pans with Pan on, and always in View and Scroll modes', () => {
-    expect(swipeAction('ArrowLeft', 'pointer', true)).toEqual({ kind: 'pan', dx: -1, dy: 0 });
-    expect(swipeAction('ArrowUp', 'view', false)).toEqual({ kind: 'pan', dx: 0, dy: -1 });
-    expect(swipeAction('ArrowRight', 'scroll', false)).toEqual({ kind: 'pan', dx: 1, dy: 0 });
-  });
-
-  it('ignores keys that are not swipes', () => {
-    expect(swipeAction('Enter', 'pointer', false)).toBeNull();
-    expect(swipeAction('toString', 'pointer', false)).toBeNull();
-  });
-});
-
 describe('nextAppSlot', () => {
   it('cycles 1 → 2 → … → count → 1', () => {
     expect(nextAppSlot(1, 3)).toBe(2);
@@ -115,10 +91,3 @@ describe('nextAppSlot', () => {
   });
 });
 
-describe('double swipe left', () => {
-  it('switches only on a second left swipe soon after the first', () => {
-    expect(isSecondLeftSwipe(null, 1000)).toBe(false);
-    expect(isSecondLeftSwipe(1000, 1000 + DOUBLE_SWIPE_MS - 1)).toBe(true);
-    expect(isSecondLeftSwipe(1000, 1000 + DOUBLE_SWIPE_MS + 1)).toBe(false);
-  });
-});

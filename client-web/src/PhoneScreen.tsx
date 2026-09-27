@@ -3,9 +3,9 @@
 //
 // Controls, kept close to the PC session's:
 // - On the view: pinch-drag moves the cursor, a pinch taps there (any pinch shorter than a long
-//   press), a longer pinch (held still) long-presses. Swipes as in a PC session's Pointer mode:
-//   up/down scroll around the cursor, right opens Type, two lefts within 0.6 s press the phone's
-//   Back (one alone only arms it: the band reads some down-swipes as left).
+//   press), a longer pinch (held still) long-presses. Swipes (swipes.ts, shared with PC sessions):
+//   up/down scroll around the cursor, left/right page (after a 0.5 s wait for a second swipe),
+//   right twice opens Type, left twice presses the phone's Back.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the composer's text goes into the phone's focused text field; Enter is separate.
@@ -14,7 +14,6 @@
 //   window made square) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Session } from './connection';
-import { isSecondLeftSwipe } from './focusnav';
 import { DEFAULT_GESTURES, GestureTracker } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
@@ -30,12 +29,12 @@ import {
   type FromPhone,
   type PhoneNav,
   type PhoneRegion,
-  type SwipeDirection,
   type ToPhone,
 } from './phoneProtocol';
 import { PhoneLink } from './phoneRtc';
 import { usePinchPressesFocused } from './pinchPress';
 import type { PhoneState, ServerMessage, Size } from './protocol';
+import { SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
 interface Props {
   onEnded(reason: string): void;
@@ -69,11 +68,6 @@ const PHONE_STATUS: Record<PhoneState, string> = {
   live: 'phone sharing',
 };
 
-const SCROLLS: Record<string, SwipeDirection> = {
-  ArrowUp: 'up',
-  ArrowDown: 'down',
-};
-
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'back', label: 'Back' },
   { action: 'home', label: 'Home' },
@@ -98,7 +92,13 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const cursor = useRef<Point>({ x: 300, y: 300 });
   // Any pinch that isn't a drag or a long press is a tap: no gap between the two where it's lost.
   const tracker = useRef(new GestureTracker({ ...DEFAULT_GESTURES, tapMaxMs: LONG_PRESS_MS }));
-  const leftSwipeAt = useRef<number | null>(null);
+  const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
+  const swipes = useRef(
+    new SwipeReader(
+      (gesture) => swipeRef.current(gesture),
+      (swipe) => setLastInput(waitingHint(swipe, 'phone')),
+    ),
+  );
   /** Text sent to the phone and not yet confirmed: it goes back in the box if the phone had no field. */
   const pendingText = useRef<string | null>(null);
   const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
@@ -343,23 +343,11 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
         return;
       }
       if (current === 'view') {
-        if (!(e.key in SCROLLS) && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const swipe = swipeOf(e.key);
+        if (!swipe) return;
         e.preventDefault();
         e.stopPropagation();
-        if (e.key !== 'ArrowLeft') leftSwipeAt.current = null;
-        const direction = SCROLLS[e.key];
-        if (direction) {
-          send(scrollSwipe(direction, atCursor()), `swipe → scroll ${direction}`);
-        } else if (e.key === 'ArrowRight') {
-          setFocus('type');
-          setLastInput('swipe → type');
-        } else if (isSecondLeftSwipe(leftSwipeAt.current, performance.now())) {
-          leftSwipeAt.current = null;
-          send({ type: 'nav', action: 'back' }, 'swipe → back');
-        } else {
-          leftSwipeAt.current = performance.now();
-          setLastInput('swipe left again for Back');
-        }
+        swipes.current.swipe(swipe);
       } else if (current === 'region') {
         const screenSize = phoneScreen.current;
         const choice = choosing.current;
@@ -381,8 +369,25 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       }
     };
     document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      swipes.current.cancel();
+    };
   }, []);
+
+  swipeRef.current = (gesture: SwipeGesture) => {
+    // A left/right that waited for a double may land after the swipes left the view.
+    if (focusRef.current !== 'view') return;
+    const action = phoneSwipeAction(gesture);
+    if (action.kind === 'type') {
+      setFocus('type');
+      setLastInput('swipe right twice → type');
+    } else if (action.kind === 'back') {
+      send({ type: 'nav', action: 'back' }, 'swipe left twice → back');
+    } else {
+      send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
+    }
+  };
 
   // ---- gestures on the view ----
   const cancelLongPress = () => {

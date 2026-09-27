@@ -4,7 +4,7 @@
 // tap at the pointer's position, which is usually over the full-screen gesture layer
 // rather than a button. So the app keeps a navigation target:
 //
-//   "view"     swipes act on the view (see swipeAction); pinches do whatever the mode
+//   "view"     swipes act on the view (see swipes.ts); pinches do whatever the mode
 //              does (click in Pointer mode). Used in View, Pointer and Scroll modes, which
 //              have no panels of their own.
 //   "controls" swipes move focus between buttons and a pinch presses the focused one.
@@ -87,49 +87,6 @@ export const SAME_BACK_MS = 400;
  */
 export function backTarget(nav: NavTarget): 'controls' | 'pointer' {
   return nav === 'view' ? 'controls' : 'pointer';
-}
-
-/** Wheel units one swipe scrolls by (nine notches; the server caps a message at 1200). */
-export const SWIPE_SCROLL = 1080;
-
-export type SwipeAction =
-  | { kind: 'pan'; dx: number; dy: number }
-  /** Browser deltaY sign: positive scrolls down. */
-  | { kind: 'scroll'; dy: number }
-  | { kind: 'type' }
-  | { kind: 'nextApp' };
-
-/**
- * What a swipe does while swipes are on the view. In Pointer mode, unless Pan is on, swipes
- * are shortcuts: up/down scroll the window under the cursor, right opens Type, left switches
- * to the next app (only as the second of two, see isSecondLeftSwipe). With Pan on, and in View
- * and Scroll modes, they move the view.
- */
-export function swipeAction(key: string, mode: ViewMode, pan: boolean): SwipeAction | null {
-  const step = Object.hasOwn(ARROW_STEPS, key) ? ARROW_STEPS[key] : undefined;
-  if (!step) return null;
-  if (mode !== 'pointer' || pan) return { kind: 'pan', dx: step.dx, dy: step.dy };
-  switch (key) {
-    case 'ArrowUp':
-      return { kind: 'scroll', dy: -SWIPE_SCROLL };
-    case 'ArrowDown':
-      return { kind: 'scroll', dy: SWIPE_SCROLL };
-    case 'ArrowRight':
-      return { kind: 'type' };
-    default:
-      return { kind: 'nextApp' };
-  }
-}
-
-/**
- * Two left swipes within this switch the app. The band reads some down-swipes (scrolling) as
- * left, and one stray left used to switch apps; a deliberate double swipe is hard to fake.
- */
-export const DOUBLE_SWIPE_MS = 600;
-
-/** Whether a left swipe at `now` completes a double swipe begun at `firstAt` (null: none begun). */
-export function isSecondLeftSwipe(firstAt: number | null, now: number): boolean {
-  return firstAt !== null && now - firstAt <= DOUBLE_SWIPE_MS;
 }
 
 /** The app after `current` (1-based), wrapping round: 1 → 2 → … → count → 1. Null with no apps. */
