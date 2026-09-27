@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockSync, FrameLatency, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
+import { ClockSync, FrameLatency, networkCode, receiverStats, statsLines, statsReport, type InboundSnapshot } from './mediaStats';
 
 describe('ClockSync', () => {
   it('uses the ping with the quickest round trip', () => {
@@ -131,10 +131,20 @@ describe('statsLines', () => {
   });
 });
 
+describe('network info', () => {
+  it('codes network types as numbers and names them in the panel', () => {
+    expect([networkCode('wifi'), networkCode('bluetooth'), networkCode('mystery'), networkCode(undefined)]).toEqual([1, 3, 0, null]);
+    const lines = statsLines(null, null, [], { type: 3, iceType: 1, downlinkMbps: 1.25, rttMs: 180.4 });
+    expect(lines).toContain('net bluetooth · ICE wifi · 1.3 Mbps est · rtt 180 ms');
+    const report = statsReport(null, null, null, 0, { type: 2, iceType: null, downlinkMbps: 10, rttMs: 95.25 });
+    expect(report).toMatchObject({ netType: 2, iceNetType: null, downlinkMbps: 10, rttMs: 95.3 });
+  });
+});
+
 describe('statsReport', () => {
   it('sends every field, null where nothing was measured', () => {
     const report = statsReport(null, null, null, 0);
-    expect(Object.keys(report)).toHaveLength(20);
+    expect(Object.keys(report)).toHaveLength(24);
     expect(report).toMatchObject({ e2eMs: null, framesShown: 0, plis: null });
   });
 

@@ -117,6 +117,11 @@ export interface StatsReport {
   freezes: number | null;
   dropped: number | null;
   keyframes: number | null;
+  /** Network type codes (mediaStats.ts NETWORK_CODES) and the network figures. */
+  netType: number | null;
+  iceNetType: number | null;
+  downlinkMbps: number | null;
+  rttMs: number | null;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;

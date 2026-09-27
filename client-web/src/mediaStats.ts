@@ -190,13 +190,51 @@ export function receiverStats(prev: InboundSnapshot | null, cur: InboundSnapshot
   };
 }
 
+/**
+ * How this device reaches the network, to tell a slow hop from a slow internet (on the glasses:
+ * Wi-Fi, or relayed by the phone over Bluetooth?). Types as number codes, see NETWORK_CODES.
+ */
+export interface NetworkInfo {
+  /** navigator.connection.type (Network Information API). */
+  type: number | null;
+  /** networkType of the local ICE candidate the video arrives on. */
+  iceType: number | null;
+  /** navigator.connection.downlink: the browser's own bandwidth estimate. */
+  downlinkMbps: number | null;
+  /** Round trip of the video's UDP path (ICE consent checks). */
+  rttMs: number | null;
+}
+
+/** Codes for network types in the stats log (only numbers go there). 0 = anything else. */
+export const NETWORK_CODES: Record<string, number> = {
+  wifi: 1,
+  cellular: 2,
+  bluetooth: 3,
+  ethernet: 4,
+  vpn: 5,
+  wimax: 6,
+  other: 7,
+  none: 8,
+};
+
+export const networkCode = (name: unknown): number | null =>
+  typeof name === 'string' ? (NETWORK_CODES[name] ?? 0) : null;
+
+const networkName = (code: number | null) =>
+  code === null ? '–' : (Object.keys(NETWORK_CODES).find((k) => NETWORK_CODES[k] === code) ?? 'unknown');
+
 /** PC stats messages kept for the panel: about the last 10 s. */
 export const PC_STATS_KEPT = MAX_WINDOW_MS / 1000;
 
 const ms = (v: number | null | undefined) => (v === null || v === undefined ? '–' : Math.round(v).toString());
 
 /** The stats panel's lines. `pc` is the recent mediaStats messages, oldest first. */
-export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | null, pc: readonly PcMediaStats[]): string[] {
+export function statsLines(
+  latency: LatencySummary | null,
+  rx: ReceiverStats | null,
+  pc: readonly PcMediaStats[],
+  net: NetworkInfo | null = null,
+): string[] {
   const lines: string[] = [];
   if (latency) {
     lines.push(
@@ -215,6 +253,11 @@ export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | n
     const mbps = rx.kbps === null ? '–' : (rx.kbps / 1000).toFixed(1);
     lines.push(`jitter buf ${ms(rx.jitterBufferMs)} ms · decode ${ms(rx.decodeMs)} ms · ${mbps} Mbps in`);
     lines.push(`lost ${rx.lost} (${rx.lostTotal}) · nack ${rx.nacks} · pli ${rx.plis} · freezes ${rx.freezes} · dropped ${rx.dropped}`);
+  }
+
+  if (net) {
+    const down = net.downlinkMbps === null ? '–' : net.downlinkMbps.toFixed(1);
+    lines.push(`net ${networkName(net.type)} · ICE ${networkName(net.iceType)} · ${down} Mbps est · rtt ${ms(net.rttMs)} ms`);
   }
 
   if (pc.length > 0) {
@@ -240,7 +283,13 @@ export function statsLines(latency: LatencySummary | null, rx: ReceiverStats | n
 }
 
 /** What the glasses send to the PC's stats log each second: the panel's figures as numbers. */
-export function statsReport(latency: LatencySummary | null, rx: ReceiverStats | null, fps: number | null, framesShown: number): StatsReport {
+export function statsReport(
+  latency: LatencySummary | null,
+  rx: ReceiverStats | null,
+  fps: number | null,
+  framesShown: number,
+  net: NetworkInfo | null = null,
+): StatsReport {
   const r = (v: number | null | undefined) => (v === null || v === undefined ? null : Math.round(v * 10) / 10);
   return {
     e2eMs: r(latency?.total.avg),
@@ -263,5 +312,9 @@ export function statsReport(latency: LatencySummary | null, rx: ReceiverStats | 
     freezes: rx?.freezes ?? null,
     dropped: rx?.dropped ?? null,
     keyframes: rx?.keyframes ?? null,
+    netType: net?.type ?? null,
+    iceNetType: net?.iceType ?? null,
+    downlinkMbps: r(net?.downlinkMbps),
+    rttMs: r(net?.rttMs),
   };
 }

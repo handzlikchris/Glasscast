@@ -28,6 +28,9 @@ public static class ControlProtocol
         "e2eMs", "e2eMaxMs", "arrivalMs", "arrivalMaxMs", "playoutMs", "playoutMaxMs", "slowestKb",
         "clockErrorMs", "framesShown", "fps", "jitterBufferMs", "decodeMs", "kbps", "lost", "lostTotal",
         "nacks", "plis", "freezes", "dropped", "keyframes",
+        // How the glasses reach the network: type codes (client mediaStats.ts NETWORK_CODES:
+        // 1 wifi, 2 cellular, 3 bluetooth, ...), the browser's bandwidth estimate, the UDP round trip.
+        "netType", "iceNetType", "downlinkMbps", "rttMs",
     ];
 
     private const char LineSeparator = (char)0x2028;

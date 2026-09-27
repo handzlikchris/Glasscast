@@ -263,10 +263,10 @@ export function SessionScreen({ onEnded }: Props) {
       setStatus((prev) => ({ ...prev, fps: s.fps, codec: s.codec }));
       const now = performance.timeOrigin + performance.now();
       const summary = latency.current.summary(now);
-      setStatsText(statsLines(summary, s.receiver, pcStats.current));
+      setStatsText(statsLines(summary, s.receiver, pcStats.current, s.network));
       // Also to the PC's stats log, so a session can be read back there afterwards. Only once the
       // PC has sent mediaStats: an older server would reject the message and end the session.
-      if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount) });
+      if (s.receiver && pcStats.current.length > 0) session.send({ type: 'stats', ...statsReport(summary, s.receiver, s.fps, latency.current.shownCount, s.network) });
     }, 1000);
     const scrollFlush = setInterval(() => {
       const edge = edgeScroll.current;

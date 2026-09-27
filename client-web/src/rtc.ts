@@ -1,7 +1,7 @@
 // Receive-only WebRTC video from the PC. The server sends the offer; we answer.
 // No STUN/TURN: the offer already carries the router's public address and the
 // forwarded media port, and our checks go straight there.
-import { receiverStats, type InboundSnapshot, type ReceiverStats, type ShownFrame } from './mediaStats';
+import { networkCode, receiverStats, type InboundSnapshot, type NetworkInfo, type ReceiverStats, type ShownFrame } from './mediaStats';
 import type { ClientMessage } from './protocol';
 
 export interface VideoStats {
@@ -9,6 +9,13 @@ export interface VideoStats {
   codec: string | null;
   rttMs: number | null;
   receiver: ReceiverStats | null;
+  network: NetworkInfo;
+}
+
+/** navigator.connection, where the browser has it (Chrome on Android does). */
+interface NetworkInformation {
+  type?: string;
+  downlink?: number;
 }
 
 export class VideoReceiver {
@@ -54,7 +61,19 @@ export class VideoReceiver {
       if (s.type === 'transport' && typeof s.selectedCandidatePairId === 'string') pairId = s.selectedCandidatePairId;
     });
 
-    const result: VideoStats = { fps: null, codec: null, rttMs: null, receiver: null };
+    const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
+    const result: VideoStats = {
+      fps: null,
+      codec: null,
+      rttMs: null,
+      receiver: null,
+      network: {
+        type: networkCode(connection?.type),
+        iceType: null,
+        downlinkMbps: typeof connection?.downlink === 'number' ? connection.downlink : null,
+        rttMs: null,
+      },
+    };
     const video = inbound as Record<string, unknown> | null;
     if (video) {
       result.fps = typeof video.framesPerSecond === 'number' ? video.framesPerSecond : null;
@@ -83,7 +102,10 @@ export class VideoReceiver {
     const pair = pairId ? byId.get(pairId) : null;
     if (pair && typeof pair.currentRoundTripTime === 'number') {
       result.rttMs = pair.currentRoundTripTime * 1000;
+      result.network.rttMs = result.rttMs;
     }
+    const local = pair ? byId.get(pair.localCandidateId as string) : null;
+    result.network.iceType = networkCode(local?.networkType);
     return result;
   }
 
