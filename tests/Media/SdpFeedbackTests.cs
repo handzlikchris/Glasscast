@@ -18,6 +18,8 @@ public sealed class SdpFeedbackTests
 
         Assert.Contains("a=rtpmap:102 H264/90000\r\na=rtcp-fb:102 nack pli\r\na=rtcp-fb:102 ccm fir\r\n", sdp);
         Assert.Contains("a=rtcp-fb:102 transport-cc\r\n", sdp);
+        // PLIs in packets of their own, not hidden in receiver reports next to REMB.
+        Assert.Contains("a=rtcp-rsize\r\n", sdp);
         Assert.DoesNotContain("a=rtcp-fb:102 nack\r\n", sdp);
         Assert.EndsWith("\r\n", sdp);
     }
@@ -34,7 +36,7 @@ public sealed class SdpFeedbackTests
     public void Leaves_other_payload_types_alone()
     {
         var sdp = SdpFeedback.AddKeyframeRequests("v=0\r\na=rtpmap:111 opus/48000/2\r\n");
-        Assert.DoesNotContain("rtcp-fb", sdp);
+        Assert.DoesNotContain("rtcp-", sdp);
     }
 
     [Theory]

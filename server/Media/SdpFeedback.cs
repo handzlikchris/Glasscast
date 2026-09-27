@@ -10,6 +10,13 @@ namespace GlassesRemote.Server.Media;
 ///
 /// Plain <c>nack</c> (retransmission) is deliberately not offered: SIPSorcery doesn't resend
 /// packets, so the browser would only wait for retransmissions that never come.
+///
+/// <c>rtcp-rsize</c> (reduced-size RTCP, RFC 5506) makes Chrome send a PLI in a packet of its own
+/// instead of inside the next receiver report. That matters: a few seconds into a stream Chrome
+/// adds a bandwidth estimate (REMB) to every report, and SIPSorcery keeps only one feedback item
+/// per report, so a PLI next to it was never seen (2 of 124 arrived in a session on the glasses).
+/// A PLI in a packet of its own is spotted from its unencrypted header
+/// (<see cref="SipsorceryMediaPeer.IsStandaloneKeyframeRequest"/>).
 /// </summary>
 public static partial class SdpFeedback
 {
@@ -28,7 +35,7 @@ public static partial class SdpFeedback
             }
 
             var pt = match.Groups[1].Value;
-            string[] wanted = [$"a=rtcp-fb:{pt} nack pli", $"a=rtcp-fb:{pt} ccm fir"];
+            string[] wanted = [$"a=rtcp-fb:{pt} nack pli", $"a=rtcp-fb:{pt} ccm fir", "a=rtcp-rsize"];
             var missing = wanted.Where(w => !lines.Contains(w)).ToArray();
             lines.InsertRange(i + 1, missing);
             i += missing.Length;

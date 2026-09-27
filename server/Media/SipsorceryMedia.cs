@@ -109,7 +109,8 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         // picture; they ask with PLI (or FIR) and we answer on the next frame. The request arrives
         // in one of two shapes:
         // - inside a compound report (receiver report first): SIPSorcery decrypts and parses it and
-        //   raises OnReceiveReport;
+        //   raises OnReceiveReport. It keeps only the report's last feedback item, so a PLI followed
+        //   by a REMB is lost; with rtcp-rsize offered (SdpFeedback) Chrome no longer sends PLIs this way;
         // - on its own (PLI first): SIPSorcery matches RTCP to a stream by the sender's SSRC, which
         //   for a receive-only browser is none of ours, so it drops the packet unseen. The first
         //   RTCP header isn't encrypted (SRTCP), so it's read here straight off the channel.
