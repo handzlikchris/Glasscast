@@ -180,6 +180,10 @@ function describeClose(event: CloseEvent): string {
     case 'rate limit':
     case 'invalid message':
       return 'The PC closed the session (unexpected messages).';
+    case 'media error':
+      return "The PC's video stopped with an error. Reconnect to try again.";
+    case 'server error':
+      return 'The PC hit an error and closed the session. Reconnect to try again.';
     default:
       return 'The connection to the PC was lost.';
   }
