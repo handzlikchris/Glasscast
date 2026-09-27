@@ -109,7 +109,7 @@ public sealed class ControlSession
             var streaming = StreamAsync(peer, encoder, controller, ct);
             var watching = IdleWatchAsync(ct);
 
-            var finished = await Task.WhenAny(receiving, streaming, watching);
+            var finished = await Task.WhenAny((Task)receiving, streaming, watching);
             if (finished == receiving && await ResultOrNull(receiving) is { } violation)
             {
                 closeStatus = WebSocketCloseStatus.PolicyViolation;
