@@ -105,6 +105,42 @@ try {
     typeof glassesLine?.e2eMs === 'number' && glassesLine.framesShown > 0 && logged.some((l) => l.kind === 'pc'),
     glassesLine ? `e2e ${glassesLine.e2eMs}, framesShown ${glassesLine.framesShown}, ${logged.length} lines` : `${logged.length} lines`);
 
+  // 2c. The PC's sound (the harness plays a tone that beeps on and off each second): on by default,
+  //     played by an element of its own, its bandwidth in the status bar. ♪ off stops the PC
+  //     capturing and sending ("A off"); ♪ on brings it back.
+  const audioKbps = async (ms = 6000) => {
+    let best = 0;
+    for (const until = Date.now() + ms; Date.now() < until && best < 10; ) {
+      const text = await page.$eval('[data-bandwidth]', (el) => el.textContent);
+      best = Math.max(best, Number(/A (\d+) kbps/.exec(text)?.[1] ?? 0));
+      await sleep(250);
+    }
+    return best;
+  };
+  const audioElement = () => page.$eval('audio', (a) => ({ playing: !!a.srcObject && !a.paused, muted: a.muted }));
+  const soundOn = await audioKbps();
+  const elementOn = await audioElement();
+  const pcOn = statsLog().findLast((l) => l.kind === 'pc' && l.audioOn === 1);
+  const glassesAudio = statsLog().findLast((l) => l.kind === 'glasses' && l.audioKbps > 0);
+  check("the PC's sound plays by default and its bandwidth shows in the status bar",
+    soundOn >= 10 && elementOn.playing && !elementOn.muted && pcOn?.audioKbps > 0 && glassesAudio !== undefined,
+    `A ${soundOn} kbps, element ${JSON.stringify(elementOn)}, PC ${pcOn?.audioKbps} kbps, glasses logged ${glassesAudio?.audioKbps}`);
+  await tapBar('button[data-toggle="audio"]');
+  await sleep(2500);
+  const offText = await page.$eval('[data-bandwidth]', (el) => el.textContent);
+  const offButton = await page.$eval('button[data-toggle="audio"]', (el) => el.textContent.trim());
+  const pcOff = statsLog().findLast((l) => l.kind === 'pc');
+  const elementOff = await audioElement();
+  check('♪ off stops the PC capturing and sending, and the status bar says so',
+    offText.includes('A off') && offButton === '♪ off' && pcOff?.audioOn === 0 && pcOff?.audioKbps === 0 && elementOff.muted,
+    `${offText}, button ${offButton}, PC on ${pcOff?.audioOn} at ${pcOff?.audioKbps} kbps`);
+  await tapBar('button[data-toggle="audio"]');
+  const soundAgain = await audioKbps();
+  const toggles = statsLog().filter((l) => l.kind === 'event' && l.event === 'setAudio').map((l) => l.on);
+  check('♪ on brings the sound back, and each switch is logged',
+    soundAgain >= 10 && toggles.join() === 'true,false,true', `A ${soundAgain} kbps, events ${toggles.join()}`);
+  await shot('2c-audio');
+
   // 3. Pointer mode: drag moves, short tap clicks.
   await tapBar('button[data-mode="pointer"]');
   await page.mouse.move(300, 300);
@@ -509,6 +545,16 @@ try {
   check('a packet lost for good makes the browser ask for a keyframe and the PC hears it',
     forGood.plis > 0 && forGood.asked > 0, `browser nacks ${forGood.nacks} plis ${forGood.plis}, PC heard ${forGood.asked}`);
 
+  // 18a''. The audio stream started 300 packets before its sequence wrap (harness), so by now it
+  //        has crossed it: the sound must still arrive (SRTP rollover, as for the video).
+  const firstSession = statsLog().find((l) => l.kind === 'event' && l.event === 'start')?.session;
+  const audioSent = statsLog().filter((l) => l.kind === 'pc' && l.session === firstSession).reduce((sum, l) => sum + (l.audioPackets ?? 0), 0);
+  const soundLater = await audioKbps();
+  check('the sound still arrives after its sequence numbers wrapped', audioSent > 300 && soundLater >= 10,
+    `${audioSent} packets sent, A ${soundLater} kbps`);
+  // ♪ off is remembered on this device: the next session (the restart below) starts without sound.
+  await tapBar('button[data-toggle="audio"]');
+
   // 18b. Restarting the page reconnects without pairing: the PC remembers approved glasses for a
   //      while (device token). The old session is replaced if the PC hasn't noticed it's gone.
   //      The harness also loses the start of this stream (its first keyframe): the browser asks
@@ -536,6 +582,13 @@ try {
   }
   check('a stream whose start was lost asks for a keyframe and the PC answers it at once',
     asked > 0 && firstPictureMs !== null && firstPictureMs < 4000, `asked ${asked}, picture within ${firstPictureMs} ms`);
+  await sleep(1500);
+  const resumedAudio = statsLog().filter((l) => l.kind === 'pc' && l.session === starts.at(-1)?.session);
+  const rememberedButton = await page.$eval('button[data-toggle="audio"]', (el) => el.textContent.trim());
+  check('♪ off is remembered: the restarted session gets no sound',
+    rememberedButton === '♪ off' && resumedAudio.length > 0 && resumedAudio.every((l) => l.audioOn === 0 && l.audioPackets === 0),
+    `button ${rememberedButton}, ${resumedAudio.length} PC lines, packets ${resumedAudio.reduce((s, l) => s + l.audioPackets, 0)}`);
+  await tapBar('button[data-toggle="audio"]'); // back on for the rest
 
   // 18c. The app hidden for 5 s (another glasses app, or closed but kept alive) ends the session on
   //      both sides, so the PC stops showing it as live; back in view, a pinch presses Reconnect.
