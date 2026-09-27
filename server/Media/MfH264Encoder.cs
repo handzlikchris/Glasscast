@@ -36,7 +36,8 @@ public sealed class MfH264Encoder : IFrameEncoder
     });
 
     private readonly int _fps;
-    private readonly int _kbps;
+    private int _kbps;
+    private int _appliedKbps;
     private readonly int _gopFrames;
     private readonly long _frameDuration;
     private IMFTransform? _transform;
@@ -78,10 +79,20 @@ public sealed class MfH264Encoder : IFrameEncoder
 
     public void ForceKeyFrame() => _keyFrameRequested = true;
 
+    public void SetTargetKbps(int kbps) => Volatile.Write(ref _kbps, Math.Max(100, kbps));
+
     public byte[]? Encode(byte[] bgra, int width, int height)
     {
         EnsureInitialised(width, height);
         Nv12.FromBgra(bgra, width, height, _nv12);
+
+        // CBR target, changeable mid-stream (CODECAPI_AVEncCommonMeanBitRate is dynamic).
+        var kbps = Volatile.Read(ref _kbps);
+        if (kbps != _appliedKbps && _codecApi is not null)
+        {
+            TrySet(MeanBitRate, (uint)(kbps * 1000));
+            _appliedKbps = kbps;
+        }
 
         if (_keyFrameRequested && _codecApi is not null)
         {
@@ -182,6 +193,7 @@ public sealed class MfH264Encoder : IFrameEncoder
             TrySet(LowLatencyMode, true);
             TrySet(RateControlMode, RateControlCbr);
             TrySet(MeanBitRate, (uint)(_kbps * 1000));
+            _appliedKbps = _kbps;
             TrySet(GopSize, (uint)_gopFrames);
             TrySet(BPictureCount, 0u);
         }

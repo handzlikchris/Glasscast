@@ -79,6 +79,10 @@ public sealed class FakeEncoder : IFrameEncoder
 
     public void ForceKeyFrame() => Interlocked.Increment(ref _keyframes);
 
+    public int TargetKbps { get; private set; }
+
+    public void SetTargetKbps(int kbps) => TargetKbps = kbps;
+
     public void Dispose()
     {
     }

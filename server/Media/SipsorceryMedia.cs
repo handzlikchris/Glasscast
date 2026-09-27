@@ -25,6 +25,9 @@ public sealed class Vp8FrameEncoder : IFrameEncoder
 
     public void ForceKeyFrame() => _encoder.ForceKeyFrame();
 
+    /// <summary>Best effort: libvpx takes the target at initialisation.</summary>
+    public void SetTargetKbps(int kbps) => _encoder.TargetKbps = (uint)Math.Max(100, kbps);
+
     public void Dispose() => _encoder.Dispose();
 }
 

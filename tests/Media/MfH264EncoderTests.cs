@@ -64,6 +64,33 @@ public sealed class MfH264EncoderTests
     }
 
     [Fact]
+    public void The_target_bitrate_can_change_mid_stream()
+    {
+        if (!MfH264Encoder.IsAvailable())
+        {
+            return;
+        }
+
+        // Noise can't be compressed, so a CBR encoder spends about its whole budget on each frame.
+        var random = new Random(1);
+        byte[] Noise()
+        {
+            var bgra = new byte[600 * 600 * 4];
+            random.NextBytes(bgra);
+            return bgra;
+        }
+        double AverageBytes(MfH264Encoder encoder) =>
+            Enumerable.Range(0, 20).Select(_ => encoder.Encode(Noise(), 600, 600)?.Length ?? 0).Skip(5).Average();
+
+        using var encoder = new MfH264Encoder(targetKbps: 4000, framesPerSecond: 20);
+        var high = AverageBytes(encoder);
+        encoder.SetTargetKbps(500);
+        var low = AverageBytes(encoder);
+
+        Assert.True(low < high / 3, $"4000 kbps: {high:F0} B/frame, then 500 kbps: {low:F0} B/frame");
+    }
+
+    [Fact]
     public void Forced_keyframe_produces_an_idr_frame()
     {
         if (!MfH264Encoder.IsAvailable())

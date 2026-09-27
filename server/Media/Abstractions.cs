@@ -10,6 +10,9 @@ public interface IFrameEncoder : IDisposable
     byte[]? Encode(byte[] bgra, int width, int height);
 
     void ForceKeyFrame();
+
+    /// <summary>Changes the target bitrate from the next frame on (mid-stream, no keyframe).</summary>
+    void SetTargetKbps(int kbps);
 }
 
 /// <summary>A send-only WebRTC video peer for one session.</summary>
