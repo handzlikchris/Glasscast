@@ -2,7 +2,8 @@
 // VP8, GDI capture) with two changes so a headless browser can drive it unattended:
 //   1. pairing requests are approved automatically;
 //   2. input and app switches are recorded, never applied to the real desktop.
-// It can also lose the start of the next session's video stream (POST /__harness/lose-stream-start).
+// It can also lose the start of the next session's video stream (POST /__harness/lose-stream-start)
+// or one packet of the current one (POST /__harness/lose-packet).
 // It listens on 127.0.0.1:5081 only and must never be deployed.
 using System.Collections.Concurrent;
 using GlassesRemote.Server.Desktop;
@@ -59,6 +60,8 @@ app.MapGet("/__harness/region", () => app.Services.GetRequiredService<RegionStor
 app.MapPost("/__harness/terminate", () => coordinator.TerminateActiveSession());
 // The next session's first frames (its first keyframe included) never reach the browser.
 app.MapPost("/__harness/lose-stream-start", () => app.Services.GetRequiredService<HarnessPeers>().DropStartOfNext = true);
+// One packet of the current stream's next frame never reaches the browser.
+app.MapPost("/__harness/lose-packet", () => app.Services.GetRequiredService<HarnessPeers>().LoseOnePacket());
 
 app.Run();
 
@@ -92,11 +95,16 @@ sealed class HarnessPeers(IOptions<MediaOptions> options, ILoggerFactory loggers
 {
     private readonly MediaPeerFactory _real = new(options, loggers);
 
+    private SipsorceryMediaPeer? _latest;
+
     public bool DropStartOfNext { get; set; }
+
+    public void LoseOnePacket() => _latest?.LoseOnePacket();
 
     public IMediaPeer Create(string codec)
     {
         var peer = _real.Create(codec);
+        _latest = peer as SipsorceryMediaPeer;
         if (DropStartOfNext && peer is SipsorceryMediaPeer real)
         {
             DropStartOfNext = false;

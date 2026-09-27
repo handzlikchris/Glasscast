@@ -220,7 +220,13 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         {
             return rtpTimestamp; // dev/test only, see DropFirstFrames
         }
-        _pacer.Enqueue(H264Rtp.Packetize(encoded, rtpTimestamp));
+        var packets = H264Rtp.Packetize(encoded, rtpTimestamp);
+        if (packets.Count > 0 && Interlocked.Exchange(ref _losePacket, 0) == 1)
+        {
+            var lost = Math.Min(1, packets.Count - 1);
+            packets[lost] = packets[lost] with { Payload = [] }; // dev/test only, see LoseOnePacket
+        }
+        _pacer.Enqueue(packets);
         return rtpTimestamp;
     }
 
@@ -232,6 +238,12 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
         var stream = _peer.VideoStream;
         if (stream is null || Volatile.Read(ref _closed) == 1)
         {
+            return;
+        }
+        if (packet.Payload.Length == 0)
+        {
+            // Lost on purpose (LoseOnePacket): its sequence number is used up, so the glasses see a gap.
+            stream.LocalTrack?.GetNextSeqNum();
             return;
         }
         if (_payloadType < 0)
@@ -251,6 +263,15 @@ public sealed class SipsorceryMediaPeer : IMediaPeer
     /// ask for a keyframe.
     /// </summary>
     internal void DropFirstFrames(int count) => _framesToDrop = count;
+
+    private int _losePacket;
+
+    /// <summary>
+    /// DEV/TEST ONLY (e2e harness): the next H.264 frame loses a packet (its second, if it has more
+    /// than one), like a packet dropped on the way mid-stream. The glasses can't decode the frame,
+    /// or those after it, and ask for a keyframe.
+    /// </summary>
+    internal void LoseOnePacket() => _losePacket = 1;
 
     private void RaiseClosed()
     {

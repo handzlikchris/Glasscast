@@ -443,6 +443,24 @@ try {
   check('the hidden mode bar lets taps through to the desktop',
     hiddenRegion.opacity === '0' && tapClicks === 1 && modeAfterHiddenTap === 'pointer',
     `opacity ${hiddenRegion.opacity}, clicks ${tapClicks}, mode ${modeAfterHiddenTap}`);
+  // 18a. A packet lost mid-stream: the browser asks for a keyframe (PLI) and the PC hears it. By now
+  //      Chrome adds a bandwidth estimate (REMB) to its RTCP reports, and a PLI inside such a report
+  //      went unseen; with reduced-size RTCP it comes in a packet of its own.
+  const streamSession = statsLog().filter((l) => l.kind === 'event' && l.event === 'start').at(-1)?.session;
+  const lostAt = Date.now();
+  await fetch(`${BASE}/__harness/lose-packet`, { method: 'POST' });
+  let plisSent = 0;
+  let plisHeard = 0;
+  for (let waited = 0; waited < 8000 && (plisSent === 0 || plisHeard === 0); waited += 250) {
+    await sleep(250);
+    const lines = statsLog().filter((l) => l.session === streamSession);
+    const before = lines.filter((l) => l.kind === 'glasses' && Date.parse(l.t) < lostAt).at(-1)?.plis ?? 0;
+    plisSent = (lines.filter((l) => l.kind === 'glasses').at(-1)?.plis ?? 0) - before;
+    plisHeard = lines.filter((l) => l.kind === 'pc' && Date.parse(l.t) >= lostAt).reduce((sum, l) => sum + (l.keyframeRequests ?? 0), 0);
+  }
+  check('a packet lost mid-stream makes the browser ask for a keyframe and the PC hears it',
+    plisSent > 0 && plisHeard > 0, `browser sent ${plisSent}, PC heard ${plisHeard}`);
+
   // 18b. Restarting the page reconnects without pairing: the PC remembers approved glasses for a
   //      while (device token). The old session is replaced if the PC hasn't noticed it's gone.
   //      The harness also loses the start of this stream (its first keyframe): the browser asks
