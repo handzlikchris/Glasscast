@@ -60,6 +60,11 @@ const ZOOM_STEP = 1.25;
 const PING_MS = 2000;
 /** Hidden this long (the app left), the session ends, as in a PC session. */
 const HIDDEN_MS = 5000;
+/**
+ * After the Type panel moves focus to Send text or Enter, presses are ignored this long: the pinch
+ * on the composer's Insert reached the page too and pressed Send text by itself (seen on the S25).
+ */
+const TYPE_GUARD_MS = 800;
 /** How often a held finger's position goes to the phone while dragging (ms). */
 const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
@@ -617,6 +622,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
             if (key === 'Enter') setFocus('view');
           }}
           refill={refill}
+          guardMs={TYPE_GUARD_MS}
         />
       )}
 

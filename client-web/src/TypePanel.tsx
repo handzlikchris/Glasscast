@@ -12,6 +12,12 @@ interface Props<K extends string> {
   placeholder?: string;
   /** Text the target couldn't take, put back in the (empty) box; a new object each time. */
   refill?: { text: string } | null;
+  /**
+   * For this long after the panel moves focus to Send text or Enter, that button ignores
+   * presses: the pinch that closed the composer (Insert) arrives late, as a tap or an Enter
+   * key, and would press it. 0 = off (a PC session de-duplicates pinches itself).
+   */
+  guardMs?: number;
 }
 
 /** A PC session's keys. */
@@ -45,7 +51,7 @@ export const PHONE_KEYS: readonly { key: PhoneKey; label: string }[] = [
  */
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
-export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, keys, placeholder, refill }: Props<K>) {
+export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, keys, placeholder, refill, guardMs = 0 }: Props<K>) {
   const [text, setText] = useState('');
   useEffect(() => {
     if (refill && !textRef.current) setText(refill.text);
@@ -59,6 +65,14 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
 
   const focusPinnedRef = useRef(focusPinned);
   focusPinnedRef.current = focusPinned;
+  /** The button the panel last moved focus to, and when (see guardMs). */
+  const moved = useRef<{ el: HTMLElement | null; at: number }>({ el: null, at: -Infinity });
+  const moveFocus = (el: HTMLElement) => {
+    moved.current = { el, at: performance.now() };
+    focusPinnedRef.current(el);
+  };
+  const guarded = (el: HTMLElement | null) =>
+    guardMs > 0 && el !== null && moved.current.el === el && performance.now() - moved.current.at < guardMs;
 
   // A layout effect, so it runs inside the pinch or swipe that opened Type (see setMode).
   useLayoutEffect(() => {
@@ -77,7 +91,7 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
     const onChange = () => {
       // After the input events have re-rendered, so Send text is enabled.
       requestAnimationFrame(() => {
-        if (!movedByYou && textRef.current.trim() && sendRef.current) focusPinnedRef.current(sendRef.current);
+        if (!movedByYou && textRef.current.trim() && sendRef.current) moveFocus(sendRef.current);
       });
     };
     box.addEventListener('focus', onFocusBox);
@@ -91,10 +105,15 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
   }, []);
 
   const send = () => {
-    if (!trimmed) return;
+    if (!trimmed || guarded(sendRef.current)) return;
     onSendText(trimmed);
     setText('');
-    if (enterRef.current) focusPinned(enterRef.current);
+    if (enterRef.current) moveFocus(enterRef.current);
+  };
+
+  const pressKey = (key: K) => {
+    if (key === 'Enter' && guarded(enterRef.current)) return;
+    onKey(key);
   };
 
   return (
@@ -121,7 +140,7 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
       </div>
       <div className="row keys">
         {keys.map((s) => (
-          <button key={s.key} ref={s.key === 'Enter' ? enterRef : undefined} type="button" onClick={() => onKey(s.key)}>
+          <button key={s.key} ref={s.key === 'Enter' ? enterRef : undefined} type="button" onClick={() => pressKey(s.key)}>
             {s.label}
           </button>
         ))}
