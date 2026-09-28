@@ -52,7 +52,9 @@ Effects:
   and click-through.
 - The status bar says `live (local)` or `live (remote)`: `mediaPath` on the PC's address in the
   chosen ICE pair (private = local; see the LAN path in media-pipeline.md). Next to it
-  `V n · A n kbps` (payload received; `A off` with ♪ off); the codec only when it isn't H.264. `nav = 'controls'`: swipes move focus, a pinch presses the focused control.
+  `V n · A n kbps` (payload received; `A off` with ♪ off); the codec only when it isn't H.264. `nav = 'controls'`: swipes move focus, a pinch presses the focused control. On the mode bar,
+  left from the first button goes to the last and right from the last to the first (`wrapAround`;
+  the glasses' own focus moves stop at the ends). The phone bar does the same.
 - Back from the view → controls (focus on Type from Pointer, Pointer otherwise); Back from the
   controls (and so from Type and Region) → home to Pointer mode. Two Backs within 400 ms count
   once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch.

@@ -88,7 +88,7 @@ client-web/             glasses client (600×600)
 tests/                  xUnit: unit + WebSocket integration (TestServerHost) + real H.264 encoder
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
-                        browser/drive.mjs (headless Chrome, 47 checks)
+                        browser/drive.mjs (headless Chrome, 48 checks)
 deploy/                 Caddyfile, firewall.ps1
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
@@ -180,7 +180,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕ n · ☀ n% · ♪ · Look · Stats · End** (one
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕n · ☀n · ♪ · Look · Stats · End** (one
 row; with two app buttons it is exactly full at 588 px, and the e2e drive checks it fits). **End**
 goes back to the PC/Phone first screen (so does End in a phone session), never the ended screen. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
@@ -218,6 +218,9 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   returns to Pointer mode. Only a swipe of the user's stops the chain. No length limit: long
   text goes as several ≤500-character `typeText` messages (`textChunks`).
 - **App buttons:** the current app is highlighted (moves only on a confirmed switch).
+- **Mode bar focus wraps round** (2026-09-28): swiping left from its first button lands on the last,
+  right from the last on the first. Buttons never wrap their label (`white-space: nowrap`); keep
+  labels without spaces (`↕3`, `☀80`), as a space let them break onto two lines on the glasses.
 - **☀ brightness** 100/80/65/50 % (default 80 %) on top of the look; kept in localStorage.
   `lifted` is the default look.
 - **♪ the PC's sound** (only when `hello.audio`): on by default, kept in localStorage. Off mutes

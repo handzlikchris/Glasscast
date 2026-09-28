@@ -93,3 +93,15 @@ export function backTarget(nav: NavTarget): 'controls' | 'pointer' {
 export function nextAppSlot(current: number, count: number): number | null {
   return count > 0 ? (current % count) + 1 : null;
 }
+
+/**
+ * Left on the first item of a row goes to the last, right on the last goes to the first; null
+ * anywhere else (the glasses' own focus navigation moves within the row, but stops at its ends).
+ */
+export function wrapAround<T>(items: readonly T[], current: T, key: string): T | null {
+  const at = items.indexOf(current);
+  if (at < 0 || items.length < 2) return null;
+  if (key === 'ArrowLeft' && at === 0) return items[items.length - 1];
+  if (key === 'ArrowRight' && at === items.length - 1) return items[0];
+  return null;
+}

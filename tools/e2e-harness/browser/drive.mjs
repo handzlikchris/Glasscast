@@ -88,7 +88,7 @@ try {
   await page.$eval('button[data-brightness]', (el) => el.click()); // 50%
   await page.$eval('button[data-brightness]', (el) => el.click()); // 100%
   await page.$eval('button[data-brightness]', (el) => el.click()); // back to 80%
-  check('the brightness button dims the video', filterBefore !== filterAfter && brightnessAfter.endsWith('65%'),
+  check('the brightness button dims the video', filterBefore !== filterAfter && brightnessAfter === '☀65',
     `${filterBefore} -> ${filterAfter} (${brightnessAfter})`);
   check('a session starts in Pointer mode with the lifted look',
     statusText.trim().endsWith('pointer') && lookLabel === 'lifted', `${lookLabel}`);
@@ -480,7 +480,7 @@ try {
   const gentle = (await input()).slice(beforeGentle).filter((a) => a.startsWith('wheel '));
   for (let i = 0; i < 4; i++) await tapBar('button[data-scroll]');
   const restored = await page.$eval('button[data-scroll]', (el) => el.dataset.scroll);
-  check('the scroll strength button makes swipes scroll less for this app', scrollLabel === '↕ 2' &&
+  check('the scroll strength button makes swipes scroll less for this app', scrollLabel === '↕2' &&
     gentle.join('|') === 'wheel -240' && restored === '3', `${scrollLabel}, ${gentle.join('|')}, back to ${restored}`);
 
   // Back from Type (or from the mode bar) goes home to Pointer.
@@ -646,6 +646,21 @@ try {
   check('after the PC ends a session, a pinch presses Reconnect and it resumes without pairing',
     ended && focusedButton === 'Reconnect' && reconnected && lastStart?.resumed === true,
     `ended ${ended}, focus ${focusedButton}, new session ${reconnected}, resumed ${lastStart?.resumed}`);
+
+  // 19b. On the mode bar, swiping left from the first button comes in at the last one, and right
+  //      from the last back to the first (the glasses' own focus moves stop at the ends).
+  await page.evaluate(() => history.back()); // Back from the view: the controls
+  await sleep(800); // past the hold on Type's focus
+  await page.focus('button[data-mode="overview"]');
+  await page.keyboard.press('ArrowLeft');
+  const wrappedLeft = await page.evaluate(() => document.activeElement?.dataset?.action ?? document.activeElement?.textContent);
+  await page.keyboard.press('ArrowRight');
+  const wrappedRight = await page.evaluate(() => document.activeElement?.dataset?.mode ?? document.activeElement?.textContent);
+  await shot('19b-controls');
+  const oneLine = await page.$$eval('.toolbar.top button', (els) => els.every((el) => el.getBoundingClientRect().height < 50));
+  check('the mode bar wraps focus round at both ends, and every button is one line',
+    wrappedLeft === 'end' && wrappedRight === 'overview' && oneLine,
+    `left from Region → ${wrappedLeft}, right from End → ${wrappedRight}, one line ${oneLine}`);
 
   // 20. The mode bar (with End last) still fits on one row, and End goes back to the PC/Phone
   //     choice rather than the ended screen, with PC (the last choice) focused.

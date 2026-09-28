@@ -29,6 +29,7 @@ import {
   menuFocusFor,
   backTarget,
   nextAppSlot,
+  wrapAround,
   SAME_BACK_MS,
   navAfterMode,
   routeTap,
@@ -511,6 +512,20 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         return;
       }
       if (e.key in ARROW_STEPS || e.key === 'Tab') keyFocus.current = true;
+      // On the mode bar, swiping past either end comes back in at the other one.
+      const onButton = document.activeElement;
+      if (target === 'controls' && onButton instanceof HTMLButtonElement) {
+        const bar = onButton.closest('.toolbar.top');
+        const buttons = bar ? Array.from(bar.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')) : [];
+        const next = wrapAround(buttons, onButton, e.key);
+        if (next) {
+          e.preventDefault();
+          e.stopPropagation();
+          focused.current = next;
+          next.focus({ preventScroll: true });
+          return;
+        }
+      }
       // Enter in the text box is typing, never a pinch.
       if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return;
 
@@ -1051,7 +1066,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
           Pan
         </button>
         <button type="button" data-scroll={shownScrollLevel} onClick={cycleScrollLevel} title="Scroll strength for this app">
-          ↕ {shownScrollLevel}
+          ↕{shownScrollLevel}
         </button>
         <button
           type="button"
@@ -1064,7 +1079,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
           }}
           title="Video brightness"
         >
-          ☀ {Math.round(brightness * 100)}%
+          ☀{Math.round(brightness * 100)}
         </button>
         {audioOffered && (
           // Always just ♪, so the bar never changes width: off loses the highlight, and a sound the

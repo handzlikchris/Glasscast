@@ -5,6 +5,7 @@ import {
   backTarget,
   navAfterMode,
   nextAppSlot,
+  wrapAround,
   routeTap,
   SAME_PINCH_MS,
 } from './focusnav';
@@ -91,3 +92,17 @@ describe('nextAppSlot', () => {
   });
 });
 
+describe('wrapAround', () => {
+  const row = ['a', 'b', 'c'];
+  it('wraps from the ends of a row to the other end', () => {
+    expect(wrapAround(row, 'a', 'ArrowLeft')).toBe('c');
+    expect(wrapAround(row, 'c', 'ArrowRight')).toBe('a');
+  });
+  it('leaves the rest to the glasses', () => {
+    expect(wrapAround(row, 'b', 'ArrowLeft')).toBeNull();
+    expect(wrapAround(row, 'a', 'ArrowRight')).toBeNull();
+    expect(wrapAround(row, 'a', 'ArrowUp')).toBeNull();
+    expect(wrapAround(row, 'x', 'ArrowLeft')).toBeNull();
+    expect(wrapAround(['a'], 'a', 'ArrowLeft')).toBeNull();
+  });
+});

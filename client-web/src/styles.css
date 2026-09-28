@@ -164,8 +164,11 @@ textarea:focus-visible {
 }
 
 /* Ten buttons share the top bar; keep them on one row. */
+/* One line per button, always: a label that wraps makes the whole bar taller. Labels are short
+   (☀80, ↕3) and the padding tight, so the bar fits the glasses' font too. */
 .toolbar.top button {
-  padding: 4px 7px;
+  padding: 4px 6px;
+  white-space: nowrap;
 }
 
 .toolbar.bottom {
