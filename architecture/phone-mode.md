@@ -94,10 +94,12 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
   flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`
   (0..1 of the phone screen; stops following a window, kept for the next session),
-  `fitWindow{}` (crop to the top-most app window that doesn't fill the screen, e.g. a Samsung
-  pop-up view window, and follow it), `ping{t}`.
-- Phone → glasses: `screen{width, height, region{x,y,width,height}, follow}` (on connect and on
-  every change), `result{of, ok}` for text and keys, `pong{t}`.
+  `fitWindow{}` (follow an app's window: the top floating one's app, e.g. a Samsung pop-up, else
+  the active app), `switchApp{dir}` (`previous`/`next`: step through the phone's recently used
+  apps like Alt+Tab, quick steps keep going; bring it forward; Fit follows it), `ping{t}`.
+- Phone → glasses: `screen{width, height, region{x,y,width,height}, follow, app?}` (on connect and
+  on every change; `app` = the followed app's name), `result{of, ok}` for text, keys and a
+  switchApp with nothing to switch to, `pong{t}`.
 - The companion parses these as strictly as `ControlProtocol` does.
 
 ## Security (additions to the invariants in CLAUDE.md)
@@ -110,7 +112,11 @@ glasses web app ──WSS /ws/session {target:"phone"}──► PC server ◄─
 - The companion accepts input only on the DataChannel of the peer it offered to, after DTLS
   (fingerprints exchanged over the authenticated signalling). Strict parser, rate limit.
 - Typed text never presses Enter; Enter is a separate `key`.
-- The companion never launches apps or opens URLs on the glasses' request (as on the PC).
+- The glasses can't name an app or a URL. Previous/next app (`switchApp`) only steps through the
+  phone's own list of apps you've recently brought to the front (seen by the accessibility
+  service, launcher apps only, not the home screen); one on screen is only selected, one that
+  isn't is brought back with its launch intent. Before 2026-09-28 the companion never started
+  an activity for the glasses at all.
 
 ## Milestones
 

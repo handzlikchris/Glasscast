@@ -187,11 +187,11 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 **controls** (swipes move focus, a pinch presses the focused control).
 
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
-  mapped, table in `architecture/glasses-client.md` "Swipes"):** up/down act at once;
-  **right twice → Type**; **left twice → next app** (PC) / **Back** (phone), both within 0.3 s. A
-  single left/right waits 0.3 s for a second, then does its plain action (nothing in Pointer
-  mode, pan with Pan on, page on the phone). Up/down drops a waiting left (the band reads some
-  down-swipes as left).
+  mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
+  twice → next app** (PC) / **Back** (phone); phone only: **up twice → previous app, down twice →
+  next app** (Alt+Tab over the phone's recently used apps; Fit follows it). Doubles within 0.3 s.
+  A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); on
+  the PC up/down act at once. Up/down drops a waiting left (the band reads some down-swipes as left).
 - **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**
   like a laptop touchpad (user's choice): pinch = click / tap (after 350 ms: two quick ones =
   double-click / double tap); pinch and move = cursor only; **pinch, then pinch and hold (tap-and-
@@ -331,7 +331,9 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   hashed on the PC (`companion-grant.json`), forgettable in the tray. `/ws/companion` refuses any
   request with an `Origin` header (web pages). Every phone session needs Android's
   screen-capture consent tapped **on the phone**. The companion parses DataChannel input as
-  strictly as `ControlProtocol`, never launches apps, and typed text never presses Enter.
+  strictly as `ControlProtocol`, and typed text never presses Enter. It only brings back apps
+  you've used on the phone (its own recent list, from accessibility; the glasses send
+  previous/next, never an app name) and never opens URLs (user's choice, 2026-09-28).
 - Approve popup: Reject is the focused/Cancel button, no AcceptButton. The cast-area frame and the
   session banner are excluded from capture (`WDA_EXCLUDEFROMCAPTURE`) and never take focus.
 

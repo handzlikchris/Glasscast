@@ -91,7 +91,9 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 
 | Swipe on the view | PC session | Phone session |
 | --- | --- | --- |
-| up / down | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor |
+| up / down once | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | after 0.3 s: scroll the phone around the cursor |
+| up, up (within 0.3 s) | (acts at once, no double) | the **previous app** (older in the phone's recent apps; quick repeats keep going back; Fit follows it) |
+| down, down (within 0.3 s) | (acts at once, no double) | the **next app** |
 | right, right (within 0.3 s) | **Type** | **Type** |
 | left, left (within 0.3 s) | **next app** shortcut | the phone's **Back** |
 | right or left once | after 0.3 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.3 s: page (a sideways swipe on the phone) |
