@@ -25,6 +25,8 @@ sealed interface InputCommand {
     data class SetRegion(val x: Double, val y: Double, val width: Double, val height: Double) : InputCommand
     /** Crop to the top app window (a pop-up view) and keep following it. */
     data object FitWindow : InputCommand
+    /** The previous (older) or next (newer) recently used app; Fit follows it. */
+    data class SwitchApp(val previous: Boolean) : InputCommand
     data class Ping(val t: Double) : InputCommand
 }
 
@@ -69,6 +71,15 @@ object InputProtocol {
             "key" -> if (only(o, "key")) (o.opt("key") as? String)?.let(KEYS::get)?.let { InputCommand.Key(it) } else null
             "setRegion" -> region(o)
             "fitWindow" -> if (only(o)) InputCommand.FitWindow else null
+            "switchApp" -> if (only(o, "dir")) {
+                when (o.opt("dir")) {
+                    "previous" -> InputCommand.SwitchApp(previous = true)
+                    "next" -> InputCommand.SwitchApp(previous = false)
+                    else -> null
+                }
+            } else {
+                null
+            }
             "ping" -> if (only(o, "t")) num(o, "t")?.let { InputCommand.Ping(it) } else null
             else -> null
         }

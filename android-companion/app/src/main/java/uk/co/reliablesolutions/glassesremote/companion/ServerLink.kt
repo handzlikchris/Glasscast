@@ -36,10 +36,15 @@ class Prefs(context: Context) {
             ?.takeIf { it.size == 4 }?.let { Region(it[0], it[1], it[2], it[3]) } ?: Region.FULL
         set(value) = sp.edit().putString("region", "${value.x},${value.y},${value.width},${value.height}").apply()
 
-    /** The crop follows the top app window (Fit on the glasses). */
+    /** The crop follows an app's window (Fit on the glasses). */
     var followWindow: Boolean
         get() = sp.getBoolean("followWindow", false)
         set(value) = sp.edit().putBoolean("followWindow", value).apply()
+
+    /** The app Fit follows (a package name), or null for the top floating window. */
+    var followPackage: String?
+        get() = sp.getString("followPackage", null)
+        set(value) = sp.edit().putString("followPackage", value).apply()
 }
 
 /** OkHttp sends no Origin header, which the PC's companion socket requires (web pages always send one). */

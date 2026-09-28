@@ -19,6 +19,8 @@ class InputProtocolTest {
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.FitWindow, InputProtocol.parse("""{"type":"fitWindow"}"""))
         assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
+        assertEquals(InputCommand.SwitchApp(previous = true), InputProtocol.parse("""{"type":"switchApp","dir":"previous"}"""))
+        assertEquals(InputCommand.SwitchApp(previous = false), InputProtocol.parse("""{"type":"switchApp","dir":"next"}"""))
         assertEquals(
             InputCommand.Touch(TouchPhase.MOVE, 0.25, 1.0),
             InputProtocol.parse("""{"type":"touch","phase":"move","x":0.25,"y":3}"""),
@@ -59,6 +61,8 @@ class InputProtocolTest {
             """{"x":1}""",
             """{"type":"fitWindow","package":"com.example"}""",
             """{"type":"touch","phase":"hover","x":0,"y":0}""",
+            """{"type":"switchApp","dir":"sideways"}""",
+            """{"type":"switchApp","package":"com.example"}""",
             """{"type":"touch","phase":"down","x":0}""",
         ).forEach { assertNull(it, InputProtocol.parse(it)) }
     }

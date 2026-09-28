@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.accessibilityservice.InputMethod
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -62,6 +63,14 @@ class InputService : AccessibilityService() {
     @Volatile
     var onWindowsChanged: (() -> Unit)? = null
 
+    /** Apps that came to the front, newest first (the glasses' previous/next app swipes). */
+    val recentApps = RecentApps()
+    private val launchable = HashMap<String, Boolean>()
+    private val homePackage: String? by lazy {
+        packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            ?.activityInfo?.packageName
+    }
+
     override fun onServiceConnected() {
         instance = this
     }
@@ -79,8 +88,69 @@ class InputService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) onWindowsChanged?.invoke()
+        when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> onWindowsChanged?.invoke()
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // An app's screen came up: remember it for previous/next app, if it's an app you
+                // could open from the launcher (not the system UI, a keyboard, the home screen or us).
+                val pkg = event.packageName?.toString() ?: return
+                if (pkg != packageName && pkg != homePackage && isLaunchable(pkg)) recentApps.used(pkg)
+            }
+        }
     }
+
+    private fun isLaunchable(pkg: String): Boolean =
+        launchable.getOrPut(pkg) { packageManager.getLaunchIntentForPackage(pkg) != null }
+
+    /** The app's top window on screen (a split-screen half, a pop-up, the full screen), or null. */
+    fun appWindow(pkg: String): Rect? {
+        val bounds = Rect()
+        return windows
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { window ->
+                if (window.root?.packageName?.toString() != pkg) return@firstNotNullOfOrNull null
+                window.getBoundsInScreen(bounds)
+                Rect(bounds)
+            }
+    }
+
+    /** What Fit follows when pressed: the top floating window's app, else the app you're using. */
+    fun appToFit(screenWidth: Int, screenHeight: Int): String? {
+        val apps = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.sortedByDescending { it.layer }
+        val bounds = Rect()
+        val floating = apps.firstOrNull { window ->
+            window.getBoundsInScreen(bounds)
+            bounds.width() * bounds.height() < 0.9 * screenWidth * screenHeight
+        }
+        val chosen = floating ?: apps.firstOrNull { it.isActive } ?: apps.firstOrNull()
+        return chosen?.root?.packageName?.toString()?.takeIf { it != packageName }
+    }
+
+    /**
+     * Brings an app you've used forward. On screen already (a split-screen half, a pop-up): it only
+     * gets focus. Otherwise its launch intent brings its task back to the front, where it was.
+     */
+    fun bringToFront(pkg: String): Boolean {
+        val window = windows.firstOrNull {
+            it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.root?.packageName?.toString() == pkg
+        }
+        if (window != null) {
+            window.root?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            Log.i(TAG, "switchApp: $pkg is on screen")
+            return true
+        }
+        val intent = packageManager.getLaunchIntentForPackage(pkg) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        return runCatching { startActivity(intent) }
+            .onFailure { Log.w(TAG, "switchApp: couldn't bring $pkg forward", it) }
+            .isSuccess.also { if (it) Log.i(TAG, "switchApp: brought $pkg forward") }
+    }
+
+    /** The app's name as the launcher shows it (for the glasses' status bar). */
+    fun appLabel(pkg: String): String? = runCatching {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    }.getOrNull()
 
     /**
      * The window Fit follows: the top-most app window that doesn't fill the screen, such as a

@@ -77,8 +77,10 @@ class ScreenSession(
     private val track: VideoTrack
     private val crop = CropProcessor()
     private val prefs = Prefs(context)
-    /** The crop follows the top floating app window (Fit on the glasses). */
+    /** The crop follows an app's window (Fit on the glasses). */
     private var follow = prefs.followWindow
+    /** The app Fit follows (set by Fit and by the glasses' previous/next app swipes). */
+    private var followPackage = prefs.followPackage
     private var refitPending = false
     private val pc: PeerConnection
     private val channel: DataChannel
@@ -221,12 +223,19 @@ class ScreenSession(
                 setRegion(Region(command.x, command.y, command.width, command.height))
             }
             is InputCommand.FitWindow -> {
-                follow = true
-                prefs.followWindow = true
-                watchWindows()
-                refit()
+                followApp(input?.appToFit(screenWidth, screenHeight))
                 // Answer even when nothing changed, so the glasses see Fit took.
                 sendScreen()
+            }
+            is InputCommand.SwitchApp -> {
+                val target = input?.recentApps?.step(command.previous, System.currentTimeMillis())
+                if (target == null || !input.bringToFront(target)) {
+                    sendResult("switchApp", false)
+                } else {
+                    // Its window may appear a moment later: window changes refit it then.
+                    followApp(target)
+                    sendScreen()
+                }
             }
             is InputCommand.Tap -> input?.tap(screenX(command.x), screenY(command.y))
             is InputCommand.LongPress -> input?.longPress(screenX(command.x), screenY(command.y))
@@ -247,6 +256,15 @@ class ScreenSession(
         sendScreen()
     }
 
+    private fun followApp(pkg: String?) {
+        follow = true
+        followPackage = pkg
+        prefs.followWindow = true
+        prefs.followPackage = pkg
+        watchWindows()
+        refit()
+    }
+
     /** Listens for window changes (the accessibility service may have started after the session). */
     private fun watchWindows() {
         InputService.instance?.onWindowsChanged = {
@@ -261,10 +279,15 @@ class ScreenSession(
 
     private fun handlerDelay(block: () -> Unit) = postDelayed(REFIT_DELAY_MS) { if (!closed) block() }
 
-    /** Crops to the floating app window, or the whole screen when there is none. */
+    /**
+     * Crops to the followed app's window (a split-screen half, a pop-up, or the full screen); if it
+     * isn't on screen, the crop stays. Without a followed app: the floating window, or everything.
+     */
     private fun refit() {
         if (!follow) return
-        val bounds = InputService.instance?.floatingAppWindow(screenWidth, screenHeight)
+        val input = InputService.instance ?: return
+        val pkg = followPackage
+        val bounds = if (pkg != null) input.appWindow(pkg) ?: return else input.floatingAppWindow(screenWidth, screenHeight)
         val region = if (bounds == null) {
             Region.FULL
         } else {
@@ -290,7 +313,10 @@ class ScreenSession(
             JSONObject().put("type", "screen").put("width", screenWidth).put("height", screenHeight).put(
                 "region",
                 JSONObject().put("x", r.x).put("y", r.y).put("width", r.width).put("height", r.height),
-            ).put("follow", follow),
+            ).put("follow", follow).apply {
+                val pkg = followPackage
+                if (follow && pkg != null) InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
+            },
         )
     }
 
