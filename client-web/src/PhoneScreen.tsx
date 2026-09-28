@@ -6,8 +6,9 @@
 //   cursor; a pinch taps there, two quick ones double-tap; a pinch then a second pinch held
 //   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
-//   up/down scroll around the cursor, left/right page (after a 0.3 s wait for a second swipe),
-//   right twice opens Type, left twice presses the phone's Back.
+//   up/down scroll around the cursor, left/right page (each after a 0.3 s wait for a second
+//   swipe), right twice opens Type, left twice presses the phone's Back, up twice goes to the
+//   previous app and down twice to the next one (the phone brings it forward and Fit follows it).
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
@@ -38,7 +39,7 @@ import { PhoneLink } from './phoneRtc';
 import { usePinchPressesFocused } from './pinchPress';
 import { PHONE_KEYS, TypePanel } from './TypePanel';
 import type { PhoneState, ServerMessage, Size } from './protocol';
-import { SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
+import { PHONE_DOUBLES, SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
 interface Props {
   onEnded(reason: string): void;
@@ -107,6 +108,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     new SwipeReader(
       (gesture) => swipeRef.current(gesture),
       (swipe) => setLastInput(waitingHint(swipe, 'phone')),
+      undefined,
+      PHONE_DOUBLES,
     ),
   );
   /** Text sent to the phone and not yet confirmed: it goes back in the box if the phone had no field. */
@@ -219,7 +222,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
           setFollow(message.follow);
           const w = Math.round(message.region.width * message.width);
           const h = Math.round(message.region.height * message.height);
-          setScreen(message.follow ? `window ${w}×${h}` : `${w}×${h}`);
+          setScreen(message.follow ? `${message.app ?? 'window'} ${w}×${h}` : `${w}×${h}`);
         }
         else if (message.type === 'result') onResult(message.of, message.ok);
       },
@@ -391,6 +394,8 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       setLastInput('swipe right twice → type');
     } else if (action.kind === 'back') {
       send({ type: 'nav', action: 'back' }, 'swipe left twice → back');
+    } else if (action.kind === 'app') {
+      send({ type: 'switchApp', dir: action.dir }, `swipe ${action.dir === 'previous' ? 'up' : 'down'} twice → ${action.dir} app`);
     } else {
       send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
     }
@@ -537,7 +542,12 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
     for (const piece of pieces) send({ type: 'typeText', text: piece }, 'text → phone');
   };
 
-  const onResult = (of: 'typeText' | 'key', ok: boolean) => {
+  const onResult = (of: 'typeText' | 'key' | 'switchApp', ok: boolean) => {
+    if (of === 'switchApp') {
+      // Only a failure is reported: the phone knows no other app yet (open one there first).
+      if (!ok) setLastInput('no other app to switch to yet: open one on the phone first');
+      return;
+    }
     // Not ok: nothing on the phone takes keyboard input (an app like a remote desktop client only
     // does while its own keyboard is open) and there's no text field on screen either.
     if (of === 'key') {

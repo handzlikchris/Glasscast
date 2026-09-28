@@ -22,6 +22,7 @@ describe('parsePhoneMessage', () => {
       follow: false,
     });
     expect(parsePhoneMessage('{"type":"screen","width":1,"height":1,"region":{"x":0,"y":0,"width":1,"height":1},"follow":true}')).toMatchObject({ follow: true });
+    expect(parsePhoneMessage('{"type":"screen","width":1,"height":1,"region":{"x":0,"y":0,"width":1,"height":1},"follow":true,"app":"Chrome"}')).toMatchObject({ app: 'Chrome' });
     expect(parsePhoneMessage('{"type":"result","of":"typeText","ok":false}')).toEqual({ type: 'result', of: 'typeText', ok: false });
     expect(parsePhoneMessage('{"type":"pong","t":5}')).toEqual({ type: 'pong', t: 5 });
   });

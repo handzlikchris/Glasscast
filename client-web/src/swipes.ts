@@ -3,20 +3,30 @@
 //
 // A thumb swipe on the Neural Band arrives as an arrow key. On the view:
 //
-//   swipe up / down        acts at once (scroll, or pan with Pan on / in View and Scroll)
 //   swipe right twice      Type, on the PC and the phone
 //   swipe left twice       PC: next app shortcut · phone: Back
-//   swipe left / right     once: the target's plain action (pan, or page on the phone), after
-//                          DOUBLE_SWIPE_MS without a second one
+//   swipe up twice         phone: the previous app (PC: up/down don't wait for a double)
+//   swipe down twice       phone: the next app
+//   a single swipe         the target's plain action (scroll, pan, page) after DOUBLE_SWIPE_MS
+//                          without a second one; on the PC up/down act at once
 //
-// Left and right wait DOUBLE_SWIPE_MS for a second swipe, so their plain action comes that much
-// later; up and down never wait. An up or down swipe while a left/right waits drops the waiting
-// one: the band reads some down-swipes as left, and that stray left must not act.
+// A swipe that waits for a double does its plain action that much later. An up or down swipe
+// while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
+// that stray left must not act.
 
 import type { ViewMode } from './protocol';
 
 export type Swipe = 'up' | 'down' | 'left' | 'right';
-export type SwipeGesture = Swipe | 'doubleLeft' | 'doubleRight';
+export type SwipeGesture = Swipe | 'doubleLeft' | 'doubleRight' | 'doubleUp' | 'doubleDown';
+
+const DOUBLES: Record<Swipe, SwipeGesture> = {
+  left: 'doubleLeft',
+  right: 'doubleRight',
+  up: 'doubleUp',
+  down: 'doubleDown',
+};
+
+const vertical = (s: Swipe) => s === 'up' || s === 'down';
 
 /** How long a left or right swipe waits for a second one in the same direction (ms). */
 export const DOUBLE_SWIPE_MS = 300;
@@ -49,29 +59,37 @@ const browserTimers: SwipeTimers = {
  * starts waiting (to show "again for Type" and the like).
  */
 export class SwipeReader {
-  private pending: { swipe: 'left' | 'right'; handle: unknown } | null = null;
+  private pending: { swipe: Swipe; handle: unknown } | null = null;
+  private readonly waitFor: ReadonlySet<Swipe>;
 
+  /**
+   * `waitFor`: the swipes that wait for a second one (a PC session: left and right; a phone
+   * session: all four). The others act at once.
+   */
   constructor(
     private readonly onGesture: (gesture: SwipeGesture) => void,
-    private readonly onWaiting: (swipe: 'left' | 'right') => void = () => {},
+    private readonly onWaiting: (swipe: Swipe) => void = () => {},
     private readonly timers: SwipeTimers = browserTimers,
-  ) {}
+    waitFor: readonly Swipe[] = ['left', 'right'],
+  ) {
+    this.waitFor = new Set(waitFor);
+  }
 
   swipe(swipe: Swipe): void {
-    if (swipe === 'up' || swipe === 'down') {
+    if (this.pending?.swipe === swipe) {
       this.cancel();
+      this.onGesture(DOUBLES[swipe]);
+      return;
+    }
+    const previous = this.pending?.swipe;
+    this.cancel();
+    // A left or right that an up/down follows was the band misreading a vertical swipe: dropped.
+    // Otherwise the one waiting was a single swipe after all.
+    if (previous && !(vertical(swipe) && !vertical(previous))) this.onGesture(previous);
+    if (!this.waitFor.has(swipe)) {
       this.onGesture(swipe);
       return;
     }
-    if (this.pending?.swipe === swipe) {
-      this.cancel();
-      this.onGesture(swipe === 'left' ? 'doubleLeft' : 'doubleRight');
-      return;
-    }
-    // The other direction: the one waiting was a single swipe after all.
-    const previous = this.pending?.swipe;
-    this.cancel();
-    if (previous) this.onGesture(previous);
     const handle = this.timers.set(() => {
       if (this.pending?.handle !== handle) return;
       this.pending = null;
@@ -113,6 +131,8 @@ const STEPS: Record<Swipe, { dx: number; dy: number }> = {
 export function pcSwipeAction(gesture: SwipeGesture, mode: ViewMode, pan: boolean): PcSwipeAction {
   if (gesture === 'doubleRight') return { kind: 'type' };
   if (gesture === 'doubleLeft') return { kind: 'nextApp' };
+  // A PC session's up/down don't wait for a double, so these never come.
+  if (gesture === 'doubleUp' || gesture === 'doubleDown') return { kind: 'none' };
   if (mode !== 'pointer' || pan) return { kind: 'pan', ...STEPS[gesture] };
   if (gesture === 'up') return { kind: 'scroll', dir: -1 };
   if (gesture === 'down') return { kind: 'scroll', dir: 1 };
@@ -122,20 +142,43 @@ export function pcSwipeAction(gesture: SwipeGesture, mode: ViewMode, pan: boolea
 export type PhoneSwipeAction =
   | { kind: 'swipe'; direction: Swipe }
   | { kind: 'type' }
-  | { kind: 'back' };
+  | { kind: 'back' }
+  /** The phone's previous (older) or next (newer) recently used app, followed by Fit. */
+  | { kind: 'app'; dir: 'previous' | 'next' };
+
+/** The swipes that wait for a double in a phone session: all four. */
+export const PHONE_DOUBLES: readonly Swipe[] = ['up', 'down', 'left', 'right'];
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
- * (up/down scroll, left/right page); right twice opens Type, left twice presses the phone's Back.
+ * (up/down scroll, left/right page); right twice opens Type, left twice presses the phone's Back,
+ * up twice goes to the previous app and down twice to the next one.
  */
 export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
-  if (gesture === 'doubleRight') return { kind: 'type' };
-  if (gesture === 'doubleLeft') return { kind: 'back' };
-  return { kind: 'swipe', direction: gesture };
+  switch (gesture) {
+    case 'doubleRight':
+      return { kind: 'type' };
+    case 'doubleLeft':
+      return { kind: 'back' };
+    case 'doubleUp':
+      return { kind: 'app', dir: 'previous' };
+    case 'doubleDown':
+      return { kind: 'app', dir: 'next' };
+    default:
+      return { kind: 'swipe', direction: gesture };
+  }
 }
 
 /** What the status bar says while a left or right waits for its second swipe. */
-export function waitingHint(swipe: 'left' | 'right', target: 'pc' | 'phone'): string {
-  if (swipe === 'right') return 'swipe right again for Type';
-  return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for Back';
+export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
+  switch (swipe) {
+    case 'right':
+      return 'swipe right again for Type';
+    case 'left':
+      return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for Back';
+    case 'up':
+      return 'swipe up again for the previous app';
+    case 'down':
+      return 'swipe down again for the next app';
+  }
 }

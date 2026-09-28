@@ -26,15 +26,21 @@ export type ToPhone =
   | { type: 'setRegion'; x: number; y: number; width: number; height: number }
   /** Crop to the top app window (e.g. a Samsung pop-up) and keep following it. */
   | { type: 'fitWindow' }
+  /**
+   * Switch to the phone's previous (older) or next (newer) recently used app, like Alt+Tab: one
+   * on screen (a split-screen half, a pop-up) is just selected, one that isn't is brought to the
+   * front. Fit then follows it. Never an app name: the phone keeps its own list.
+   */
+  | { type: 'switchApp'; dir: 'previous' | 'next' }
   | { type: 'ping'; t: number };
 
 /** The crop, in 0..1 of the phone's screen. */
 export type PhoneRegion = Region;
 
 export type FromPhone =
-  /** The phone's screen in pixels, the crop (0..1) and whether it follows a window. */
-  | { type: 'screen'; width: number; height: number; region: PhoneRegion; follow: boolean }
-  | { type: 'result'; of: 'typeText' | 'key'; ok: boolean }
+  /** The phone's screen in pixels, the crop (0..1), whether it follows an app's window, and which app. */
+  | { type: 'screen'; width: number; height: number; region: PhoneRegion; follow: boolean; app?: string }
+  | { type: 'result'; of: 'typeText' | 'key' | 'switchApp'; ok: boolean }
   | { type: 'pong'; t: number };
 
 export const SWIPE_MIN_MS = 50;
@@ -64,11 +70,13 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
             height: data.height,
             region: { x: r.x, y: r.y, width: r.width, height: r.height },
             follow: data.follow === true,
+            // The followed app's name, for the status bar only; capped.
+            ...(typeof data.app === 'string' && data.app.length > 0 ? { app: data.app.slice(0, 24) } : {}),
           }
         : null;
     }
     case 'result':
-      return (data.of === 'typeText' || data.of === 'key') && typeof data.ok === 'boolean'
+      return (data.of === 'typeText' || data.of === 'key' || data.of === 'switchApp') && typeof data.ok === 'boolean'
         ? { type: 'result', of: data.of, ok: data.ok }
         : null;
     case 'pong':

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DOUBLE_SWIPE_MS,
+  PHONE_DOUBLES,
   SwipeReader,
   pcSwipeAction,
   phoneSwipeAction,
@@ -130,10 +131,47 @@ describe('pcSwipeAction', () => {
 });
 
 describe('phoneSwipeAction', () => {
-  it('single swipes swipe the phone; right twice is Type, left twice is Back', () => {
+  it('single swipes swipe the phone; right twice is Type, left twice Back, up/down twice switch apps', () => {
     expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down' });
     expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left' });
     expect(phoneSwipeAction('doubleRight')).toEqual({ kind: 'type' });
     expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'back' });
+    expect(phoneSwipeAction('doubleUp')).toEqual({ kind: 'app', dir: 'previous' });
+    expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'app', dir: 'next' });
+  });
+});
+
+describe('SwipeReader in a phone session (every direction waits for a double)', () => {
+  function phoneReader() {
+    const { timers, run } = fakeTimers();
+    const gestures: SwipeGesture[] = [];
+    const r = new SwipeReader((g) => gestures.push(g), () => {}, timers, PHONE_DOUBLES);
+    return { r, run, gestures };
+  }
+
+  it('up twice and down twice are doubles; one alone scrolls after the wait', () => {
+    const { r, run, gestures } = phoneReader();
+    r.swipe('up');
+    r.swipe('up');
+    r.swipe('down');
+    run(DOUBLE_SWIPE_MS - 50);
+    r.swipe('down');
+    expect(gestures).toEqual(['doubleUp', 'doubleDown']);
+    r.swipe('down');
+    expect(gestures).toEqual(['doubleUp', 'doubleDown']);
+    run(DOUBLE_SWIPE_MS);
+    expect(gestures).toEqual(['doubleUp', 'doubleDown', 'down']);
+  });
+
+  it('a waiting left that a down follows is still dropped; a waiting down that a left follows is kept', () => {
+    const { r, run, gestures } = phoneReader();
+    r.swipe('left');
+    r.swipe('down');
+    run(DOUBLE_SWIPE_MS);
+    expect(gestures).toEqual(['down']);
+    r.swipe('down');
+    r.swipe('left');
+    run(DOUBLE_SWIPE_MS);
+    expect(gestures).toEqual(['down', 'down', 'left']);
   });
 });
