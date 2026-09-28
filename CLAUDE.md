@@ -181,7 +181,7 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 ## Glasses controls (as tuned on the device)
 
 The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕n · ☀n · ♪ · Look · Stats · End** (one
-row; with two app buttons it is exactly full at 588 px, and the e2e drive checks it fits). **End**
+row; with two app buttons it has a little room to spare, and the e2e drive checks it fits). **End**
 goes back to the PC/Phone first screen (so does End in a phone session), never the ended screen. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
