@@ -3,9 +3,10 @@
 One authenticated session = one `/ws/session` WebSocket + one WebRTC peer + one frame pump.
 Everything the glasses do goes through this socket as small JSON messages.
 
-A session whose `authenticate`/`resume` says `target:"phone"` is a **phone session** instead:
-`PhoneRelay` runs rather than `ControlSession`, relays signalling with the phone's companion app,
-and accepts only `rtcAnswer`, `iceCandidate` and `ping`. See [phone-mode.md](phone-mode.md).
+A socket whose first message is `{type:"phone"}` is a **phone relay** instead: no login on the
+PC and no session lease; `PhoneRelay` passes pairing, authentication and signalling between the
+glasses and the phone's companion app (`RelayProtocol.cs`), and the phone decides who gets in.
+See [phone-mode.md](phone-mode.md).
 
 ## Files
 

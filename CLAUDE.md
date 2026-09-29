@@ -14,10 +14,14 @@ Neural Band gestures, switch between configured apps, and type through the glass
 voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**,
 or (for 24 h after such an approval) the **device token** of the glasses that were approved.
 
-**Phone mode (branch `feat/phone-mode`, 2026-09-27):** the first screen asks **PC or Phone**.
-Phone controls the user's Android phone (Samsung S25) through a companion app in
-`android-companion/` (MediaProjection + AccessibilityService); the PC only relays WebRTC
-signalling. Design, protocols, status: **`architecture/phone-mode.md`**.
+**Phone mode (branch `feat/phone-mode`, 2026-09-27; redesigned 2026-09-29):** the first screen
+asks **PC or Phone**. Phone controls the user's Android phone (Samsung S25) through a companion app
+in `android-companion/` (MediaProjection + AccessibilityService). The server (this PC) is only the
+meeting point for the **first connection**: the glasses pair with the **phone** (code on both,
+Approve on the phone) and prove themselves to it each session; once the WebRTC DataChannel is open
+the session needs neither the server nor the internet. Why it's built this way (a page can't reach
+a stock phone directly; WebRTC's compressed video beats DAT's still frames), design, protocols,
+status: **`architecture/phone-mode.md`**.
 
 - **Plan / design / decisions / setup / status** live in a shared page:
   https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV (read it with the Artifact tool, action `read`).
@@ -65,8 +69,9 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
                         around the cast area on the PC monitor), TerminateHotkey
   Alerts/               AlertLog, AlertThrottle
-  Phone/                phone mode: CompanionEndpoint (/ws/companion), CompanionRegistry (phone pairing,
-                        token hash, live connection), CompanionLink, CompanionProtocol, PhoneRelay
+  Phone/                phone mode: CompanionEndpoint (/ws/companion), CompanionRegistry (companion
+                        registration, token hash, live connection, relay limits), CompanionLink,
+                        CompanionProtocol, PhoneRelay + RelayProtocol (glasses ⇄ phone, opaque)
 client-web/             glasses client (600×600)
   build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
@@ -76,7 +81,8 @@ client-web/             glasses client (600×600)
   src/App.tsx           first screen (PC or Phone; last choice in target.ts), pairing, sessions, ended
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
   src/PhoneScreen.tsx   phone session: phone's frame, local cursor, taps/swipes/nav/text over the
-                        DataChannel (phoneRtc.ts, phoneProtocol.ts)
+                        DataChannel (phoneRtc.ts, phoneProtocol.ts); phoneConnect.ts (relay, pairing,
+                        proof), phoneTrust.ts (the crypto), phoneSignal.ts (relay socket)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: Back targets, tap routing (pure, tested)
   src/swipes.ts         THE swipe rules for PC and phone: double left/right, what each does (pure, tested)
@@ -294,8 +300,8 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 - Only public ports: TCP 443 (→ Caddy 8443) and UDP 50000 (phone mode adds none: its media goes
   phone ↔ glasses). App listens on loopback (except the
   dev `lan` profile). RDP, admin endpoints, shells, file APIs: never.
-- No session without a human clicking **Approve** on the PC, or a device token from such an
-  approval less than 24 h ago. **Never** add auto-approve, a bypass flag, or a network approval
+- No PC session without a human clicking **Approve** on the PC, or a device token from such an
+  approval less than 24 h ago. (Phone sessions are gated on the phone instead: see Phone mode.) **Never** add auto-approve, a bypass flag, or a network approval
   endpoint to `server/`. Auto-approval exists only in `tools/e2e-harness` (dev-only, 127.0.0.1:5081).
 - Approval token: single-use, hashed server-side, constant-time compare, never in URLs, storage,
   React state or logs (test `Tokens_never_appear_in_logs`). Failures are generic (`pairFailed`/`authFailed`).
@@ -310,7 +316,7 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, the last target (PC/Phone), and the device token (`connection.ts`, localStorage;
+- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`) and the phone pairing `{id, key}` (`phoneTrust.ts`) (localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); after a
   page (re)load one pinch on the first screen (last target focused) resumes.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
@@ -325,12 +331,18 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   Never launch processes. The e2e harness records switches and must never move real windows.
 - Strict CSP (`script-src 'self'`, no inline/eval). Keep the client free of inline scripts/styles
   in `index.html`; React `style` props are fine (they go through the CSSOM).
-- **Phone mode:** the PC relays only signalling (offer, answer, ICE, start/stop) and never the
-  phone's video or the glasses' input for it; any input message in a phone session is a
-  violation. The companion pairs once through the same Approve popup; its 256-bit token is
-  hashed on the PC (`companion-grant.json`), forgettable in the tray. `/ws/companion` refuses any
-  request with an `Origin` header (web pages). Every phone session needs Android's
-  screen-capture consent tapped **on the phone**. The companion parses DataChannel input as
+- **Phone mode:** the **phone is the gate**. Glasses get in only by pairing with the phone (ECDH
+  numeric comparison with a commitment: the same code on both screens, **Approve on the phone**)
+  and proving the pairing key on every session; the phone's offer and the glasses' answer are
+  MACed with the session key. Every phone session also needs Android's screen-capture consent
+  tapped **on the phone**. The server only relays that setup (pairing, proof, offer, answer, ICE)
+  as opaque strings, holds no key, and never carries the phone's video or the glasses' input for
+  it; any input message on a relay is a violation. Relays need no login on the PC, so they're
+  rate-limited; the phone prompts to pair at most every 10 s. Never let the server approve,
+  store or see a phone pairing key. The companion registers with the PC once through the Approve
+  popup (it may then use the PC as a meeting point); its 256-bit token is hashed on the PC
+  (`companion-grant.json`), forgettable in the tray. `/ws/companion` refuses any
+  request with an `Origin` header (web pages). The companion parses DataChannel input as
   strictly as `ControlProtocol`, and typed text never presses Enter. It only brings back apps
   you've used on the phone (its own recent list, from accessibility; the glasses send
   previous/next, never an app name) and never opens URLs (user's choice, 2026-09-28).
@@ -478,11 +490,11 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 
 ## Status and next steps (as of 2026-09-25)
 
-- **Phone mode (2026-09-27, branch `feat/phone-mode`):** PC side (companion pairing,
-  `/ws/companion`, `PhoneRelay`) and glasses side (PC/Phone first screen, `PhoneScreen`) built and
-  tested (server tests with a fake companion, client tests, e2e 45/45). The Android companion
-  builds and is installed on the S25; not yet used for a session. Next
-  steps and questions: `architecture/phone-mode.md`.
+- **Phone mode (2026-09-27, branch `feat/phone-mode`):** used from the glasses at home
+  (`live (local)`: the video goes straight from the phone). **Redesigned 2026-09-29:** pairing and
+  proof on the phone, the server only a relay for the first connection, sessions that outlive it
+  (pings both ways over the DataChannel). Built and tested (server, client and companion tests);
+  not yet tried on the device. Next steps and questions: `architecture/phone-mode.md`.
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.

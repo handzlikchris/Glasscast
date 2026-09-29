@@ -3,10 +3,12 @@
 Who may start a session, and how. Nothing reaches the desktop without a human clicking
 **Approve** on the PC, or a device token that came out of such an approval less than 24 h ago.
 
-The phone companion app pairs through the same Approve popup but its own coordinator
-(`server/Phone/CompanionRegistry.cs`, token hash in `companion-grant.json`, tray **Forget
-phone**); see [phone-mode.md](phone-mode.md). Glasses sessions for either target use the
-approval and device token described here.
+This is the PC's pairing, for **PC sessions** only. Phone mode is different (see
+[phone-mode.md](phone-mode.md)): the companion app registers with the PC once through the same
+Approve popup (`server/Phone/CompanionRegistry.cs`, token hash in `companion-grant.json`, tray
+**Forget phone**), which only lets it use the PC as a meeting point; the **glasses pair with the
+phone itself** (a code on both screens, Approve on the phone) and prove themselves to the phone
+on every session. The PC's approval and device token play no part in a phone session.
 
 ## Files
 

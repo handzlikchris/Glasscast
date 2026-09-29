@@ -16,7 +16,7 @@ status) and these go one level deeper.
 | [glasses-client.md](glasses-client.md) | the React app: screens, gestures, focus navigation, Back, Type flow, local storage |
 | [pc-ui.md](pc-ui.md) | tray icon and menu, approve popup, session banner, cast frame, hotkey, alert notifications |
 | [deployment-and-networking.md](deployment-and-networking.md) | Caddy, router/ports, IIS, adapters, firewall, launch profiles, configuration keys |
-| [phone-mode.md](phone-mode.md) | controlling the Android phone: companion app, `/ws/companion`, `PhoneRelay`, the DataChannel protocol (plan + status) |
+| [phone-mode.md](phone-mode.md) | controlling the Android phone: why a server only for the first connection, pairing on the phone, `PhoneRelay`, the DataChannel protocol, sessions that outlive the internet (plan + status) |
 | [testing.md](testing.md) | xUnit layout, `TestServerHost` and fakes, the e2e harness and its hooks, isolated builds |
 
 ## System in one picture
