@@ -131,17 +131,15 @@ describe('pcSwipeAction', () => {
 });
 
 describe('phoneSwipeAction', () => {
-  it('single swipes swipe the phone; right twice is Type, down twice the app overview', () => {
-    expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down', count: 1 });
-    expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left', count: 1 });
-    // No Back on left twice any more: two pages.
-    expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'swipe', direction: 'left', count: 2 });
+  it('single swipes swipe the phone; right twice is Type, left twice the app overview', () => {
+    expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down' });
+    expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left' });
+    expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'apps' });
     expect(phoneSwipeAction('doubleRight')).toEqual({ kind: 'type' });
-    expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'apps' });
   });
 });
 
-describe('SwipeReader in a phone session (down, left and right wait)', () => {
+describe('SwipeReader in a phone session (left and right wait for a double)', () => {
   function phoneReader() {
     const { timers, run } = fakeTimers();
     const gestures: SwipeGesture[] = [];
@@ -149,30 +147,26 @@ describe('SwipeReader in a phone session (down, left and right wait)', () => {
     return { r, run, gestures };
   }
 
-  it('up scrolls at once, even twice; down twice is a double, one alone scrolls after the wait', () => {
+  it('up and down scroll at once, even twice; left twice is a double, one alone pages after the wait', () => {
     const { r, run, gestures } = phoneReader();
     r.swipe('up');
-    r.swipe('up');
-    expect(gestures).toEqual(['up', 'up']);
     r.swipe('down');
+    r.swipe('down');
+    expect(gestures).toEqual(['up', 'down', 'down']);
+    r.swipe('left');
     run(DOUBLE_SWIPE_MS - 50);
-    r.swipe('down');
-    expect(gestures).toEqual(['up', 'up', 'doubleDown']);
-    r.swipe('down');
-    expect(gestures).toEqual(['up', 'up', 'doubleDown']);
+    r.swipe('left');
+    expect(gestures).toEqual(['up', 'down', 'down', 'doubleLeft']);
+    r.swipe('left');
     run(DOUBLE_SWIPE_MS);
-    expect(gestures).toEqual(['up', 'up', 'doubleDown', 'down']);
+    expect(gestures).toEqual(['up', 'down', 'down', 'doubleLeft', 'left']);
   });
 
-  it('a waiting left that a down follows is still dropped; a waiting down that a left follows is kept', () => {
+  it('a waiting left that a down follows is dropped (the band reads some downs as left)', () => {
     const { r, run, gestures } = phoneReader();
     r.swipe('left');
     r.swipe('down');
     run(DOUBLE_SWIPE_MS);
     expect(gestures).toEqual(['down']);
-    r.swipe('down');
-    r.swipe('left');
-    run(DOUBLE_SWIPE_MS);
-    expect(gestures).toEqual(['down', 'down', 'left']);
   });
 });

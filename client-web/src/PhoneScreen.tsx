@@ -10,8 +10,8 @@
 //   cursor; a pinch taps there, two quick ones double-tap; a pinch then a second pinch held
 //   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
-//   up/down scroll around the cursor, left/right page (down, left and right after a 0.3 s wait
-//   for a second swipe), right twice opens Type, down twice opens the app
+//   up/down scroll around the cursor at once, left/right page (after a 0.3 s wait for a second
+//   swipe), right twice opens Type, left twice opens the app
 //   overview (swipe left/right through it, pinch to pick; Fit follows the app you pick).
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
@@ -88,8 +88,6 @@ const PHONE_STATUS: Record<PhoneState, string> = {
   live: 'phone sharing',
 };
 
-/** Left twice on the phone: the second page swipe waits for the first (220 ms) to finish. */
-const SECOND_SWIPE_MS = 300;
 const APPS_HINT = 'apps: swipe left/right, pinch to pick, Back to leave';
 
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
@@ -123,7 +121,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
   const touchSentAt = useRef(0);
   /**
-   * The phone's app overview is open (down twice, or Apps on the bar): left/right move through it
+   * The phone's app overview is open (left twice, or Apps on the bar): left/right move through it
    * at once (no wait for a double), up/down do nothing
    * (a card swiped up closes that app), a pinch picks one, Back leaves.
    */
@@ -445,10 +443,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     } else if (action.kind === 'apps') {
       openApps();
     } else {
-      const swipe = () => send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
-      swipe();
-      // A second one only once the first has played out: a new gesture on Android cancels one in progress.
-      if (action.count === 2) setTimeout(swipe, SECOND_SWIPE_MS);
+      send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
     }
   };
 

@@ -4,13 +4,11 @@
 // A thumb swipe on the Neural Band arrives as an arrow key. On the view:
 //
 //   swipe right twice      Type, on the PC and the phone
-//   swipe left twice       PC: next app shortcut (phone: two pages; Back is on the bar)
-//   swipe down twice       phone: the app overview (Recents): swipe left/right through the
-//                          apps, pinch to pick one (PC: up/down don't wait for a double)
-//   a single swipe         the target's plain action (scroll, pan, page) after DOUBLE_SWIPE_MS
-//                          without a second one; up acts at once everywhere, and on the PC
-//                          down too. On the phone left still waits, only so a down that follows
-//                          can drop it (below); left twice is simply two left swipes there.
+//   swipe left twice       PC: next app shortcut · phone: the app overview (Recents): swipe
+//                          left/right through the apps, pinch to pick one
+//   a single swipe         left/right: the target's plain action (pan, page) after
+//                          DOUBLE_SWIPE_MS without a second one; up/down act at once (scroll,
+//                          pan), on the PC and the phone alike
 //
 // A swipe that waits for a double does its plain action that much later. An up or down swipe
 // while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
@@ -142,37 +140,33 @@ export function pcSwipeAction(gesture: SwipeGesture, mode: ViewMode, pan: boolea
 }
 
 export type PhoneSwipeAction =
-  /** The finger swipe on the phone, `count` times (left twice: two pages). */
-  | { kind: 'swipe'; direction: Swipe; count: 1 | 2 }
+  | { kind: 'swipe'; direction: Swipe }
   | { kind: 'type' }
   /** The phone's app overview (Recents), to pick an app from with left/right and a pinch. */
   | { kind: 'apps' };
 
-/**
- * The swipes that wait for a double in a phone session. Up has no double and acts at once; left
- * has none either, but waits so a down right after it drops it (the band reads some downs as left).
- */
-export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
+/** The swipes that wait for a double in a phone session: left and right, as on the PC. */
+export const PHONE_DOUBLES: readonly Swipe[] = ['left', 'right'];
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
- * (up/down scroll, left/right page); right twice opens Type, down twice opens the app overview.
- * Kept simple (user's choice, 2026-09-29): no previous/next app on up/down twice, no Back on left
- * twice (Back is on the bar).
+ * (up/down scroll at once, left/right page); right twice opens Type, left twice the app overview.
+ * Kept simple (user's choice, 2026-09-29): nothing on up/down twice, so they never wait; Back is
+ * on the bar.
  */
 export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
   switch (gesture) {
     case 'doubleRight':
       return { kind: 'type' };
-    case 'doubleDown':
-      return { kind: 'apps' };
     case 'doubleLeft':
-      return { kind: 'swipe', direction: 'left', count: 2 };
-    // Up doesn't wait for a double in a phone session, so this never comes; a scroll if it did.
+      return { kind: 'apps' };
+    // Up and down don't wait for a double in a phone session, so these never come; a scroll if they did.
     case 'doubleUp':
-      return { kind: 'swipe', direction: 'up', count: 1 };
+      return { kind: 'swipe', direction: 'up' };
+    case 'doubleDown':
+      return { kind: 'swipe', direction: 'down' };
     default:
-      return { kind: 'swipe', direction: gesture, count: 1 };
+      return { kind: 'swipe', direction: gesture };
   }
 }
 
@@ -182,10 +176,9 @@ export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
     case 'right':
       return 'swipe right again for Type';
     case 'left':
-      return target === 'pc' ? 'swipe left again for the next app' : '';
+      return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for your apps';
     case 'up':
-      return '';
     case 'down':
-      return 'swipe down again for your apps';
+      return '';
   }
 }
