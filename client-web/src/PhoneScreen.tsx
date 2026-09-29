@@ -30,6 +30,7 @@ import {
   phoneText,
   regionOnView,
   scrollSwipe,
+  appsSwipe,
   squareAround,
   toFrame,
   zoomRegion,
@@ -87,6 +88,8 @@ const PHONE_STATUS: Record<PhoneState, string> = {
   live: 'phone sharing',
 };
 
+const APPS_HINT = 'apps: swipe left/right, pinch to pick, Back to leave';
+
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'back', label: 'Back' },
   { action: 'home', label: 'Home' },
@@ -117,6 +120,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
   const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
   const touchSentAt = useRef(0);
+  /**
+   * The phone's app overview is open (down twice, or Apps on the bar): left/right move through it
+   * at once (no double: left twice would be the phone's Back and close it), up/down do nothing
+   * (a card swiped up closes that app), a pinch picks one, Back leaves.
+   */
+  const pickingApps = useRef(false);
   /** A finger is down on the phone (tap-and-a-half). */
   const touchDown = useRef(false);
   const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
@@ -339,6 +348,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   // ---- focus: view, bar, type, region ----
   const back = () => {
     const current = focusRef.current;
+    if (current === 'view' && pickingApps.current) {
+      pickingApps.current = false;
+      send({ type: 'nav', action: 'back' }, 'left the apps');
+      return;
+    }
     if (current === 'region') finishRegion(false);
     else setFocus(current === 'view' ? 'bar' : 'view');
   };
@@ -360,6 +374,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   }, []);
 
   useLayoutEffect(() => {
+    // Leaving the view for the bar, Type or Region: the app overview's swipes are over.
+    if (focus !== 'view') pickingApps.current = false;
     if (focus === 'bar') {
       barRef.current?.querySelector('button')?.focus();
     } else if (focus !== 'type' && document.activeElement instanceof HTMLElement) {
@@ -383,6 +399,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         if (!swipe) return;
         e.preventDefault();
         e.stopPropagation();
+        if (pickingApps.current) {
+          swipes.current.cancel();
+          if (swipe === 'left' || swipe === 'right') send(appsSwipe(swipe), `apps: swipe ${swipe}`);
+          else setLastInput(APPS_HINT);
+          return;
+        }
         swipes.current.swipe(swipe);
       } else if (current === 'region') {
         const screenSize = phoneScreen.current;
@@ -421,7 +443,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     } else if (action.kind === 'back') {
       send({ type: 'nav', action: 'back' }, 'swipe left twice → back');
     } else if (action.kind === 'apps') {
-      send({ type: 'nav', action: 'recents' }, 'swipe down twice → apps: left/right, pinch to pick');
+      openApps();
     } else {
       send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
     }
@@ -468,6 +490,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
     switch (event.kind) {
       case 'tap':
+        // Picking an app in the overview: the tap takes it, and the overview is gone.
+        pickingApps.current = false;
         if (pendingTap.current) {
           const at = pendingTap.current.at;
           clearPendingTap();
@@ -558,8 +582,18 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
   // ---- bar and type ----
   const nav = (action: PhoneNav) => {
-    send({ type: 'nav', action }, action);
+    if (action === 'recents') {
+      openApps();
+    } else {
+      pickingApps.current = false;
+      send({ type: 'nav', action }, action);
+    }
     setFocus('view');
+  };
+
+  const openApps = () => {
+    pickingApps.current = true;
+    send({ type: 'nav', action: 'recents' }, APPS_HINT);
   };
 
   const sendText = (text: string) => {

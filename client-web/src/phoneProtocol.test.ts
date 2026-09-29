@@ -6,6 +6,7 @@ import {
   phoneText,
   regionOnView,
   scrollSwipe,
+  appsSwipe,
   squareAround,
   squareRegion,
   toFrame,
@@ -47,6 +48,13 @@ describe('frame mapping', () => {
     expect(toFrame({ x: 161 + 277 / 2, y: 300 }, frame)).toEqual({ x: 0.5, y: 0.5 });
     // Outside the frame clamps to its edge.
     expect(toFrame({ x: 10, y: 700 }, frame)).toEqual({ x: 0, y: 1 });
+  });
+});
+
+describe('appsSwipe', () => {
+  it('swipes across the middle of the screen, whatever the cursor', () => {
+    expect(appsSwipe('left')).toMatchObject({ type: 'swipe', x1: 0.75, x2: 0.25, y1: 0.5, y2: 0.5 });
+    expect(appsSwipe('right')).toMatchObject({ x1: 0.25, x2: 0.75 });
   });
 });
 

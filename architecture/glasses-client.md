@@ -94,7 +94,7 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 | up once | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor (up has no double, so nothing to wait for) |
 | down once | at once, as up | after 0.3 s: scroll the phone around the cursor |
 | up, up | (acts at once, no double) | nothing special: two scrolls |
-| down, down (within 0.3 s) | (acts at once, no double) | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; Fit then follows it (or the Region crop comes back) |
+| down, down (within 0.3 s) | (acts at once, no double) | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; Fit then follows it (or the Region crop comes back). While it's open, left/right act at once across the middle of the screen (no double: left twice would be Back and close it), up/down do nothing (a card swiped up closes that app), Back leaves it |
 | right, right (within 0.3 s) | **Type** | **Type** |
 | left, left (within 0.3 s) | **next app** shortcut | the phone's **Back** |
 | right or left once | after 0.3 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.3 s: page (a sideways swipe on the phone) |

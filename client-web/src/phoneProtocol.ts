@@ -149,6 +149,15 @@ export function scrollSwipe(direction: SwipeDirection, at: Point): ToPhone {
   return { type: 'swipe', x1, y1, x2, y2, ms: SWIPE_MS };
 }
 
+/**
+ * Moving through the app overview (Recents): a sideways swipe across the middle of the screen,
+ * where the cards are, wherever the cursor is. "left" moves the finger left, as a page swipe does.
+ */
+export function appsSwipe(direction: 'left' | 'right'): ToPhone {
+  const [x1, x2] = direction === 'left' ? [0.75, 0.25] : [0.25, 0.75];
+  return { type: 'swipe', x1, y1: 0.5, x2, y2: 0.5, ms: SWIPE_MS };
+}
+
 const LINE_BREAKS = new Set([10, 13, 9, 0x2028, 0x2029]);
 
 /** Text for the phone in typeText-sized pieces, with line breaks flattened (text never presses Enter). */
