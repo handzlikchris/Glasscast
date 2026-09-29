@@ -525,7 +525,9 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   logged; `media error` / `server error` close reasons). Open: F5-F14 (low), e.g. the Approve
   popup's stale "End session" text, stale cursor before clicks, region file written per pan step.
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
-  the task". `phone-direct-dat.md` (2026-09-29): a native DAT glasses app instead of the web app was
+  the task". `square-screen-keyboard.md` (2026-09-29, idea): a smaller keyboard on the phone's square screen
+  (switch keyboards with Square/Reset, or an invisible keyboard in the companion).
+  `phone-direct-dat.md` (2026-09-29): a native DAT glasses app instead of the web app was
   **looked at and not pursued** (no live video in DAT Display; the companion already is the
   native app); lists extras for later (mic dictation, cards, buttons, camera). `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
   mic via Meta's DAT) is planned but **on hold** at the user's request.
