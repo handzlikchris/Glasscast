@@ -24,6 +24,8 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** A pinch-drag holds this long before moving: the first 0.2 s of a pinch is a tap's grace (client gestures.ts). */
+const PINCH_GRACE_WAIT_MS = 250;
 const input = async () => (await fetch(`${BASE}/__harness/input`)).json();
 const startedAt = Date.now();
 /** Stats log lines written since this run started (the harness logs to %TEMP%/glasses-e2e-stats). */
@@ -155,6 +157,7 @@ try {
   await tapBar('button[data-mode="pointer"]');
   await page.mouse.move(300, 300);
   await page.mouse.down();
+  await sleep(PINCH_GRACE_WAIT_MS); // a pinch drags only after its 0.2 s grace
   await page.mouse.move(360, 330, { steps: 10 });
   await page.mouse.up();
   await sleep(200);
@@ -202,6 +205,7 @@ try {
   await sleep(500);
   await page.mouse.move(300, 300);
   await page.mouse.down();
+  await sleep(PINCH_GRACE_WAIT_MS); // a pinch drags only after its 0.2 s grace
   await page.mouse.move(250, 280, { steps: 8 });
   await page.mouse.up();
   await shot('5-overview');
@@ -215,6 +219,7 @@ try {
   const pushRight = async () => {
     await page.mouse.move(60, 300);
     await page.mouse.down();
+    await sleep(PINCH_GRACE_WAIT_MS); // a pinch drags only after its 0.2 s grace
     await page.mouse.move(590, 300, { steps: 40 });
     await page.mouse.up();
     await sleep(600);
@@ -232,6 +237,7 @@ try {
     const from = (await input()).length;
     await page.mouse.move(300, fromY);
     await page.mouse.down();
+    await sleep(PINCH_GRACE_WAIT_MS); // a pinch drags only after its 0.2 s grace
     await page.mouse.move(300, toY, { steps: 40 });
     await page.mouse.up();
     await sleep(400);
@@ -300,6 +306,7 @@ try {
     await page.mouse.click(300, 300);
     await sleep(100);
     await page.mouse.down();
+    await sleep(PINCH_GRACE_WAIT_MS); // a pinch drags only after its 0.2 s grace
     if (moveBy) {
       await page.mouse.move(300 + moveBy, 320, { steps: 6 });
       await sleep(100);
