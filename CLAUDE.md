@@ -453,8 +453,9 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 - Web apps get motion/orientation, phone GPS, Neural Band input and local storage.
   **No camera and no microphone** (`getUserMedia` fails). The glasses camera is only available
   to phone apps through Meta's Wearables Device Access Toolkit.
-- Budget guidance: under 300 KB first load and fewer than 15 requests. We're at ~247 KB JS
-  (~78 KB gzipped) + 3 KB CSS in 3 requests.
+- Budget guidance: under 300 KB first load and fewer than 15 requests. We're at ~291 KB JS
+  (~92 KB gzipped) + 4.5 KB CSS in 3 requests (2026-09-29): close to the line, so watch what
+  new code costs (gzipped it's far under).
 - **Verified on the device (2026-09-25):** WebRTC H.264 video plays in the glasses WebView, over
   home Wi-Fi and via the phone's mobile data. User agent contains `Greatwhite` (Android 14 WebView).
 - **Input as the page sees it:** thumb swipes → `ArrowUp/Down/Left/Right` keydowns; an index pinch →
