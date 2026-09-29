@@ -152,11 +152,15 @@ export function scrollSwipe(direction: SwipeDirection, at: Point): ToPhone {
 /**
  * Moving through the app overview (Recents): a sideways swipe across the middle of the screen,
  * where the cards are, wherever the cursor is. "left" moves the finger left, as a page swipe does.
+ * Shorter and slower than a page swipe: half the width in 220 ms was a fling that skipped two
+ * apps (seen on the S25 at 1080×1080, density 320).
  */
 export function appsSwipe(direction: 'left' | 'right'): ToPhone {
-  const [x1, x2] = direction === 'left' ? [0.75, 0.25] : [0.25, 0.75];
-  return { type: 'swipe', x1, y1: 0.5, x2, y2: 0.5, ms: SWIPE_MS };
+  const [x1, x2] = direction === 'left' ? [0.68, 0.32] : [0.32, 0.68];
+  return { type: 'swipe', x1, y1: 0.5, x2, y2: 0.5, ms: APPS_SWIPE_MS };
 }
+
+const APPS_SWIPE_MS = 350;
 
 const LINE_BREAKS = new Set([10, 13, 9, 0x2028, 0x2029]);
 
