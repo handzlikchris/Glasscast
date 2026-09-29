@@ -131,17 +131,16 @@ describe('pcSwipeAction', () => {
 });
 
 describe('phoneSwipeAction', () => {
-  it('single swipes swipe the phone; right twice is Type, left twice Back, up/down twice switch apps', () => {
+  it('single swipes swipe the phone; right twice is Type, left twice Back, down twice the app overview', () => {
     expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down' });
     expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left' });
     expect(phoneSwipeAction('doubleRight')).toEqual({ kind: 'type' });
     expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'back' });
-    expect(phoneSwipeAction('doubleUp')).toEqual({ kind: 'app', dir: 'previous' });
-    expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'app', dir: 'next' });
+    expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'apps' });
   });
 });
 
-describe('SwipeReader in a phone session (every direction waits for a double)', () => {
+describe('SwipeReader in a phone session (down, left and right wait for a double)', () => {
   function phoneReader() {
     const { timers, run } = fakeTimers();
     const gestures: SwipeGesture[] = [];
@@ -149,18 +148,19 @@ describe('SwipeReader in a phone session (every direction waits for a double)', 
     return { r, run, gestures };
   }
 
-  it('up twice and down twice are doubles; one alone scrolls after the wait', () => {
+  it('up scrolls at once, even twice; down twice is a double, one alone scrolls after the wait', () => {
     const { r, run, gestures } = phoneReader();
     r.swipe('up');
     r.swipe('up');
+    expect(gestures).toEqual(['up', 'up']);
     r.swipe('down');
     run(DOUBLE_SWIPE_MS - 50);
     r.swipe('down');
-    expect(gestures).toEqual(['doubleUp', 'doubleDown']);
+    expect(gestures).toEqual(['up', 'up', 'doubleDown']);
     r.swipe('down');
-    expect(gestures).toEqual(['doubleUp', 'doubleDown']);
+    expect(gestures).toEqual(['up', 'up', 'doubleDown']);
     run(DOUBLE_SWIPE_MS);
-    expect(gestures).toEqual(['doubleUp', 'doubleDown', 'down']);
+    expect(gestures).toEqual(['up', 'up', 'doubleDown', 'down']);
   });
 
   it('a waiting left that a down follows is still dropped; a waiting down that a left follows is kept', () => {

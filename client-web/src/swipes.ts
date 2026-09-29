@@ -5,10 +5,11 @@
 //
 //   swipe right twice      Type, on the PC and the phone
 //   swipe left twice       PC: next app shortcut · phone: Back
-//   swipe up twice         phone: the previous app (PC: up/down don't wait for a double)
-//   swipe down twice       phone: the next app
+//   swipe down twice       phone: the app overview (Recents): swipe left/right through the
+//                          apps, pinch to pick one (PC: up/down don't wait for a double)
 //   a single swipe         the target's plain action (scroll, pan, page) after DOUBLE_SWIPE_MS
-//                          without a second one; on the PC up/down act at once
+//                          without a second one; up acts at once everywhere (nothing on up
+//                          twice, so there's nothing to wait for), and on the PC down too
 //
 // A swipe that waits for a double does its plain action that much later. An up or down swipe
 // while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
@@ -143,16 +144,17 @@ export type PhoneSwipeAction =
   | { kind: 'swipe'; direction: Swipe }
   | { kind: 'type' }
   | { kind: 'back' }
-  /** The phone's previous (older) or next (newer) recently used app, followed by Fit. */
-  | { kind: 'app'; dir: 'previous' | 'next' };
+  /** The phone's app overview (Recents), to pick an app from with left/right and a pinch. */
+  | { kind: 'apps' };
 
-/** The swipes that wait for a double in a phone session: all four. */
-export const PHONE_DOUBLES: readonly Swipe[] = ['up', 'down', 'left', 'right'];
+/** The swipes that wait for a double in a phone session (up has no double: it scrolls at once). */
+export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
  * (up/down scroll, left/right page); right twice opens Type, left twice presses the phone's Back,
- * up twice goes to the previous app and down twice to the next one.
+ * down twice opens the app overview (user's choice, 2026-09-29: it replaced stepping through the
+ * previous/next app with up/down twice).
  */
 export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
   switch (gesture) {
@@ -160,10 +162,11 @@ export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
       return { kind: 'type' };
     case 'doubleLeft':
       return { kind: 'back' };
-    case 'doubleUp':
-      return { kind: 'app', dir: 'previous' };
     case 'doubleDown':
-      return { kind: 'app', dir: 'next' };
+      return { kind: 'apps' };
+    // Up doesn't wait for a double in a phone session, so this never comes; a scroll if it did.
+    case 'doubleUp':
+      return { kind: 'swipe', direction: 'up' };
     default:
       return { kind: 'swipe', direction: gesture };
   }
@@ -177,8 +180,8 @@ export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
     case 'left':
       return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for Back';
     case 'up':
-      return 'swipe up again for the previous app';
+      return '';
     case 'down':
-      return 'swipe down again for the next app';
+      return 'swipe down again for your apps';
   }
 }

@@ -11,8 +11,8 @@
 //   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
 //   up/down scroll around the cursor, left/right page (each after a 0.3 s wait for a second
-//   swipe), right twice opens Type, left twice presses the phone's Back, up twice goes to the
-//   previous app and down twice to the next one (the phone brings it forward and Fit follows it).
+//   swipe), right twice opens Type, left twice presses the phone's Back, down twice opens the app
+//   overview (swipe left/right through it, pinch to pick; Fit follows the app you pick).
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
@@ -420,8 +420,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       setLastInput('swipe right twice → type');
     } else if (action.kind === 'back') {
       send({ type: 'nav', action: 'back' }, 'swipe left twice → back');
-    } else if (action.kind === 'app') {
-      send({ type: 'switchApp', dir: action.dir }, `swipe ${action.dir === 'previous' ? 'up' : 'down'} twice → ${action.dir} app`);
+    } else if (action.kind === 'apps') {
+      send({ type: 'nav', action: 'recents' }, 'swipe down twice → apps: left/right, pinch to pick');
     } else {
       send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
     }

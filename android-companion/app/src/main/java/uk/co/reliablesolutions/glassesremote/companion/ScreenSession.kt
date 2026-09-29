@@ -96,6 +96,11 @@ class ScreenSession(
     /** The app Fit follows (set by Fit and by the glasses' previous/next app swipes). */
     private var followPackage = prefs.followPackage
     private var refitPending = false
+    /**
+     * The app overview is open (down twice, or Apps on the bar): the whole screen shows, and the
+     * app picked next is followed (with Fit on) or this crop comes back (without).
+     */
+    private var picking: Region? = null
     private val pc: PeerConnection
     private val channel: DataChannel
     private val screenWidth: Int
@@ -206,6 +211,7 @@ class ScreenSession(
         InputService.instance?.let { input ->
             input.keepScreenOn(false)
             input.onWindowsChanged = null
+            input.onAppFront = null
             // A finger still down (the glasses left mid-drag) comes up.
             input.releaseTouch()
         }
@@ -306,13 +312,32 @@ class ScreenSession(
             is InputCommand.Swipe -> input?.swipe(
                 screenX(command.x1), screenY(command.y1), screenX(command.x2), screenY(command.y2), command.ms,
             )
-            is InputCommand.Nav -> input?.nav(command.action)
+            is InputCommand.Nav -> {
+                input?.nav(command.action)
+                if (command.action == NavAction.RECENTS) pickApp()
+            }
             is InputCommand.TypeText -> sendResult("typeText", input?.typeText(command.text) ?: false)
             is InputCommand.Key -> sendResult("key", input?.key(command.key) ?: false)
         }
     }
 
+    /** Shows the whole screen while the app overview is open, until an app comes to the front. */
+    private fun pickApp() {
+        if (picking == null) picking = crop.region
+        crop.region = Region.FULL
+        sendScreen()
+        InputService.instance?.onAppFront = { pkg -> post { if (!closed) appPicked(pkg) } }
+    }
+
+    private fun appPicked(pkg: String) {
+        val before = picking ?: return
+        picking = null
+        InputService.instance?.onAppFront = null
+        if (follow) followApp(pkg) else setRegion(before)
+    }
+
     private fun setRegion(region: Region) {
+        picking = null
         crop.region = region
         prefs.region = region
         sendScreen()
@@ -346,7 +371,7 @@ class ScreenSession(
      * isn't on screen, the crop stays. Without a followed app: the floating window, or everything.
      */
     private fun refit() {
-        if (!follow) return
+        if (!follow || picking != null) return
         val input = InputService.instance ?: return
         val pkg = followPackage
         val bounds = if (pkg != null) input.appWindow(pkg) ?: return else input.floatingAppWindow(screenWidth, screenHeight)

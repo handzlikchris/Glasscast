@@ -174,7 +174,9 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   `longPress{x,y}` (still parsed, no longer sent), `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
   flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`,
-  `fitWindow{}`, `switchApp{dir}` (`previous`/`next`), `ping{t}` (every 2 s: the phone's only
+  `fitWindow{}`, `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: down twice
+  now opens the app overview with `nav{recents}`, and the phone shows the whole screen until an
+  app comes to the front, which Fit then follows), `ping{t}` (every 2 s: the phone's only
   sign the glasses are there), `end{}` (End on the glasses).
 - Phone → glasses: `screen{width, height, region, follow, app?}`, `result{of, ok}`, `pong{t}`,
   `bye{reason}` just before it closes: `stopped` (Stop / End session on the phone), `capture`

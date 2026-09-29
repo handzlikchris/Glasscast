@@ -63,7 +63,11 @@ class InputService : AccessibilityService() {
     @Volatile
     var onWindowsChanged: (() -> Unit)? = null
 
-    /** Apps that came to the front, newest first (the glasses' previous/next app swipes). */
+    /** Called (on the main thread) when an app you could open from the launcher comes to the front; set by a live session. */
+    @Volatile
+    var onAppFront: ((String) -> Unit)? = null
+
+    /** Apps that came to the front, newest first (the glasses' previous/next app message). */
     val recentApps = RecentApps()
     private val launchable = HashMap<String, Boolean>()
     private val homePackage: String? by lazy {
@@ -94,7 +98,10 @@ class InputService : AccessibilityService() {
                 // An app's screen came up: remember it for previous/next app, if it's an app you
                 // could open from the launcher (not the system UI, a keyboard, the home screen or us).
                 val pkg = event.packageName?.toString() ?: return
-                if (pkg != packageName && pkg != homePackage && isLaunchable(pkg)) recentApps.used(pkg)
+                if (pkg != packageName && pkg != homePackage && isLaunchable(pkg)) {
+                    recentApps.used(pkg)
+                    onAppFront?.invoke(pkg)
+                }
             }
         }
     }

@@ -194,10 +194,11 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
-  twice → next app** (PC) / **Back** (phone); phone only: **up twice → previous app, down twice →
-  next app** (Alt+Tab over the phone's recently used apps; Fit follows it). Doubles within 0.3 s.
-  A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); on
-  the PC up/down act at once. Up/down drops a waiting left (the band reads some down-swipes as left).
+  twice → next app** (PC) / **Back** (phone); phone only: **down twice → the app overview**
+  (Recents: swipe left/right, pinch to pick; Fit follows the pick), up twice nothing (user's
+  choice, 2026-09-29, replacing previous/next app). Doubles within 0.3 s.
+  A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); up
+  acts at once on both, and down on the PC. Up/down drops a waiting left (the band reads some down-swipes as left).
 - **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**
   like a laptop touchpad (user's choice): pinch = click / tap (after 350 ms: two quick ones =
   double-click / double tap); pinch and move = cursor only; **pinch, then pinch and hold (tap-and-
