@@ -10,8 +10,8 @@
 //   cursor; a pinch taps there, two quick ones double-tap; a pinch then a second pinch held
 //   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
-//   up/down scroll around the cursor at once, left/right page (after a 0.3 s wait for a second
-//   swipe), right twice opens Type, left twice opens the app
+//   up scrolls around the cursor at once, down scrolls and left/right page after a 0.3 s wait for
+//   a second swipe; right twice opens Type, down twice presses Back, left twice opens the app
 //   overview (swipe left/right through it, pinch to pick; Fit follows the app you pick).
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
 //   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
@@ -440,6 +440,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (action.kind === 'type') {
       setFocus('type');
       setLastInput('swipe right twice → type');
+    } else if (action.kind === 'back') {
+      send({ type: 'nav', action: 'back' }, 'swipe down twice → back');
     } else if (action.kind === 'apps') {
       openApps();
     } else {

@@ -131,15 +131,16 @@ describe('pcSwipeAction', () => {
 });
 
 describe('phoneSwipeAction', () => {
-  it('single swipes swipe the phone; right twice is Type, left twice the app overview', () => {
+  it('single swipes swipe the phone; right twice is Type, left twice the app overview, down twice Back', () => {
     expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down' });
     expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left' });
     expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'apps' });
+    expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'back' });
     expect(phoneSwipeAction('doubleRight')).toEqual({ kind: 'type' });
   });
 });
 
-describe('SwipeReader in a phone session (left and right wait for a double)', () => {
+describe('SwipeReader in a phone session (down, left and right wait for a double)', () => {
   function phoneReader() {
     const { timers, run } = fakeTimers();
     const gestures: SwipeGesture[] = [];
@@ -147,19 +148,20 @@ describe('SwipeReader in a phone session (left and right wait for a double)', ()
     return { r, run, gestures };
   }
 
-  it('up and down scroll at once, even twice; left twice is a double, one alone pages after the wait', () => {
+  it('up scrolls at once, even twice; down and left twice are doubles, one alone acts after the wait', () => {
     const { r, run, gestures } = phoneReader();
     r.swipe('up');
+    r.swipe('up');
+    expect(gestures).toEqual(['up', 'up']);
     r.swipe('down');
-    r.swipe('down');
-    expect(gestures).toEqual(['up', 'down', 'down']);
-    r.swipe('left');
     run(DOUBLE_SWIPE_MS - 50);
+    r.swipe('down');
     r.swipe('left');
-    expect(gestures).toEqual(['up', 'down', 'down', 'doubleLeft']);
     r.swipe('left');
+    expect(gestures).toEqual(['up', 'up', 'doubleDown', 'doubleLeft']);
+    r.swipe('down');
     run(DOUBLE_SWIPE_MS);
-    expect(gestures).toEqual(['up', 'down', 'down', 'doubleLeft', 'left']);
+    expect(gestures).toEqual(['up', 'up', 'doubleDown', 'doubleLeft', 'down']);
   });
 
   it('a waiting left that a down follows is dropped (the band reads some downs as left)', () => {

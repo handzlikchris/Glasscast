@@ -6,9 +6,10 @@
 //   swipe right twice      Type, on the PC and the phone
 //   swipe left twice       PC: next app shortcut · phone: the app overview (Recents): swipe
 //                          left/right through the apps, pinch to pick one
-//   a single swipe         left/right: the target's plain action (pan, page) after
-//                          DOUBLE_SWIPE_MS without a second one; up/down act at once (scroll,
-//                          pan), on the PC and the phone alike
+//   swipe down twice       phone: Back (closes the keyboard, a dialog, goes back a screen)
+//   a single swipe         the target's plain action (scroll, pan, page) after
+//                          DOUBLE_SWIPE_MS without a second one; up acts at once everywhere,
+//                          and on the PC down too
 //
 // A swipe that waits for a double does its plain action that much later. An up or down swipe
 // while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
@@ -142,17 +143,19 @@ export function pcSwipeAction(gesture: SwipeGesture, mode: ViewMode, pan: boolea
 export type PhoneSwipeAction =
   | { kind: 'swipe'; direction: Swipe }
   | { kind: 'type' }
+  /** The phone's Back. */
+  | { kind: 'back' }
   /** The phone's app overview (Recents), to pick an app from with left/right and a pinch. */
   | { kind: 'apps' };
 
-/** The swipes that wait for a double in a phone session: left and right, as on the PC. */
-export const PHONE_DOUBLES: readonly Swipe[] = ['left', 'right'];
+/** The swipes that wait for a double in a phone session; up has none and scrolls at once. */
+export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
- * (up/down scroll at once, left/right page); right twice opens Type, left twice the app overview.
- * Kept simple (user's choice, 2026-09-29): nothing on up/down twice, so they never wait; Back is
- * on the bar.
+ * (up/down scroll, left/right page); right twice opens Type, left twice the app overview, down
+ * twice presses Back (user's choices, 2026-09-29: few shortcuts; Back is needed to close the
+ * keyboard). Nothing on up twice, so up never waits.
  */
 export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
   switch (gesture) {
@@ -160,11 +163,11 @@ export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
       return { kind: 'type' };
     case 'doubleLeft':
       return { kind: 'apps' };
-    // Up and down don't wait for a double in a phone session, so these never come; a scroll if they did.
+    case 'doubleDown':
+      return { kind: 'back' };
+    // Up doesn't wait for a double in a phone session, so this never comes; a scroll if it did.
     case 'doubleUp':
       return { kind: 'swipe', direction: 'up' };
-    case 'doubleDown':
-      return { kind: 'swipe', direction: 'down' };
     default:
       return { kind: 'swipe', direction: gesture };
   }
@@ -178,7 +181,8 @@ export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
     case 'left':
       return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for your apps';
     case 'up':
-    case 'down':
       return '';
+    case 'down':
+      return target === 'phone' ? 'swipe down again for Back' : '';
   }
 }

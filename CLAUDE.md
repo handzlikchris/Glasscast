@@ -197,8 +197,9 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
   twice → next app** (PC) / **the app overview** (phone: Recents; swipe left/right, which act at
-  once there, pinch to pick, Back leaves; Fit follows the pick). Nothing on up/down twice, and
-  no Back on a swipe: it's on the bar (user's choice, 2026-09-29). Doubles within 0.3 s.
+  once there, pinch to pick, Back leaves; Fit follows the pick); phone only: **down twice →
+  Back** (closes the keyboard). Nothing on up twice, so up scrolls at once (user's choices,
+  2026-09-29). Doubles within 0.3 s.
   A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); up
   acts at once on both, and down on the PC. Up/down drops a waiting left (the band reads some down-swipes as left).
 - **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**

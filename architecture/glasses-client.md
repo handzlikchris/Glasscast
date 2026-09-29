@@ -93,10 +93,12 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 
 | Swipe on the view | PC session | Phone session |
 | --- | --- | --- |
-| up / down once | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor |
-| up, up / down, down | (act at once, no double) | two scrolls (no double on the phone either) |
+| up once | at once: scroll (Pointer mode), pan (Pan on, View, Scroll) | at once: scroll the phone around the cursor |
+| down once | at once, as up | after 0.3 s: scroll the phone around the cursor |
+| up, up | (acts at once, no double) | two scrolls |
+| down, down (within 0.3 s) | (acts at once, no double) | the phone's **Back** (closes the keyboard, a dialog, goes back a screen; user's choice, 2026-09-29) |
 | right, right (within 0.3 s) | **Type** | **Type** |
-| left, left (within 0.3 s) | **next app** shortcut | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; Fit then follows it (or the Region crop comes back). While it's open, left/right act at once across the middle of the screen, up/down do nothing (a card swiped up closes that app), Back leaves it. No Back on a swipe: it's on the bar (user's choice, 2026-09-29) |
+| left, left (within 0.3 s) | **next app** shortcut | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; Fit then follows it (or the Region crop comes back). While it's open, left/right act at once across the middle of the screen, up/down do nothing (a card swiped up closes that app), Back leaves it |
 | right or left once | after 0.3 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.3 s: page (a sideways swipe on the phone) |
 
 - Why doubles: the shortcuts are the same on both targets, and a single stray swipe can't open
