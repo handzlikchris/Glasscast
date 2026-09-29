@@ -1,8 +1,9 @@
 // Getting from "Phone" on the first screen to a WebRTC connection with the phone, through the
 // relay (phoneSignal.ts): pair if needed (a code on both screens, Approve on the phone), prove
 // each other (phoneTrust.ts), then take the phone's signed offer and send a signed answer. Once
-// the DataChannel is open, connected() closes the relay: from then on the session needs neither
-// the PC nor the internet, only the link between the glasses and the phone.
+// the DataChannel is open, connected() closes the relay: from then on the session doesn't need
+// the server. (It still needs the phone online: Meta's app takes the glasses' link down when the
+// phone loses internet; architecture/phone-mode.md, "What it can't survive".)
 import { describeRelayClose, type FromRelay, type IceCandidate, type PhoneState, type RelayHandlers, type RelaySocket } from './phoneSignal';
 import { forgetPairing, Handshake, loadPairing, PairingExchange, type PairingResult } from './phoneTrust';
 

@@ -27,7 +27,7 @@ public sealed record PhoneServices(
 /// as opaque strings; the PC holds no secret of the glasses' or the phone's.
 ///
 /// Once the video is up the glasses close the relay, and the session goes on without the PC:
-/// losing the internet (or this PC) doesn't end it (architecture/phone-mode.md).
+/// losing this PC (or its internet) doesn't end it (architecture/phone-mode.md).
 ///
 /// The glasses may send only pairing, authentication, signalling and ping messages here: never
 /// input, which goes straight to the phone over WebRTC.

@@ -8,7 +8,6 @@ import android.media.projection.MediaProjection
 import android.util.Log
 import android.view.Display
 import org.json.JSONObject
-import org.webrtc.CandidatePairChangeEvent
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
@@ -28,7 +27,6 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
-import java.net.NetworkInterface
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import kotlin.math.abs
@@ -116,15 +114,7 @@ class ScreenSession(
 
     init {
         initialize(context)
-        logInterfaces()
         factory = PeerConnectionFactory.builder()
-            // Android's network monitor only knows the phone's own networks (Wi-Fi, mobile data).
-            // The glasses reach the phone through Meta's app, which hands their packets to one of
-            // the phone's addresses; the only one that needs no internet is on Meta's Wi-Fi Direct
-            // group (p2p-wlan0-0, 192.168.49.1), which the monitor doesn't list. Without it,
-            // every interface is used, so the connection can move there when the phone loses its
-            // Wi-Fi network or mobile data (architecture/phone-mode.md, "Links").
-            .setOptions(PeerConnectionFactory.Options().apply { disableNetworkMonitor = true })
             // Hardware H.264 (Constrained Baseline, which the glasses decode) and VP8.
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, false))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
@@ -155,9 +145,6 @@ class ScreenSession(
             // Keep gathering: the phone may move between Wi-Fi and mobile data mid-session.
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
-            // Keep the other candidate pairs checked, so a switch is quick when the chosen one's
-            // address goes away (the phone lost its Wi-Fi network or its mobile data).
-            iceBackupCandidatePairPingInterval = 2000
         }
         pc = factory.createPeerConnection(config, Observer())
             ?: throw IllegalStateException("no peer connection")
@@ -206,7 +193,6 @@ class ScreenSession(
 
     fun addCandidate(candidate: String, sdpMid: String?, sdpMLineIndex: Int) {
         if (closed) return
-        Log.i(TAG, "glasses candidate $candidate")
         pc.addIceCandidate(IceCandidate(sdpMid ?: "", sdpMLineIndex, candidate))
     }
 
@@ -239,19 +225,6 @@ class ScreenSession(
         if (closed) return
         Log.i(TAG, "session ended: $reason")
         onEnded(reason)
-    }
-
-    /**
-     * Which links the phone has (for working out which one the glasses reach it over; addresses
-     * of this phone only, never the glasses' input).
-     */
-    private fun logInterfaces() {
-        runCatching {
-            NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().filter { it.isUp }.forEach { nif ->
-                val addresses = nif.inetAddresses.toList().joinToString { it.hostAddress ?: "?" }
-                Log.i(TAG, "interface ${nif.name}: $addresses")
-            }
-        }.onFailure { Log.w(TAG, "interfaces not listed", it) }
     }
 
     /** Ends a session whose glasses went quiet, or that never connected. */
@@ -454,7 +427,6 @@ class ScreenSession(
 
     private inner class Observer : PeerConnection.Observer {
         override fun onIceCandidate(candidate: IceCandidate) = post {
-            Log.i(TAG, "local candidate ${candidate.sdp}")
             if (!closed) {
                 signal(
                     JSONObject().put("type", "iceCandidate").put("candidate", candidate.sdp)
@@ -473,13 +445,7 @@ class ScreenSession(
         }
 
         override fun onSignalingChange(state: PeerConnection.SignalingState) {}
-        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-            Log.i(TAG, "ice $state")
-        }
-
-        override fun onSelectedCandidatePairChanged(event: CandidatePairChangeEvent) {
-            Log.i(TAG, "pair: local ${event.local.sdp} | remote ${event.remote.sdp} (${event.reason})")
-        }
+        override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
         override fun onIceConnectionReceivingChange(receiving: Boolean) {}
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
         override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}

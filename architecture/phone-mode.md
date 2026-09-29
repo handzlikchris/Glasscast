@@ -1,9 +1,9 @@
 # Phone mode: controlling the Android phone from the glasses
 
 Status (2026-09-29, branch `feat/phone-mode`): P1–P3 built and used from the glasses (video and
-input over the LAN, `live (local)`); P4 started (Region, Fit). **Redesigned 2026-09-29:** the
-glasses pair with the **phone**, not the PC, and a running session no longer needs the PC or the
-internet. Built and tested (server, client and companion tests); not yet tried on the device.
+input, `live (local)`); P4 started (Region, Fit). **Redesigned 2026-09-29:** the glasses pair
+with the **phone**, not the PC (works on the device), and a running session no longer needs the
+PC. It does need the phone online: see "What it can't survive".
 
 The first screen of the glasses app asks **PC or Phone**. PC is everything else in this repo.
 Phone connects to an **Android companion app** on the user's Samsung S25 (unrooted, no ADB at
@@ -18,7 +18,7 @@ glasses web app ──WSS /ws/session {type:"phone"}──► server ◄──WS
       ▲   │                                         PhoneRelay                            │   ▲
       │   └──────────── WebRTC DataChannel "input": tap, swipe, nav, text, ping, end ─────►│   │
       └──────────────── WebRTC video: the phone's screen (MediaProjection, HW H.264) ─────┘   │
-                        (the glasses' own link to the phone: no internet needed)  AccessibilityService
+                        (through Meta's app on the phone, over its Wi-Fi Direct link) AccessibilityService
 ```
 
 1. The glasses open a **relay** through the server (today this PC; anything that serves the web
@@ -28,7 +28,8 @@ glasses web app ──WSS /ws/session {type:"phone"}──► server ◄──WS
 3. The phone asks for Android's capture consent, then offers WebRTC (video + DataChannel), its
    offer MACed with the session key; the glasses check it and answer, MACed too.
 4. When the DataChannel opens, **the glasses close the relay**. From then on the session lives
-   on the direct connection only: it survives losing the internet, the server, or this PC.
+   on the direct connection only: it survives losing the server or this PC, but not the phone
+   losing internet (below).
 
 ## Why it's built this way
 
@@ -75,33 +76,29 @@ would add nothing there.
 ### Why the session outlives the server
 
 Video and input never went through the server; only the setup did. Before 2026-09-29 the
-session still ended when the glasses' or the companion's socket to the PC dropped (a dead spot
-on mobile data ended it). Now each side watches the other over the DataChannel instead: the
-glasses ping every 2 s and end after 10 s of silence; the phone ends after 15 s. The glasses
-report `live (local)` when the chosen ICE pair reaches the phone at a private address, i.e. over
-their own link to it.
+session still ended when the glasses' or the companion's socket to the PC dropped. Now each side
+watches the other over the DataChannel instead: the glasses ping every 2 s and end after 10 s of
+silence; the phone ends after 15 s.
 
-## Links: how the glasses reach the phone (measured 2026-09-29)
+### What it can't survive: the phone losing internet (measured 2026-09-29)
 
-- Meta's app (`com.facebook.stella`) runs a **Wi-Fi Direct group** on the phone
-  (`p2p-wlan0-0`, the phone at `192.168.49.1`, the glasses a client). It creates and deletes it
-  as it sees fit (groups of 30 s to 10 min in the phone's `dumpsys wifip2p`).
-- The glasses' WebView sits on a **virtual network** (its candidates: `10.0.2.2` and an
-  `fdff:…:cafe` address); Meta's app forwards its traffic, so the glasses' packets reach our
-  socket from Meta's app on the phone (a peer-reflexive candidate), sent to one of the phone's
-  own addresses. The status bar's `local` meant that address was a private one.
-- So the session lives as long as **the phone address it uses** exists and Meta keeps the link.
-  Tests: SIM off with the phone on home Wi-Fi: the session carried on (56 s, on the Wi-Fi
-  address). Phone on mobile data only, SIM off: dropped (it used the mobile address). Wi-Fi
-  turned off: dropped (Wi-Fi Direct runs on the same radio and went down too).
-- Hence the companion turns libwebrtc's Android network monitor off
-  (`PeerConnectionFactory.Options.disableNetworkMonitor`): the monitor lists only Wi-Fi and
-  mobile networks, so `192.168.49.1` was never offered. It pings backup pairs every 2 s to
-  switch quickly. To check on the device: a session on mobile data with the Wi-Fi radio on (but
-  no network), then mobile data off.
-- Without internet, Meta shows "no internet" on the glasses and stops the web app, at least when
-  the page reloads (Reconnect needs the relay anyway). A session that is already running may
-  carry on; a new one can't start.
+The hope was a session that survives dead spots. It can't, and nothing on our side can change
+that:
+
+- The glasses' WebView sits on a virtual network (its candidates: `10.0.2.2` and an
+  `fdff:…:cafe` address). **Meta's app on the phone forwards its traffic** over a Wi-Fi Direct
+  group it runs (`p2p-wlan0-0`, the phone at `192.168.49.1`), and the packets reach our socket
+  from Meta's app, at one of the phone's own addresses. That group is the glasses' only IP path.
+- **Meta's app deletes that group when the phone loses internet**, and doesn't bring it back
+  while offline (phone logs: mobile data off at 14:31:14, group deleted the same second, none
+  since). The glasses then show "no internet" and the web app stops. With the Wi-Fi radio off
+  the group goes too (it runs on the same radio).
+- It survives losing one network while another carries internet (SIM off on home Wi-Fi: the
+  session carried on). Moving between networks (leaving home Wi-Fi for mobile data) makes Meta
+  rebuild the group, and the session drops within seconds; Reconnect starts a new one.
+- So: phone mode needs the phone online, like the web app itself. Truly offline would take
+  Meta's native Device Access Toolkit over Bluetooth, set aside for its still-frame video
+  (`.claude/tasks/phone-direct-dat.md`).
 
 ## Pairing and authentication
 
@@ -146,7 +143,7 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | Transport | WebRTC: phone offers video + DataChannel; the server relays the setup only | Compressed video, lowest latency; input doesn't go through a server |
 | First connection | Through a server both reach (the one serving the web app) | The page can't reach the phone before WebRTC (above) |
 | Who decides | The phone: pairing approved on the phone, proof on every session, capture consent | The glasses control the phone, so the phone is the gate; the server stays dumb |
-| Session life | Independent of the relay once the DataChannel is open; pings both ways | Dead spots on mobile data mustn't end it (user's request, 2026-09-29) |
+| Session life | Independent of the relay once the DataChannel is open; pings both ways | The PC or its internet going away mustn't end it (user's request, 2026-09-29). The phone losing internet still does (Meta, above) |
 | Companion ⇄ server | Registers once through the PC's Approve popup (companion token, hash on the PC) | So a random device can't sit on the relay pretending to be the phone |
 | Capture | `MediaProjection`, **entire screen** (`createConfigForDefaultDisplay`), cropped to a region on the phone | Input mapping needs screen coordinates; single-app capture gives no window position |
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
@@ -237,9 +234,9 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 | P1 | Server: companion registration, `/ws/companion`, `PhoneRelay` | done |
 | P2 | Glasses: PC/Phone chooser, phone session screen | done |
 | P3 | Companion app: pairing with the PC, foreground service, consent, capture → WebRTC, DataChannel → accessibility | done, used from the glasses |
-| P3b | **Pairing on the phone, sessions that outlive the server** (2026-09-29) | built and tested; try on the device |
+| P3b | **Pairing on the phone, sessions that outlive the server** (2026-09-29) | done; pairing works on the device. Offline sessions: not possible (Meta) |
 | P4 | Region: fit to the top app window, Samsung pop-up view, the PC-style Region mode. **Region and Fit built**; rotation and opening apps in pop-up view still to do | yes |
-| P5 | On the go: keep the screen on while live, lock handling, reconnect after a drop without the server (an ICE restart over the DataChannel) | yes |
+| P5 | On the go: keep the screen on while live, lock handling | yes |
 | P6 | Later: the phone's sound (`AudioPlaybackCapture`), stats figures, a fake phone in the e2e harness | yes |
 
 ## Research notes (2026-09-27; verify on the S25)
@@ -257,12 +254,8 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   each window's bounds, which is how Fit crops to the app window.
 - **Protected content** (banking apps, DRM video, `FLAG_SECURE`) captures black.
 - **WebRTC library:** `io.getstream:stream-webrtc-android` 1.3.10.
-- **Network on the go:** the glasses' WebView reports no network of its own (`netType` 8) and its
-  traffic leaves through the phone. At home the ICE pair is `local`. Still to check: a session
-  started with the phone's Wi-Fi off (mobile data only) — `local` means the direct link carries
-  it and a dead spot won't cut it; `remote` would mean the video goes through the mobile network.
-- **A network change mid-session** (the phone switching Wi-Fi ↔ mobile data) may need an ICE
-  restart, which today needs the relay. Doing it over the DataChannel is P5.
+- **Network on the go:** the glasses' WebView reports no network of its own (`netType` 8); its
+  traffic goes through Meta's app on the phone (measured, see "What it can't survive").
 
 ## Files
 
@@ -297,10 +290,6 @@ on the first screen; it has no phone path yet.
 
 ## Next steps
 
-1. On the device: install the new companion, restart the server, choose Phone on the glasses:
-   the code shows on both, Approve on the phone, then Start on the capture consent.
-2. Start a session with the phone on mobile data only, read `live (local|remote)`, then walk
-   into a dead spot (or turn mobile data off): the session should carry on.
-3. A fake phone for the e2e harness (SIPSorcery offering a test pattern and a DataChannel, doing
+1. A fake phone for the e2e harness (SIPSorcery offering a test pattern and a DataChannel, doing
    the phone's half of pairing), so the phone path is tested end to end without the phone.
-4. P5: an ICE restart over the DataChannel when the phone changes networks.
+2. P4 on the device: rotation, opening apps in pop-up view.

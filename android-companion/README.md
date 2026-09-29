@@ -6,7 +6,8 @@ glasses pair here (the same code on both screens, Approve in a notification), pa
 prove themselves each session, and Android's screen-capture consent is tapped here every time.
 Then it streams the screen to the glasses over WebRTC and turns their input into taps, swipes,
 Back/Home/Recents and text through an accessibility service. The PC only relays the setup; once
-the glasses are connected the session needs neither the PC nor the internet.
+the glasses are connected the session doesn't need the PC (the phone must stay online: Meta's app
+drops its link to the glasses without internet).
 
 Status: used from the glasses (2026-09-28, over the LAN). Pairing on the phone and sessions that
 outlive the PC built on 2026-09-29 (21 unit tests pass); not yet tried on the device.
@@ -47,8 +48,9 @@ glasses show a code and the phone a notification "Pair glasses? Code …": if th
 **Approve**. Then the phone shows the screen-capture prompt (or a notification to open it): tap
 **Start**. The glasses then see the whole screen; the notification offers
 **End session**, and Android's status-bar chip can stop it too. Locking the phone ends it
-(Android 15+); the companion keeps the screen on while a session is live. Losing the PC or the
-internet doesn't; 15 s without the glasses' ping does.
+(Android 15+); the companion keeps the screen on while a session is live. Losing the PC doesn't;
+losing the phone's internet does (Meta's app drops the glasses' link), as do 15 s without the
+glasses' ping.
 
 ## Files
 

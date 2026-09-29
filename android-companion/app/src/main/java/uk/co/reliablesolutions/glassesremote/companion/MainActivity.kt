@@ -73,7 +73,7 @@ class MainActivity : Activity() {
         text(
             "Keeps a connection to the PC so the glasses can reach this phone to start a session. " +
                 "The first time, the glasses pair with this phone: approve the code in the notification. " +
-                "Each session still asks you here first, and once it runs it no longer needs the PC or the internet.",
+                "Each session still asks you here first, and once it runs it no longer needs the PC.",
         )
         button("Start") { CompanionService.start(this) }
         button("Stop") { CompanionService.stop(this) }

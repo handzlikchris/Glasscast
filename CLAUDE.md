@@ -19,9 +19,11 @@ asks **PC or Phone**. Phone controls the user's Android phone (Samsung S25) thro
 in `android-companion/` (MediaProjection + AccessibilityService). The server (this PC) is only the
 meeting point for the **first connection**: the glasses pair with the **phone** (code on both,
 Approve on the phone) and prove themselves to it each session; once the WebRTC DataChannel is open
-the session needs neither the server nor the internet. Why it's built this way (a page can't reach
-a stock phone directly; WebRTC's compressed video beats DAT's still frames), design, protocols,
-status: **`architecture/phone-mode.md`**.
+the session doesn't need the server. It does need the **phone online**: Meta's app, the glasses'
+only IP link to the phone, takes that link down when the phone loses internet (measured
+2026-09-29), so a dead spot ends a session whatever we do. Why it's built this way (a page can't
+reach a stock phone directly; WebRTC's compressed video beats DAT's still frames), design,
+protocols, status: **`architecture/phone-mode.md`**.
 
 - **Plan / design / decisions / setup / status** live in a shared page:
   https://claude.ai/artifact/UUBNEYcPv88tssxSezHPVV (read it with the Artifact tool, action `read`).
@@ -493,10 +495,11 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 ## Status and next steps (as of 2026-09-25)
 
 - **Phone mode (2026-09-27, branch `feat/phone-mode`):** used from the glasses at home
-  (`live (local)`: the video goes straight from the phone). **Redesigned 2026-09-29:** pairing and
-  proof on the phone, the server only a relay for the first connection, sessions that outlive it
-  (pings both ways over the DataChannel). Built and tested (server, client and companion tests);
-  not yet tried on the device. Next steps and questions: `architecture/phone-mode.md`.
+  (`live (local)`: the video comes through Meta's app on the phone). **Redesigned 2026-09-29:**
+  pairing and proof on the phone (works on the device), the server only a relay for the first
+  connection, sessions that outlive it (pings both ways over the DataChannel). Tried going
+  offline the same day: not possible, Meta drops the glasses' link when the phone loses internet
+  (details in `architecture/phone-mode.md`, "What it can't survive").
 
 - Works end to end from the glasses and the phone: video, pairing, Pointer, Type with the
   composer, app shortcuts, cast-area frame, brightness. Controls were reworked on the device.

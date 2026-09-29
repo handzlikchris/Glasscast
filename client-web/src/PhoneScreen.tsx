@@ -1,9 +1,9 @@
 // A phone session: the phone's screen (from its companion app, over WebRTC) with a cursor drawn
 // here, and input sent straight to the phone on the DataChannel. A server (the PC today) only
 // relays the setup (phoneConnect.ts): pairing and proving each other, the offer and the answer.
-// Once the channel is open the relay closes, and the session lives on the glasses' own link to
-// the phone: losing the internet doesn't end it. Glasses and phone ping each other over the
-// channel, and each ends the session when the other goes quiet.
+// Once the channel is open the relay closes, and the session doesn't need the server any more.
+// Glasses and phone ping each other over the channel, and each ends the session when the other
+// goes quiet (no server watches it).
 //
 // Controls, kept close to the PC session's:
 // - On the view (pinches as on a laptop touchpad, as in a PC session): pinch-drag moves the
@@ -144,7 +144,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [media, setMedia] = useState<RTCPeerConnectionState>('new');
   const [channelOpen, setChannelOpen] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
-  const [path, setPath] = useState<{ kind: 'local' | 'remote'; address: string } | null>(null);
+  const [path, setPath] = useState<'local' | 'remote' | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
   const [follow, setFollow] = useState(false);
@@ -209,7 +209,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         setChannelOpen(open);
         if (open) {
           lastHeard.current = performance.now();
-          // Reached directly: the relay (and the server, and the internet) aren't needed any more.
+          // Reached directly: the relay (and the server) aren't needed any more.
           connector?.connected();
         } else {
           end(bye.current ? describeBye(bye.current) : 'The connection to the phone closed.');
@@ -674,7 +674,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
       <div className="status">
         <span className={connected ? 'dot' : 'dot warn'}>●</span>
-        <span>{connected ? `live (${path ? `${path.kind} ${path.address}` : '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
+        <span>{connected ? `live (${path ?? '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
         <span className="input-trace">

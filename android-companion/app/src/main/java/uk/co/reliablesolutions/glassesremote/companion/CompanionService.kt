@@ -26,8 +26,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  *   notification here); paired ones prove they hold the key → Android's screen-capture consent
  *   ("asking") → Start: capture and WebRTC ("live"), or Cancel ("declined").
  *
- * Once the glasses' DataChannel is open, the session no longer needs the PC or the internet:
- * losing the relay or the PC link doesn't end it. It ends on Stop / End session here, the phone
+ * Once the glasses' DataChannel is open, the session no longer needs the PC: losing the relay
+ * or the PC link doesn't end it. (It does need the phone online: Meta's app takes its link to
+ * the glasses down when the phone loses internet.) It ends on Stop / End session here, the phone
  * locking (capture stops), End on the glasses, the glasses going quiet, or newer glasses taking
  * over. Anything not yet connected (a pairing prompt, the consent dialog, a session still
  * connecting) is dropped when the relay goes.

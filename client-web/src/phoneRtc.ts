@@ -1,7 +1,7 @@
 // The WebRTC side of a phone session. The phone's companion app offers a video track (its screen)
 // and a DataChannel "input"; the offer, the answer and the ICE candidates go through the relay
 // (phoneConnect.ts). No STUN/TURN: the phone's own addresses are the candidates, and the glasses
-// reach them over their own link to the phone ("live (local)"), so the session needs no internet.
+// reach them through Meta's app on the phone ("live (local)").
 import { mediaPath } from './mediaStats';
 import { parsePhoneMessage, type FromPhone, type ToPhone } from './phoneProtocol';
 import type { IceCandidate } from './phoneSignal';
@@ -80,12 +80,8 @@ export class PhoneLink {
     return true;
   }
 
-  /**
-   * The phone's address on the chosen candidate pair, and whether it's a private one ("local"),
-   * once known. The address is shown too: a mobile network's private 10.x address counts as
-   * local but goes away with the phone's data.
-   */
-  async path(): Promise<{ kind: 'local' | 'remote'; address: string } | null> {
+  /** Whether the chosen candidate pair reaches the phone over a LAN address, once known. */
+  async path(): Promise<'local' | 'remote' | null> {
     const report = await this.pc.getStats();
     let pairId: string | null = null;
     const byId = new Map<string, Record<string, unknown>>();
@@ -95,9 +91,7 @@ export class PhoneLink {
     });
     const pair = pairId ? byId.get(pairId) : null;
     const remote = pair ? byId.get(pair.remoteCandidateId as string) : null;
-    const address = (remote?.address ?? remote?.ip) as string | undefined;
-    const kind = mediaPath(address);
-    return kind && address ? { kind, address } : null;
+    return mediaPath(remote?.address ?? remote?.ip);
   }
 
   close(): void {
