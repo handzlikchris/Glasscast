@@ -196,7 +196,7 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
-  twice → next app** (PC) / **Back** (phone); phone only: **down twice → the app overview**
+  twice → next app** (PC only; on the phone it's two pages, Back is on the bar); phone only: **down twice → the app overview**
   (Recents: swipe left/right, which act at once there, pinch to pick, Back leaves; Fit follows the
   pick), up twice nothing (user's
   choice, 2026-09-29, replacing previous/next app). Doubles within 0.3 s.

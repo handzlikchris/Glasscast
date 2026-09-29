@@ -131,16 +131,17 @@ describe('pcSwipeAction', () => {
 });
 
 describe('phoneSwipeAction', () => {
-  it('single swipes swipe the phone; right twice is Type, left twice Back, down twice the app overview', () => {
-    expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down' });
-    expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left' });
+  it('single swipes swipe the phone; right twice is Type, down twice the app overview', () => {
+    expect(phoneSwipeAction('down')).toEqual({ kind: 'swipe', direction: 'down', count: 1 });
+    expect(phoneSwipeAction('left')).toEqual({ kind: 'swipe', direction: 'left', count: 1 });
+    // No Back on left twice any more: two pages.
+    expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'swipe', direction: 'left', count: 2 });
     expect(phoneSwipeAction('doubleRight')).toEqual({ kind: 'type' });
-    expect(phoneSwipeAction('doubleLeft')).toEqual({ kind: 'back' });
     expect(phoneSwipeAction('doubleDown')).toEqual({ kind: 'apps' });
   });
 });
 
-describe('SwipeReader in a phone session (down, left and right wait for a double)', () => {
+describe('SwipeReader in a phone session (down, left and right wait)', () => {
   function phoneReader() {
     const { timers, run } = fakeTimers();
     const gestures: SwipeGesture[] = [];

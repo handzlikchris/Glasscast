@@ -4,12 +4,13 @@
 // A thumb swipe on the Neural Band arrives as an arrow key. On the view:
 //
 //   swipe right twice      Type, on the PC and the phone
-//   swipe left twice       PC: next app shortcut · phone: Back
+//   swipe left twice       PC: next app shortcut (phone: two pages; Back is on the bar)
 //   swipe down twice       phone: the app overview (Recents): swipe left/right through the
 //                          apps, pinch to pick one (PC: up/down don't wait for a double)
 //   a single swipe         the target's plain action (scroll, pan, page) after DOUBLE_SWIPE_MS
-//                          without a second one; up acts at once everywhere (nothing on up
-//                          twice, so there's nothing to wait for), and on the PC down too
+//                          without a second one; up acts at once everywhere, and on the PC
+//                          down too. On the phone left still waits, only so a down that follows
+//                          can drop it (below); left twice is simply two left swipes there.
 //
 // A swipe that waits for a double does its plain action that much later. An up or down swipe
 // while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
@@ -141,34 +142,37 @@ export function pcSwipeAction(gesture: SwipeGesture, mode: ViewMode, pan: boolea
 }
 
 export type PhoneSwipeAction =
-  | { kind: 'swipe'; direction: Swipe }
+  /** The finger swipe on the phone, `count` times (left twice: two pages). */
+  | { kind: 'swipe'; direction: Swipe; count: 1 | 2 }
   | { kind: 'type' }
-  | { kind: 'back' }
   /** The phone's app overview (Recents), to pick an app from with left/right and a pinch. */
   | { kind: 'apps' };
 
-/** The swipes that wait for a double in a phone session (up has no double: it scrolls at once). */
+/**
+ * The swipes that wait for a double in a phone session. Up has no double and acts at once; left
+ * has none either, but waits so a down right after it drops it (the band reads some downs as left).
+ */
 export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
- * (up/down scroll, left/right page); right twice opens Type, left twice presses the phone's Back,
- * down twice opens the app overview (user's choice, 2026-09-29: it replaced stepping through the
- * previous/next app with up/down twice).
+ * (up/down scroll, left/right page); right twice opens Type, down twice opens the app overview.
+ * Kept simple (user's choice, 2026-09-29): no previous/next app on up/down twice, no Back on left
+ * twice (Back is on the bar).
  */
 export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
   switch (gesture) {
     case 'doubleRight':
       return { kind: 'type' };
-    case 'doubleLeft':
-      return { kind: 'back' };
     case 'doubleDown':
       return { kind: 'apps' };
+    case 'doubleLeft':
+      return { kind: 'swipe', direction: 'left', count: 2 };
     // Up doesn't wait for a double in a phone session, so this never comes; a scroll if it did.
     case 'doubleUp':
-      return { kind: 'swipe', direction: 'up' };
+      return { kind: 'swipe', direction: 'up', count: 1 };
     default:
-      return { kind: 'swipe', direction: gesture };
+      return { kind: 'swipe', direction: gesture, count: 1 };
   }
 }
 
@@ -178,7 +182,7 @@ export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
     case 'right':
       return 'swipe right again for Type';
     case 'left':
-      return target === 'pc' ? 'swipe left again for the next app' : 'swipe left again for Back';
+      return target === 'pc' ? 'swipe left again for the next app' : '';
     case 'up':
       return '';
     case 'down':
