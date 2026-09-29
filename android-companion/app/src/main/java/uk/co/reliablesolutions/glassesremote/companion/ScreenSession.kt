@@ -118,6 +118,13 @@ class ScreenSession(
         initialize(context)
         logInterfaces()
         factory = PeerConnectionFactory.builder()
+            // Android's network monitor only knows the phone's own networks (Wi-Fi, mobile data).
+            // The glasses reach the phone through Meta's app, which hands their packets to one of
+            // the phone's addresses; the only one that needs no internet is on Meta's Wi-Fi Direct
+            // group (p2p-wlan0-0, 192.168.49.1), which the monitor doesn't list. Without it,
+            // every interface is used, so the connection can move there when the phone loses its
+            // Wi-Fi network or mobile data (architecture/phone-mode.md, "Links").
+            .setOptions(PeerConnectionFactory.Options().apply { disableNetworkMonitor = true })
             // Hardware H.264 (Constrained Baseline, which the glasses decode) and VP8.
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, false))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
@@ -148,6 +155,9 @@ class ScreenSession(
             // Keep gathering: the phone may move between Wi-Fi and mobile data mid-session.
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
+            // Keep the other candidate pairs checked, so a switch is quick when the chosen one's
+            // address goes away (the phone lost its Wi-Fi network or its mobile data).
+            iceBackupCandidatePairPingInterval = 2000
         }
         pc = factory.createPeerConnection(config, Observer())
             ?: throw IllegalStateException("no peer connection")

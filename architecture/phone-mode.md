@@ -81,6 +81,28 @@ glasses ping every 2 s and end after 10 s of silence; the phone ends after 15 s.
 report `live (local)` when the chosen ICE pair reaches the phone at a private address, i.e. over
 their own link to it.
 
+## Links: how the glasses reach the phone (measured 2026-09-29)
+
+- Meta's app (`com.facebook.stella`) runs a **Wi-Fi Direct group** on the phone
+  (`p2p-wlan0-0`, the phone at `192.168.49.1`, the glasses a client). It creates and deletes it
+  as it sees fit (groups of 30 s to 10 min in the phone's `dumpsys wifip2p`).
+- The glasses' WebView sits on a **virtual network** (its candidates: `10.0.2.2` and an
+  `fdff:…:cafe` address); Meta's app forwards its traffic, so the glasses' packets reach our
+  socket from Meta's app on the phone (a peer-reflexive candidate), sent to one of the phone's
+  own addresses. The status bar's `local` meant that address was a private one.
+- So the session lives as long as **the phone address it uses** exists and Meta keeps the link.
+  Tests: SIM off with the phone on home Wi-Fi: the session carried on (56 s, on the Wi-Fi
+  address). Phone on mobile data only, SIM off: dropped (it used the mobile address). Wi-Fi
+  turned off: dropped (Wi-Fi Direct runs on the same radio and went down too).
+- Hence the companion turns libwebrtc's Android network monitor off
+  (`PeerConnectionFactory.Options.disableNetworkMonitor`): the monitor lists only Wi-Fi and
+  mobile networks, so `192.168.49.1` was never offered. It pings backup pairs every 2 s to
+  switch quickly. To check on the device: a session on mobile data with the Wi-Fi radio on (but
+  no network), then mobile data off.
+- Without internet, Meta shows "no internet" on the glasses and stops the web app, at least when
+  the page reloads (Reconnect needs the relay anyway). A session that is already running may
+  carry on; a new one can't start.
+
 ## Pairing and authentication
 
 Between the glasses (`client-web/src/phoneTrust.ts`) and the phone (`GlassesTrust.kt`,
