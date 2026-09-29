@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Tests.Hosting;
+using static GlassesRemote.Server.Tests.Phone.CompanionProtocolTests;
 
 namespace GlassesRemote.Server.Tests.Phone;
 
@@ -73,27 +74,47 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Phone_session_relays_signalling_and_never_touches_the_pc()
+    public async Task Relay_passes_pairing_and_signalling_and_never_touches_the_pc()
     {
         using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
-        using var glasses = await StartPhoneSessionAsync();
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
+        Assert.Equal("ready", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
 
+        // Pairing and authentication go through as they are: the phone decides.
+        await glasses.SendAsync(new { type = "pairStart", commit = Mac });
+        Assert.Equal(Mac, (await companion.ReceiveAsync("pairStart")).GetProperty("commit").GetString());
+        await companion.SendAsync(new { type = "pairKey", key = Key });
+        Assert.Equal(Key, (await glasses.ReceiveAsync("pairKey")).GetProperty("key").GetString());
+        await glasses.SendAsync(new { type = "pairReveal", key = Key });
+        await companion.ReceiveAsync("pairReveal");
+        await companion.SendAsync(new { type = "paired" });
+        await glasses.ReceiveAsync("paired");
+
+        await glasses.SendAsync(new { type = "hello", id = Id, nonce = Nonce });
+        var hello = await companion.ReceiveAsync("hello");
+        Assert.Equal(Id, hello.GetProperty("id").GetString());
+        await companion.SendAsync(new { type = "challenge", nonce = Nonce, mac = Mac });
+        Assert.Equal(Mac, (await glasses.ReceiveAsync("challenge")).GetProperty("mac").GetString());
+        await glasses.SendAsync(new { type = "proof", mac = Mac });
+        await companion.ReceiveAsync("proof");
+
+        await companion.SendAsync(new { type = "sessionState", state = "asking" });
         Assert.Equal("asking", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
-        await companion.ReceiveAsync("sessionStart");
-
         await companion.SendAsync(new { type = "sessionState", state = "live" });
-        await companion.SendAsync(new { type = "rtcOffer", sdp = "v=0\r\nphone-offer\r\n" });
+        await companion.SendAsync(new { type = "rtcOffer", sdp = "v=0\r\nphone-offer\r\n", mac = Mac });
         await companion.SendAsync(new
         {
             type = "iceCandidate", candidate = "candidate:1 1 udp 1 192.168.1.50 40000 typ host", sdpMid = "0", sdpMLineIndex = 0,
         });
 
         Assert.Equal("live", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
-        Assert.Equal("v=0\r\nphone-offer\r\n", (await glasses.ReceiveAsync("rtcOffer")).GetProperty("sdp").GetString());
-        var candidate = await glasses.ReceiveAsync("iceCandidate");
-        Assert.Contains("192.168.1.50", candidate.GetProperty("candidate").GetString());
+        var offer = await glasses.ReceiveAsync("rtcOffer");
+        Assert.Equal("v=0\r\nphone-offer\r\n", offer.GetProperty("sdp").GetString());
+        Assert.Equal(Mac, offer.GetProperty("mac").GetString());
+        Assert.Contains("192.168.1.50", (await glasses.ReceiveAsync("iceCandidate")).GetProperty("candidate").GetString());
 
-        await glasses.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\nglasses-answer\r\n" });
+        await glasses.SendAsync(new { type = "rtcAnswer", sdp = "v=0\r\nglasses-answer\r\n", mac = Mac });
         await glasses.SendAsync(new
         {
             type = "iceCandidate", candidate = "candidate:2 1 udp 1 10.1.1.1 50000 typ host", sdpMid = "0", sdpMLineIndex = 0,
@@ -104,53 +125,61 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
         await glasses.SendAsync(new { type = "ping", t = 1 });
         await glasses.ReceiveAsync("pong");
 
-        // No capture, no encoder, no input, no keep-awake: the PC only relayed.
+        // No capture, no encoder, no input, no keep-awake, no PC session: the PC only relayed.
         Assert.Empty(_host.Peers.Created);
         Assert.Empty(_host.Input.Actions);
         Assert.Equal(0, _host.KeepAwake.Active);
         Assert.Null(_host.CastArea.Current);
+        Assert.Null(_host.Coordinator.ActiveSession);
     }
 
     [Fact]
-    public async Task Glasses_input_in_a_phone_session_is_a_violation()
+    public async Task A_relay_needs_no_approval_on_the_pc_and_logs_no_secret()
     {
         using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
-        using var glasses = await StartPhoneSessionAsync();
-        await companion.ReceiveAsync("sessionStart");
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
 
-        await glasses.SendAsync(new { type = "click", button = "left" });
+        Assert.Null(_host.Coordinator.PendingRequest);
+        await glasses.SendAsync(new { type = "hello", id = Id, nonce = Nonce });
+        await companion.ReceiveAsync("hello");
+        Assert.DoesNotContain(_host.Logs, line => line.Contains(Nonce, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Glasses_input_in_a_relay_is_a_violation()
+    {
+        using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
+
+        await glasses.SendAsync(new { type = "tap", x = 0.5, y = 0.5 });
 
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, await glasses.WaitForCloseAsync());
         Assert.Equal("invalid message", glasses.Socket.CloseStatusDescription);
-        Assert.Empty(_host.Input.Actions);
-        await companion.ReceiveAsync("sessionEnd");
+        Assert.Contains(_host.Alerts.Recent(), a => a.Kind == AlertKind.ProtocolViolation);
+        await companion.ReceiveAsync("relayClosed");
     }
 
     [Fact]
-    public async Task Declining_on_the_phone_ends_the_session()
+    public async Task Declining_on_the_phone_closes_the_relay()
     {
         using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
-        using var glasses = await StartPhoneSessionAsync();
-        await companion.ReceiveAsync("sessionStart");
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
 
         await companion.SendAsync(new { type = "sessionState", state = "declined" });
 
         await glasses.WaitForCloseAsync();
         Assert.Equal("phone declined", glasses.Socket.CloseStatusDescription);
-        // The slot frees once the close handshake finishes (up to 2 s: this test client never answers it).
-        for (var i = 0; i < 200 && _host.Coordinator.ActiveSession is not null; i++)
-        {
-            await Task.Delay(20);
-        }
-        Assert.Null(_host.Coordinator.ActiveSession);
     }
 
     [Fact]
-    public async Task Losing_the_phone_ends_the_session()
+    public async Task Losing_the_phone_closes_the_relay()
     {
         var companion = await ConnectCompanionAsync(await PairCompanionAsync());
-        using var glasses = await StartPhoneSessionAsync();
-        await companion.ReceiveAsync("sessionStart");
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
 
         await companion.Socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
         companion.Dispose();
@@ -160,37 +189,85 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Glasses_leaving_stops_the_phone()
+    public async Task Glasses_leaving_tells_the_phone_and_nothing_more()
     {
         using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
-        var glasses = await StartPhoneSessionAsync();
-        await companion.ReceiveAsync("sessionStart");
+        var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
 
         await glasses.Socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None);
         glasses.Dispose();
 
-        await companion.ReceiveAsync("sessionEnd");
-        Assert.False(_host.Companion.Current!.InSession);
+        // Only "relayClosed": a session already live on the phone carries on without the PC.
+        await companion.ReceiveAsync("relayClosed");
+        Assert.False(_host.Companion.Current!.HasRelay);
     }
 
     [Fact]
-    public async Task A_session_waits_for_the_companion_to_connect()
+    public async Task Newer_glasses_replace_an_older_relay()
+    {
+        using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
+        using var first = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
+        using var second = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
+
+        await first.WaitForCloseAsync();
+        Assert.Equal("replaced", first.Socket.CloseStatusDescription);
+        await second.SendAsync(new { type = "hello", id = Id, nonce = Nonce });
+        await companion.ReceiveAsync("hello");
+    }
+
+    [Fact]
+    public async Task Phone_messages_without_a_relay_are_dropped()
+    {
+        using var companion = await ConnectCompanionAsync(await PairCompanionAsync());
+        await companion.SendAsync(new { type = "challenge", nonce = Nonce, mac = Mac });
+
+        using var glasses = await OpenRelayAsync();
+        await companion.ReceiveAsync("relayOpen");
+        await companion.SendAsync(new { type = "paired" });
+        Assert.Equal("ready", (await glasses.ReceiveAsync()).GetProperty("state").GetString());
+        Assert.Equal("paired", (await glasses.ReceiveAsync()).GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task A_relay_waits_for_the_companion_to_connect()
     {
         var token = await PairCompanionAsync();
-        using var glasses = await StartPhoneSessionAsync();
+        using var glasses = await OpenRelayAsync();
         Assert.Equal("offline", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
 
         using var companion = await ConnectCompanionAsync(token);
-        await companion.ReceiveAsync("sessionStart");
-        Assert.Equal("asking", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+        await companion.ReceiveAsync("relayOpen");
+        Assert.Equal("ready", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
     }
 
     [Fact]
-    public async Task No_phone_within_the_start_timeout_ends_the_session()
+    public async Task No_phone_within_the_start_timeout_closes_the_relay()
     {
-        using var glasses = await StartPhoneSessionAsync();
+        using var glasses = await OpenRelayAsync();
         await glasses.WaitForCloseAsync(timeoutMs: 10_000);
         Assert.Equal("phone offline", glasses.Socket.CloseStatusDescription);
+    }
+
+    [Fact]
+    public async Task Relays_are_rate_limited_per_address()
+    {
+        string? last = null;
+        for (var i = 0; i < 12; i++)
+        {
+            using var glasses = await OpenRelayAsync();
+            if (i < 11)
+            {
+                continue;
+            }
+            await glasses.WaitForCloseAsync();
+            last = glasses.Socket.CloseStatusDescription;
+        }
+
+        Assert.Equal("rate limit", last);
+        Assert.Contains(_host.Alerts.Recent(), a => a.Kind == AlertKind.MessageRateLimited);
     }
 
     [Fact]
@@ -251,12 +328,10 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
         return socket;
     }
 
-    private async Task<TestSocket> StartPhoneSessionAsync()
+    private async Task<TestSocket> OpenRelayAsync()
     {
-        var token = await _host.PairAsync();
-        var session = await _host.ConnectAsync("/ws/session");
-        await session.SendAsync(new { type = "authenticate", token, target = "phone" });
-        Assert.Equal("authenticated", (await session.ReceiveAsync()).GetProperty("type").GetString());
-        return session;
+        var socket = await _host.ConnectAsync("/ws/session");
+        await socket.SendAsync(new { type = "phone" });
+        return socket;
     }
 }

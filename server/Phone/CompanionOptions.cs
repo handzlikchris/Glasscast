@@ -22,11 +22,20 @@ public sealed class CompanionOptions
     /// <summary>A connected companion that sends nothing (it pings every 15 s) for this long is dropped.</summary>
     public TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(45);
 
-    /// <summary>
-    /// From a phone session's start to the phone's offer: waiting for the companion to connect and
-    /// for someone to tap the capture consent on the phone. Then the session gives up.
-    /// </summary>
+    /// <summary>How long glasses wait in a phone relay for the companion to connect before giving up.</summary>
     public TimeSpan StartTimeout { get; set; } = TimeSpan.FromSeconds(90);
+
+    /// <summary>
+    /// A phone relay's whole life: pairing on the phone, the capture consent, the offer and answer.
+    /// The glasses close it once their video is up; the session itself doesn't need the PC.
+    /// </summary>
+    public TimeSpan RelayTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
+    /// <summary>Phone relays glasses may open per source IP within <see cref="RateWindow"/>.</summary>
+    public int MaxRelaysPerIp { get; set; } = 10;
+
+    /// <summary>Phone relays allowed from all sources within <see cref="RateWindow"/>.</summary>
+    public int MaxRelaysGlobal { get; set; } = 30;
 
     public int MaxMessagesPerSecond { get; set; } = 60;
 

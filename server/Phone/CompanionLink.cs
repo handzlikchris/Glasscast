@@ -5,15 +5,46 @@ using GlassesRemote.Server.Sessions;
 namespace GlassesRemote.Server.Phone;
 
 /// <summary>
-/// One authenticated companion connection. At most one glasses session (a <see cref="PhoneRelay"/>)
-/// uses it at a time; the companion's signalling messages go to that session's inbox.
+/// A glasses connection relayed to the phone: the companion's messages for it arrive in
+/// <see cref="Inbox"/>. <see cref="Replaced"/> fires when newer glasses open a relay.
+/// </summary>
+public sealed class RelayHandle
+{
+    private readonly CancellationTokenSource _replaced = new();
+
+    internal RelayHandle()
+    {
+        Channel = System.Threading.Channels.Channel.CreateBounded<CompanionMessage>(new BoundedChannelOptions(256)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest,
+            SingleReader = true,
+        });
+    }
+
+    internal Channel<CompanionMessage> Channel { get; }
+
+    public ChannelReader<CompanionMessage> Inbox => Channel.Reader;
+
+    public CancellationToken Replaced => _replaced.Token;
+
+    internal void Replace()
+    {
+        _replaced.Cancel();
+        Channel.Writer.TryComplete();
+    }
+}
+
+/// <summary>
+/// One authenticated companion connection. At most one glasses relay (a <see cref="PhoneRelay"/>)
+/// uses it at a time, and the newest wins: the phone itself decides whether those glasses may
+/// in. The companion's signalling messages go to that relay's inbox.
 /// </summary>
 public sealed class CompanionLink
 {
     private readonly SocketIO _io;
     private readonly CancellationTokenSource _closed = new();
     private readonly object _gate = new();
-    private Channel<CompanionMessage>? _inbox;
+    private RelayHandle? _relay;
 
     public CompanionLink(SocketIO io, string name, IPAddress remoteAddress)
     {
@@ -34,54 +65,52 @@ public sealed class CompanionLink
 
     public Task SendAsync(object message, CancellationToken ct) => _io.SendAsync(message, ct);
 
-    /// <summary>Starts a session on this phone; null if one is already running.</summary>
-    public ChannelReader<CompanionMessage>? BeginSession()
+    /// <summary>Opens a relay for newly connected glasses; an older one is replaced.</summary>
+    public RelayHandle OpenRelay()
+    {
+        RelayHandle? previous;
+        var relay = new RelayHandle();
+        lock (_gate)
+        {
+            previous = _relay;
+            _relay = relay;
+        }
+        previous?.Replace();
+        return relay;
+    }
+
+    /// <summary>Whether this relay is still the one the phone's messages go to.</summary>
+    public bool CloseRelay(RelayHandle relay)
     {
         lock (_gate)
         {
-            if (_inbox is not null)
+            if (_relay != relay)
             {
-                return null;
+                return false;
             }
-
-            _inbox = Channel.CreateBounded<CompanionMessage>(new BoundedChannelOptions(256)
-            {
-                FullMode = BoundedChannelFullMode.DropOldest,
-                SingleReader = true,
-            });
-            return _inbox.Reader;
+            _relay = null;
         }
+        relay.Channel.Writer.TryComplete();
+        return true;
     }
 
-    public void EndSession(ChannelReader<CompanionMessage> reader)
-    {
-        lock (_gate)
-        {
-            if (_inbox?.Reader == reader)
-            {
-                _inbox.Writer.TryComplete();
-                _inbox = null;
-            }
-        }
-    }
-
-    public bool InSession
+    public bool HasRelay
     {
         get
         {
             lock (_gate)
             {
-                return _inbox is not null;
+                return _relay is not null;
             }
         }
     }
 
-    /// <summary>Hands a signalling message to the running session. Without one it is stale: dropped.</summary>
+    /// <summary>Hands a message to the open relay. Without one it is stale: dropped.</summary>
     internal void Deliver(CompanionMessage message)
     {
         lock (_gate)
         {
-            _inbox?.Writer.TryWrite(message);
+            _relay?.Channel.Writer.TryWrite(message);
         }
     }
 
@@ -98,7 +127,7 @@ public sealed class CompanionLink
 
         lock (_gate)
         {
-            _inbox?.Writer.TryComplete();
+            _relay?.Channel.Writer.TryComplete();
         }
     }
 }

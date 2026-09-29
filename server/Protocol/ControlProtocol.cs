@@ -93,6 +93,7 @@ public static class ControlProtocol
             {
                 "authenticate" => ParseAuthenticate(root),
                 "resume" => ParseResume(root),
+                "phone" => Only(root) ? new ConnectPhoneMessage() : null,
                 "rtcAnswer" => ParseRtcAnswer(root),
                 "iceCandidate" => ParseIceCandidate(root),
                 "setMode" => ParseSetMode(root),
@@ -129,40 +130,10 @@ public static class ControlProtocol
         TryParse(Encoding.UTF8.GetBytes(json), out message, out error);
 
     private static ControlMessage? ParseAuthenticate(JsonElement e) =>
-        Only(e, "token", "target") && Str(e, "token", MaxTokenLength, out var token) && Target(e, out var target)
-            ? new AuthenticateMessage(token, target)
-            : null;
+        Only(e, "token") && Str(e, "token", MaxTokenLength, out var token) ? new AuthenticateMessage(token) : null;
 
     private static ControlMessage? ParseResume(JsonElement e) =>
-        Only(e, "token", "target") && Str(e, "token", MaxTokenLength, out var token) && Target(e, out var target)
-            ? new ResumeMessage(token, target)
-            : null;
-
-    /// <summary>Optional "target": "pc" (the default) or "phone".</summary>
-    private static bool Target(JsonElement e, out SessionTarget target)
-    {
-        target = SessionTarget.Pc;
-        if (!e.TryGetProperty("target", out _))
-        {
-            return true;
-        }
-
-        if (!Str(e, "target", 8, out var name))
-        {
-            return false;
-        }
-
-        switch (name)
-        {
-            case "pc":
-                return true;
-            case "phone":
-                target = SessionTarget.Phone;
-                return true;
-            default:
-                return false;
-        }
-    }
+        Only(e, "token") && Str(e, "token", MaxTokenLength, out var token) ? new ResumeMessage(token) : null;
 
     private static ControlMessage? ParseRtcAnswer(JsonElement e) =>
         Only(e, "sdp") && Str(e, "sdp", MaxSdpLength, out var sdp)

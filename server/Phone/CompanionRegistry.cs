@@ -20,7 +20,9 @@ public sealed record CompanionGrant(string Name, byte[] TokenHash, DateTimeOffse
 ///   its SHA-256 is kept (and saved, so a restart keeps the phone paired). One phone at a time: a
 ///   new approval replaces the old one. The tray's Forget phone drops it.
 /// - Connection: the one authenticated companion socket (<see cref="CompanionLink"/>). A newer
-///   one replaces an older one; phone sessions wait for one to be there.
+///   one replaces an older one; glasses' phone relays wait for one to be there.
+/// - Relays: glasses open them without a login on the PC (the phone pairs and checks the glasses
+///   itself), so they're rate-limited per IP and overall.
 ///
 /// The token never expires on its own: the companion lives on your phone, and every phone session
 /// still needs someone to tap Android's screen-capture consent on the phone itself.
@@ -33,6 +35,8 @@ public sealed class CompanionRegistry : IDisposable
     private readonly ILogger<CompanionRegistry> _logger;
     private readonly SlidingWindowLimiter _perIpLimiter;
     private readonly SlidingWindowLimiter _globalLimiter;
+    private readonly SlidingWindowLimiter _relayPerIpLimiter;
+    private readonly SlidingWindowLimiter _relayGlobalLimiter;
     private readonly string? _grantFile;
     private readonly object _gate = new();
 
@@ -51,6 +55,8 @@ public sealed class CompanionRegistry : IDisposable
         _logger = logger;
         _perIpLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRequestsPerIp);
         _globalLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRequestsGlobal);
+        _relayPerIpLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRelaysPerIp);
+        _relayGlobalLimiter = new SlidingWindowLimiter(time, _options.RateWindow, _options.MaxRelaysGlobal);
         _grantFile = string.IsNullOrEmpty(_options.GrantFile) ? CompanionOptions.DefaultGrantFile : _options.GrantFile;
         _grant = LoadGrant();
     }
@@ -128,6 +134,24 @@ public sealed class CompanionRegistry : IDisposable
         _logger.LogInformation("Phone pairing request {Code} opened from {Remote}", pending.Request.Code, remote);
         RequestOpened?.Invoke(pending);
         return pending;
+    }
+
+    /// <summary>
+    /// Whether glasses from <paramref name="remote"/> may open a phone relay now. Relays need no
+    /// login on the PC (the phone checks the glasses), so they're rate-limited here instead.
+    /// </summary>
+    public bool TryOpenRelay(IPAddress remote)
+    {
+        lock (_gate)
+        {
+            if (_relayPerIpLimiter.TryAcquire(remote.ToString()) && _relayGlobalLimiter.TryAcquire("*"))
+            {
+                return true;
+            }
+        }
+
+        _alerts.Raise(AlertKind.MessageRateLimited, remote, "Too many phone relays");
+        return false;
     }
 
     /// <summary>Approves the pending request: the phone gets its token, and replaces any paired before.</summary>

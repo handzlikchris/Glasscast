@@ -1,15 +1,15 @@
+using System.Net;
 using System.Net.WebSockets;
 using System.Threading.Channels;
 using GlassesRemote.Server.Alerts;
 using GlassesRemote.Server.Hosting;
-using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Protocol;
 using GlassesRemote.Server.Sessions;
 using Microsoft.Extensions.Options;
 
 namespace GlassesRemote.Server.Phone;
 
-/// <summary>Everything a phone session needs, resolved once from DI.</summary>
+/// <summary>Everything a phone relay needs, resolved once from DI.</summary>
 public sealed record PhoneServices(
     CompanionRegistry Registry,
     IOptions<CompanionOptions> Companion,
@@ -19,189 +19,191 @@ public sealed record PhoneServices(
     ILogger<PhoneRelay> Logger);
 
 /// <summary>
-/// A glasses session whose target is the phone. The PC is only the meeting point: it asks the
-/// companion to start, passes the phone's offer and ICE candidates to the glasses and their
-/// answer and candidates back, and ends both sides together. Video and input go straight between
-/// phone and glasses (WebRTC); nothing of either passes through here.
+/// Glasses that want the phone (first message <c>phone</c>). The PC is only the meeting point:
+/// the glasses' page can't reach the phone until a WebRTC connection exists, so the first
+/// messages go through here. It passes pairing, authentication and signalling between the glasses
+/// and the companion, and decides nothing: the phone pairs the glasses (approval on the phone),
+/// checks them on every session, and asks for its own capture consent. Keys and MACs pass through
+/// as opaque strings; the PC holds no secret of the glasses' or the phone's.
 ///
-/// The glasses may send only rtcAnswer, iceCandidate and ping in a phone session.
+/// Once the video is up the glasses close the relay, and the session goes on without the PC:
+/// losing the internet (or this PC) doesn't end it (architecture/phone-mode.md).
+///
+/// The glasses may send only pairing, authentication, signalling and ping messages here: never
+/// input, which goes straight to the phone over WebRTC.
 /// </summary>
 public sealed class PhoneRelay
 {
     private readonly SocketIO _io;
-    private readonly SessionLease _lease;
+    private readonly IPAddress _remote;
     private readonly PhoneServices _s;
-    private readonly ControlSessionOptions _session;
     private readonly CompanionOptions _companion;
-    private volatile CompanionLink? _link;
-    private long _lastMessageTimestamp;
+    private readonly ControlSessionOptions _session;
 
-    public PhoneRelay(SocketIO io, SessionLease lease, PhoneServices services)
+    public PhoneRelay(SocketIO io, IPAddress remote, PhoneServices services)
     {
         _io = io;
-        _lease = lease;
+        _remote = remote;
         _s = services;
-        _session = services.Session.Value;
         _companion = services.Companion.Value;
+        _session = services.Session.Value;
     }
 
     public async Task RunAsync(CancellationToken requestAborted)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, _lease.Ended);
-        cts.CancelAfter(_session.MaxDuration);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
+        cts.CancelAfter(_companion.RelayTimeout);
         var ct = cts.Token;
 
         var closeStatus = WebSocketCloseStatus.NormalClosure;
-        var closeReason = "session ended";
-        _lastMessageTimestamp = _s.Time.GetTimestamp();
-        _s.Logger.LogInformation("Session {Session} controls the phone", _lease.Id);
+        var closeReason = "relay ended";
+        CompanionLink? link = null;
+        RelayHandle? relay = null;
         try
         {
-            var receiving = ReceiveLoopAsync(ct);
-            var phone = PhoneLoopAsync(ct);
-            var watching = HeartbeatWatchAsync(ct);
+            link = await WaitForPhoneAsync(ct);
+            if (link is null)
+            {
+                closeReason = "phone offline";
+                return;
+            }
 
-            var finished = await Task.WhenAny(receiving, phone, watching);
-            if (finished == receiving && await ResultOrNull(receiving) is { } violation)
+            relay = link.OpenRelay();
+            using var untilGone = CancellationTokenSource.CreateLinkedTokenSource(ct, link.Closed, relay.Replaced);
+            await link.SendAsync(new { type = "relayOpen" }, untilGone.Token);
+            await _io.SendAsync(new { type = "phoneStatus", state = "ready" }, untilGone.Token);
+            _s.Logger.LogInformation("Glasses from {Remote} relayed to the phone", _remote);
+
+            var fromGlasses = FromGlassesAsync(link, untilGone.Token);
+            var fromPhone = FromPhoneAsync(relay, untilGone.Token);
+            var finished = await Task.WhenAny(fromGlasses, fromPhone);
+            var reason = await ResultOrNull(finished);
+            if (finished == fromGlasses && reason is not null)
             {
                 closeStatus = WebSocketCloseStatus.PolicyViolation;
-                closeReason = violation;
-                _lease.ForgetDevice(violation);
-            }
-            else if (finished != receiving && !ct.IsCancellationRequested && await ResultOrNull(finished) is { } reason)
-            {
-                closeReason = reason;
             }
 
-            cts.Cancel();
-            await Task.WhenAll(Swallow(receiving), Swallow(phone), Swallow(watching));
+            closeReason = reason
+                          ?? (relay.Replaced.IsCancellationRequested ? "replaced"
+                              : link.Closed.IsCancellationRequested ? "phone offline"
+                              : ct.IsCancellationRequested && !requestAborted.IsCancellationRequested ? "timeout"
+                              : "relay ended");
+            untilGone.Cancel();
+            await Task.WhenAll(Swallow(fromGlasses), Swallow(fromPhone));
         }
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
         {
+            if (relay?.Replaced.IsCancellationRequested == true)
+            {
+                closeReason = "replaced";
+            }
+            else if (link?.Closed.IsCancellationRequested == true)
+            {
+                closeReason = "phone offline";
+            }
+            else if (!requestAborted.IsCancellationRequested && ct.IsCancellationRequested)
+            {
+                closeReason = "timeout";
+            }
         }
         catch (Exception ex)
         {
-            _s.Logger.LogError(ex, "Phone session {Session} failed", _lease.Id);
+            _s.Logger.LogError(ex, "Phone relay for {Remote} failed", _remote);
             closeStatus = WebSocketCloseStatus.InternalServerError;
             closeReason = "server error";
         }
         finally
         {
-            if (_lease.Ended.IsCancellationRequested)
+            if (link is not null && relay is not null && link.CloseRelay(relay) && !link.Closed.IsCancellationRequested)
             {
-                closeReason = _lease.Superseded ? "replaced" : "terminated";
-            }
-            await _io.CloseQuietlyAsync(closeStatus, closeReason);
-            _s.Logger.LogInformation("Phone session {Session} closed: {Reason}", _lease.Id, closeReason);
-        }
-    }
-
-    /// <summary>
-    /// Waits for the companion, starts the phone and relays its signalling to the glasses.
-    /// Returns the close reason when the phone side ends the session.
-    /// </summary>
-    private async Task<string?> PhoneLoopAsync(CancellationToken ct)
-    {
-        using var startDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        startDeadline.CancelAfter(_companion.StartTimeout);
-
-        CompanionLink link;
-        try
-        {
-            if (_s.Registry.Current is null)
-            {
-                await SendStatusAsync("offline", ct);
-            }
-            link = await _s.Registry.WaitForLinkAsync(startDeadline.Token);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return "phone offline";
-        }
-
-        var inbox = link.BeginSession();
-        if (inbox is null)
-        {
-            return "phone busy";
-        }
-
-        _link = link;
-        try
-        {
-            await link.SendAsync(new { type = "sessionStart" }, ct);
-            await SendStatusAsync("asking", ct);
-
-            var offered = false;
-            using var untilLinkGone = CancellationTokenSource.CreateLinkedTokenSource(ct, link.Closed);
-            using var beforeOffer = CancellationTokenSource.CreateLinkedTokenSource(untilLinkGone.Token, startDeadline.Token);
-            while (true)
-            {
-                CompanionMessage message;
-                try
-                {
-                    // Before the offer, the start deadline applies; after it, only the link's life.
-                    message = await inbox.ReadAsync(offered ? untilLinkGone.Token : beforeOffer.Token);
-                }
-                catch (Exception ex) when (ex is OperationCanceledException or ChannelClosedException)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (link.Closed.IsCancellationRequested)
-                    {
-                        return "phone offline";
-                    }
-                    return "phone not ready";
-                }
-
-                switch (message)
-                {
-                    case CompanionStateMessage { State: PhoneState.Declined }:
-                        return "phone declined";
-                    case CompanionStateMessage { State: PhoneState.Ended }:
-                        return "phone ended";
-                    case CompanionStateMessage state:
-                        await SendStatusAsync(CompanionProtocol.StateName(state.State), ct);
-                        break;
-                    case CompanionOfferMessage offer:
-                        offered = true;
-                        await _io.SendAsync(new { type = "rtcOffer", sdp = offer.Sdp }, ct);
-                        break;
-                    case CompanionIceMessage ice:
-                        await _io.SendAsync(new
-                        {
-                            type = "iceCandidate",
-                            candidate = ice.Candidate.Candidate,
-                            sdpMid = ice.Candidate.SdpMid,
-                            sdpMLineIndex = ice.Candidate.SdpMLineIndex,
-                        }, ct);
-                        break;
-                }
-            }
-        }
-        finally
-        {
-            _link = null;
-            link.EndSession(inbox);
-            if (!link.Closed.IsCancellationRequested)
-            {
-                // Tell the phone to stop capturing; it may already have.
+                // The phone drops anything the glasses hadn't finished (a pairing prompt, a consent
+                // dialog, a connection not yet up). A session already live carries on without us.
                 try
                 {
                     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    await link.SendAsync(new { type = "sessionEnd" }, timeout.Token);
+                    await link.SendAsync(new { type = "relayClosed" }, timeout.Token);
                 }
                 catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException)
                 {
                 }
             }
+            await _io.CloseQuietlyAsync(closeStatus, closeReason);
+            _s.Logger.LogInformation("Phone relay for {Remote} closed: {Reason}", _remote, closeReason);
         }
     }
 
-    /// <summary>Returns null when the glasses go away, or a reason when they break the rules.</summary>
-    private async Task<string?> ReceiveLoopAsync(CancellationToken ct)
+    /// <summary>The connected companion, now or once it connects; null if none within the start timeout.</summary>
+    private async Task<CompanionLink?> WaitForPhoneAsync(CancellationToken ct)
+    {
+        if (_s.Registry.Current is { } now)
+        {
+            return now;
+        }
+
+        await _io.SendAsync(new { type = "phoneStatus", state = "offline" }, ct);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(_companion.StartTimeout);
+        try
+        {
+            return await _s.Registry.WaitForLinkAsync(deadline.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Passes the phone's messages to the glasses. Returns a close reason when the phone ends the
+    /// relay (declined or stopped before the video was up), or null when its messages stop.
+    /// </summary>
+    private async Task<string?> FromPhoneAsync(RelayHandle relay, CancellationToken ct)
+    {
+        await foreach (var message in relay.Inbox.ReadAllAsync(ct))
+        {
+            object? forward = message switch
+            {
+                CompanionStateMessage { State: PhoneState.Declined } => null,
+                CompanionStateMessage { State: PhoneState.Ended } => null,
+                CompanionStateMessage state => new { type = "phoneStatus", state = CompanionProtocol.StateName(state.State) },
+                CompanionPairKeyMessage pairKey => new { type = "pairKey", key = pairKey.Key },
+                CompanionPairedMessage => new { type = "paired" },
+                CompanionPairFailedMessage => new { type = "pairFailed" },
+                CompanionChallengeMessage challenge => new { type = "challenge", nonce = challenge.Nonce, mac = challenge.Mac },
+                CompanionAuthFailedMessage => new { type = "authFailed" },
+                CompanionOfferMessage offer => new { type = "rtcOffer", sdp = offer.Sdp, mac = offer.Mac },
+                CompanionIceMessage ice => new
+                {
+                    type = "iceCandidate",
+                    candidate = ice.Candidate.Candidate,
+                    sdpMid = ice.Candidate.SdpMid,
+                    sdpMLineIndex = ice.Candidate.SdpMLineIndex,
+                },
+                _ => null,
+            };
+
+            switch (message)
+            {
+                case CompanionStateMessage { State: PhoneState.Declined }:
+                    return "phone declined";
+                case CompanionStateMessage { State: PhoneState.Ended }:
+                    return "phone ended";
+            }
+
+            if (forward is not null)
+            {
+                await _io.SendAsync(forward, ct);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Passes the glasses' messages to the phone. Returns null when they leave, or a reason when they break the rules.</summary>
+    private async Task<string?> FromGlassesAsync(CompanionLink link, CancellationToken ct)
     {
         var rate = Math.Max(1, _session.MaxMessagesPerSecond);
         var bucket = new TokenBucket(_s.Time, rate, rate * 2);
-        var confirmed = false;
 
         while (!ct.IsCancellationRequested)
         {
@@ -212,7 +214,7 @@ public sealed class PhoneRelay
             }
             catch (InvalidClientMessageException ex)
             {
-                _s.Alerts.Raise(AlertKind.ProtocolViolation, _lease.RemoteAddress, ex.Message);
+                _s.Alerts.Raise(AlertKind.ProtocolViolation, _remote, ex.Message);
                 return "invalid message";
             }
 
@@ -221,75 +223,49 @@ public sealed class PhoneRelay
                 return null;
             }
 
-            Interlocked.Exchange(ref _lastMessageTimestamp, _s.Time.GetTimestamp());
             if (!bucket.TryTake())
             {
-                _s.Alerts.Raise(AlertKind.MessageRateLimited, _lease.RemoteAddress, "Session exceeded the message rate");
+                _s.Alerts.Raise(AlertKind.MessageRateLimited, _remote, "Phone relay exceeded the message rate");
                 return "rate limit";
             }
 
-            if (!ControlProtocol.TryParse(raw.Value.Span, out var message, out var error))
+            if (!RelayProtocol.TryParse(raw.Value.Span, out var message, out var error))
             {
-                _s.Alerts.Raise(AlertKind.ProtocolViolation, _lease.RemoteAddress, $"Rejected message ({error})");
+                // Input never goes through the PC for the phone, nor does anything else unexpected.
+                _s.Alerts.Raise(AlertKind.ProtocolViolation, _remote, $"Phone relay message rejected ({error})");
                 return "invalid message";
             }
 
-            switch (message)
+            object forward = message switch
             {
-                case PingMessage ping:
-                    await _io.SendAsync(new { type = "pong", t = ping.T, serverTime = _s.Time.GetUtcNow().ToUnixTimeMilliseconds() }, ct);
-                    break;
-                case RtcAnswerMessage answer:
-                    if (_link is { } link)
-                    {
-                        await link.SendAsync(new { type = "rtcAnswer", sdp = answer.Sdp }, ct);
-                    }
-                    if (!confirmed)
-                    {
-                        // The answer follows "authenticated" on this socket: the glasses have their new device token.
-                        confirmed = true;
-                        _lease.ConfirmDeviceToken();
-                    }
-                    break;
-                case IceCandidateMessage ice:
-                    if (_link is { } target)
-                    {
-                        await target.SendAsync(new
-                        {
-                            type = "iceCandidate",
-                            candidate = ice.Candidate,
-                            sdpMid = ice.SdpMid,
-                            sdpMLineIndex = ice.SdpMLineIndex,
-                        }, ct);
-                    }
-                    break;
-                default:
-                    // Input goes to the phone over WebRTC, never through the PC.
-                    _s.Alerts.Raise(AlertKind.ProtocolViolation, _lease.RemoteAddress,
-                        $"{message!.GetType().Name} is not allowed in a phone session");
-                    return "invalid message";
+                RelayPingSignal ping => new { type = "pong", t = ping.T, serverTime = _s.Time.GetUtcNow().ToUnixTimeMilliseconds() },
+                PairStartSignal start => new { type = "pairStart", commit = start.Commit },
+                PairRevealSignal reveal => new { type = "pairReveal", key = reveal.Key },
+                HelloSignal hello => new { type = "hello", id = hello.Id, nonce = hello.Nonce },
+                ProofSignal proof => new { type = "proof", mac = proof.Mac },
+                AnswerSignal answer => new { type = "rtcAnswer", sdp = answer.Sdp, mac = answer.Mac },
+                GlassesIceSignal ice => new
+                {
+                    type = "iceCandidate",
+                    candidate = ice.Candidate.Candidate,
+                    sdpMid = ice.Candidate.SdpMid,
+                    sdpMLineIndex = ice.Candidate.SdpMLineIndex,
+                },
+                _ => throw new InvalidOperationException("unhandled relay message"),
+            };
+
+            if (message is RelayPingSignal)
+            {
+                await _io.SendAsync(forward, ct);
+            }
+            else
+            {
+                await link.SendAsync(forward, ct);
             }
         }
 
         return null;
     }
-
-    private async Task<string?> HeartbeatWatchAsync(CancellationToken ct)
-    {
-        var check = TimeSpan.FromSeconds(Math.Clamp(_session.HeartbeatTimeout.TotalSeconds / 4, 0.25, 30));
-        while (true)
-        {
-            await Task.Delay(check, _s.Time, ct);
-            var silentFor = _s.Time.GetElapsedTime(Interlocked.Read(ref _lastMessageTimestamp));
-            if (silentFor >= _session.HeartbeatTimeout)
-            {
-                return "no heartbeat";
-            }
-        }
-    }
-
-    private Task SendStatusAsync(string state, CancellationToken ct) =>
-        _io.SendAsync(new { type = "phoneStatus", state }, ct);
 
     private static async Task<string?> ResultOrNull(Task<string?> task)
     {
@@ -297,7 +273,8 @@ public sealed class PhoneRelay
         {
             return await task;
         }
-        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException)
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or ObjectDisposedException
+                                       or ChannelClosedException)
         {
             return null;
         }

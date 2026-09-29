@@ -15,7 +15,7 @@ public enum PhoneState
     /// <summary>Capturing; the offer follows (or has gone).</summary>
     Live,
 
-    /// <summary>The phone stopped: its Stop button, the screen locked, capture ended.</summary>
+    /// <summary>The phone stopped before the video was up: its Stop button, the screen locked, capture ended.</summary>
     Ended,
 }
 
@@ -36,14 +36,32 @@ public sealed record CompanionPingMessage(double T) : CompanionMessage;
 
 public sealed record CompanionStateMessage(PhoneState State) : CompanionMessage;
 
-public sealed record CompanionOfferMessage(string Sdp) : CompanionMessage;
+/// <summary>The phone's offer, with its MAC under the session key the glasses and phone agreed.</summary>
+public sealed record CompanionOfferMessage(string Sdp, string Mac) : CompanionMessage;
 
 public sealed record CompanionIceMessage(IceCandidateMessage Candidate) : CompanionMessage;
+
+// The phone's side of pairing and authenticating the glasses (the PC only passes these on).
+
+/// <summary>Pairing: the phone's public key.</summary>
+public sealed record CompanionPairKeyMessage(string Key) : CompanionMessage;
+
+/// <summary>Pairing: approved on the phone.</summary>
+public sealed record CompanionPairedMessage : CompanionMessage;
+
+/// <summary>Pairing: rejected on the phone, timed out, or the glasses' key didn't match their commitment.</summary>
+public sealed record CompanionPairFailedMessage : CompanionMessage;
+
+/// <summary>The phone's nonce and its proof that it holds the pairing key.</summary>
+public sealed record CompanionChallengeMessage(string Nonce, string Mac) : CompanionMessage;
+
+/// <summary>The phone doesn't know these glasses, or their proof was wrong.</summary>
+public sealed record CompanionAuthFailedMessage : CompanionMessage;
 
 /// <summary>
 /// Strict parser for the companion socket, in the same style as <see cref="ControlProtocol"/>:
 /// a small JSON object, a known type, exactly its properties, capped sizes. The PC only relays
-/// signalling for the phone, so that's all there is.
+/// signalling, pairing and authentication between the phone and the glasses, so that's all there is.
 /// </summary>
 public static class CompanionProtocol
 {
@@ -97,9 +115,21 @@ public static class CompanionProtocol
                                   && States.TryGetValue(state, out var parsed)
                     ? new CompanionStateMessage(parsed)
                     : null,
-                "rtcOffer" => ControlProtocol.Only(e, "sdp") && ControlProtocol.Str(e, "sdp", ControlProtocol.MaxSdpLength, out var sdp)
-                    ? new CompanionOfferMessage(sdp)
+                "rtcOffer" => ControlProtocol.Only(e, "sdp", "mac") && ControlProtocol.Str(e, "sdp", ControlProtocol.MaxSdpLength, out var sdp)
+                               && RelayProtocol.B64u(e, "mac", RelayProtocol.HashLength, out var offerMac)
+                    ? new CompanionOfferMessage(sdp, offerMac)
                     : null,
+                "pairKey" => ControlProtocol.Only(e, "key") && RelayProtocol.B64u(e, "key", RelayProtocol.PublicKeyLength, out var key)
+                    ? new CompanionPairKeyMessage(key)
+                    : null,
+                "paired" => ControlProtocol.Only(e) ? new CompanionPairedMessage() : null,
+                "pairFailed" => ControlProtocol.Only(e) ? new CompanionPairFailedMessage() : null,
+                "challenge" => ControlProtocol.Only(e, "nonce", "mac")
+                               && RelayProtocol.B64u(e, "nonce", RelayProtocol.NonceLength, out var nonce)
+                               && RelayProtocol.B64u(e, "mac", RelayProtocol.HashLength, out var mac)
+                    ? new CompanionChallengeMessage(nonce, mac)
+                    : null,
+                "authFailed" => ControlProtocol.Only(e) ? new CompanionAuthFailedMessage() : null,
                 "iceCandidate" => ControlProtocol.ParseIce(e) is { } candidate ? new CompanionIceMessage(candidate) : null,
                 _ => null,
             };

@@ -92,7 +92,8 @@ public static class GlassesEndpoints
 
         // The first message must be "authenticate" (an approval's token) or "resume" (a remembered
         // device's token), within a few seconds. Until then the socket holds nothing: the session
-        // slot is only taken by a valid token.
+        // slot is only taken by a valid token. "phone" instead asks for a relay to the phone's
+        // companion, which pairs and checks the glasses itself.
         ControlMessage? auth;
         using (var authDeadline = new CancellationTokenSource(session.Value.AuthTimeout, time))
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(authDeadline.Token, context.RequestAborted))
@@ -106,7 +107,7 @@ public static class GlassesEndpoints
                 }
 
                 ControlProtocol.TryParse(first.Value.Span, out var message, out _);
-                auth = message is AuthenticateMessage or ResumeMessage ? message : null;
+                auth = message is AuthenticateMessage or ResumeMessage or ConnectPhoneMessage ? message : null;
             }
             catch (OperationCanceledException) when (authDeadline.IsCancellationRequested)
             {
@@ -125,6 +126,18 @@ public static class GlassesEndpoints
         {
             alerts.Raise(AlertKind.ProtocolViolation, remote, "First session message was not authenticate");
             await FailAsync(io, "authFailed", context.RequestAborted);
+            return;
+        }
+
+        if (auth is ConnectPhoneMessage)
+        {
+            // Not a PC session: no lease, no approval on the PC. The phone decides who gets in.
+            if (!phone.Registry.TryOpenRelay(remote))
+            {
+                await io.CloseQuietlyAsync(WebSocketCloseStatus.PolicyViolation, "rate limit");
+                return;
+            }
+            await new PhoneRelay(io, remote, phone).RunAsync(context.RequestAborted);
             return;
         }
 
@@ -150,21 +163,7 @@ public static class GlassesEndpoints
                 deviceToken,
                 deviceTokenExpiresAt = lease.DeviceTokenExpiresAt!.Value.ToUnixTimeMilliseconds(),
             }, context.RequestAborted);
-        var target = auth switch
-        {
-            AuthenticateMessage a => a.Target,
-            ResumeMessage r => r.Target,
-            _ => SessionTarget.Pc,
-        };
-        if (target == SessionTarget.Phone)
-        {
-            // The PC only relays signalling between the glasses and the phone's companion app.
-            await new PhoneRelay(io, lease, phone).RunAsync(context.RequestAborted);
-        }
-        else
-        {
-            await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
-        }
+        await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
     }
 
     /// <summary>WebSocket upgrade and exact Origin match; a bad Origin is refused before accepting.</summary>
