@@ -2,6 +2,9 @@ package uk.co.reliablesolutions.glassesremote.companion
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
@@ -9,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.widget.Button
@@ -28,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var code: TextView
     private lateinit var server: EditText
+    private lateinit var screen: TextView
     private var pairing: Pairing? = null
     private val watcher: () -> Unit = { runOnUiThread { refresh() } }
 
@@ -82,6 +87,40 @@ class MainActivity : Activity() {
             refresh()
         }
 
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = "Screen for the glasses"
+                    textSize = 18f
+                    setTypeface(typeface, Typeface.BOLD)
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(
+                Button(this@MainActivity).apply {
+                    text = "ⓘ"
+                    contentDescription = "How to allow the square screen"
+                    setOnClickListener { showScreenHelp() }
+                },
+            )
+        }.also { column.addView(it) }
+        text(
+            "Square makes the phone's screen square (the glasses' view is square) with more on it; " +
+                "Reset puts it back. Change it before starting a session.",
+        )
+        button("Square screen") {
+            changeScreen { "Square: ${DisplayOverride.square(this)}" }
+        }
+        button("Reset screen") {
+            changeScreen {
+                DisplayOverride.reset()
+                "Back to the phone's own screen"
+            }
+        }
+        screen = text("")
+
         // Android 15+ draws apps edge to edge: keep the content clear of the status and navigation bars.
         val scroll = ScrollView(this).apply { addView(column) }
         scroll.setOnApplyWindowInsetsListener { view, insets ->
@@ -112,6 +151,38 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         pairing?.cancel()
         super.onDestroy()
+    }
+
+    /** Runs a screen change, or says how to allow it (a one-off permission over adb). */
+    private fun changeScreen(change: () -> String) {
+        if (!DisplayOverride.allowed(this)) {
+            screen.text = "Not allowed yet: tap ⓘ to see how."
+            showScreenHelp()
+            return
+        }
+        screen.text = runCatching(change).getOrElse { "Couldn't change the screen: ${it.message ?: it.javaClass.simpleName}" }
+    }
+
+    /** How to allow the square screen: a one-off adb command, with a button to copy it. */
+    private fun showScreenHelp() {
+        val allowed = DisplayOverride.allowed(this)
+        AlertDialog.Builder(this)
+            .setTitle("Square screen: one-off setup")
+            .setMessage(
+                (if (allowed) "Allowed on this phone: nothing to do.\n\n" else "") +
+                    "Changing the screen size needs a permission Android only gives over adb. It's a " +
+                    "one-off: it stays after restarts.\n\n" +
+                    "1. On the phone: Settings > Developer options > USB debugging on.\n" +
+                    "2. Connect the phone to a PC with adb (Android platform-tools) and run:\n\n" +
+                    DisplayOverride.GRANT_COMMAND + "\n\n" +
+                    "Then Square screen and Reset screen work here any time, no PC needed.",
+            )
+            .setPositiveButton("Copy command") { _, _ ->
+                getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("adb command", DisplayOverride.GRANT_COMMAND))
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun refresh() {

@@ -40,6 +40,12 @@ Or open `android-companion/` in Android Studio.
    sideloaded app is greyed out at first ("Restricted setting"): Settings > Apps > Glasses
    Remote > ⋮ > **Allow restricted settings**, then turn it on.
 3. Tap **Start**. A notification stays while the companion is connected (Stop is there too).
+4. Optional, **square screen for the glasses:** grant a one-off permission from a PC (it survives
+   restarts; ⓘ on the setup screen shows this too):
+   `adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS`.
+   Then **Square screen** makes the phone 1080×1080 (its short side) at density 320, and **Reset
+   screen** puts it back, any time. Change it before starting a session: the companion reads the
+   screen size when a session starts.
 
 ## A session
 
@@ -65,4 +71,5 @@ glasses' ping.
 | `CropProcessor.kt` | Crops frames to the region, long side ≤ 600 |
 | `InputService.kt` | Accessibility service: gestures, global actions, text into the focused field, keep screen on |
 | `InputProtocol.kt` | Strict parser for the glasses' DataChannel messages (unit-tested) |
-| `MainActivity.kt` | Setup screen |
+| `MainActivity.kt` | Setup screen (with Square screen / Reset screen and the ⓘ setup pop-up) |
+| `DisplayOverride.kt` | Square screen and reset: the window manager's forced size and density (hidden API via HiddenApiBypass; needs `WRITE_SECURE_SETTINGS`, granted once over adb) |

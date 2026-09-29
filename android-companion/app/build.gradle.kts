@@ -32,6 +32,8 @@ android {
 dependencies {
     implementation("io.getstream:stream-webrtc-android:1.3.10")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // The square screen for the glasses calls the window manager's hidden forced size/density.
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")
 
     testImplementation("junit:junit:4.13.2")
     // Android's org.json is a stub in local unit tests; the real one for the parser tests.
