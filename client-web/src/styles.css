@@ -366,3 +366,28 @@ textarea:focus-visible {
 .phone-stage.choosing .status .input-trace {
   max-width: none;
 }
+
+/* Pairing with the phone: the code to compare with the one on the phone (black is see-through). */
+.phone-pair {
+  position: absolute;
+  inset: 120px 40px auto;
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: #000;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.phone-pair p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.phone-pair .code {
+  font: 700 56px/1 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}

@@ -1,5 +1,9 @@
 // A phone session: the phone's screen (from its companion app, over WebRTC) with a cursor drawn
-// here, and input sent straight to the phone on the DataChannel. The PC only relays signalling.
+// here, and input sent straight to the phone on the DataChannel. A server (the PC today) only
+// relays the setup (phoneConnect.ts): pairing and proving each other, the offer and the answer.
+// Once the channel is open the relay closes, and the session lives on the glasses' own link to
+// the phone: losing the internet doesn't end it. Glasses and phone ping each other over the
+// channel, and each ends the session when the other goes quiet.
 //
 // Controls, kept close to the PC session's:
 // - On the view (pinches as on a laptop touchpad, as in a PC session): pinch-drag moves the
@@ -17,7 +21,6 @@
 //   uses it, Back cancels. Fit: the phone crops to its top app window (a Samsung pop-up view
 //   window made square) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Session } from './connection';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, type GestureEvent } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
@@ -30,18 +33,24 @@ import {
   squareAround,
   toFrame,
   zoomRegion,
+  describeBye,
   type FromPhone,
+  type PhoneByeReason,
   type PhoneNav,
   type PhoneRegion,
   type ToPhone,
 } from './phoneProtocol';
+import { PhoneConnector } from './phoneConnect';
 import { PhoneLink } from './phoneRtc';
+import { openRelay, type PhoneState } from './phoneSignal';
 import { usePinchPressesFocused } from './pinchPress';
 import { PHONE_KEYS, TypePanel } from './TypePanel';
-import type { PhoneState, ServerMessage, Size } from './protocol';
+import type { Size } from './protocol';
 import { PHONE_DOUBLES, SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
 interface Props {
+  /** Pair with the phone again even if a pairing is remembered. */
+  pairAgain?: boolean;
   onEnded(reason: string): void;
   /** End on the bar: back to the PC/Phone choice. */
   onLeave(): void;
@@ -59,6 +68,8 @@ interface Choosing {
 const ZOOM_STEP = 1.25;
 
 const PING_MS = 2000;
+/** Nothing from the phone this long over the direct connection: it's gone (the phone uses 15 s). */
+const SILENT_MS = 10_000;
 /** Hidden this long (the app left), the session ends, as in a PC session. */
 const HIDDEN_MS = 5000;
 /**
@@ -71,6 +82,7 @@ const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
+  ready: 'checking the phone…',
   asking: 'on the phone, tap Start to share',
   live: 'phone sharing',
 };
@@ -82,7 +94,7 @@ const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'notifications', label: 'Notif' },
 ];
 
-export function PhoneScreen({ onEnded, onLeave }: Props) {
+export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -92,7 +104,11 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const choosing = useRef<Choosing | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<PhoneLink | null>(null);
-  const sessionRef = useRef<Session | null>(null);
+  const connectorRef = useRef<PhoneConnector | null>(null);
+  /** When the phone last said anything on the channel. */
+  const lastHeard = useRef(0);
+  /** Why the phone is ending the session, if it said so before closing. */
+  const bye = useRef<PhoneByeReason | null>(null);
   const frame = useRef<Rect>({ x: 0, y: 0, width: 600, height: 600 });
   const cursor = useRef<Point>({ x: 300, y: 300 });
   // A pinch released before the hold (HOLD_DRAG_MS) is a tap; after it, the hold has taken over.
@@ -122,7 +138,9 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   const [focus, setFocus] = useState<Focus>('view');
   const focusRef = useRef(focus);
   focusRef.current = focus;
-  const [phone, setPhone] = useState('connecting to the PC…');
+  const [phone, setPhone] = useState('reaching the phone…');
+  /** The pairing code, while the phone asks for approval. */
+  const [code, setCode] = useState<string | null>(null);
   const [media, setMedia] = useState<RTCPeerConnectionState>('new');
   const [channelOpen, setChannelOpen] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
@@ -181,39 +199,24 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       onEndedRef.current(reason);
     };
 
-    let link: PhoneLink | null = null;
-    const onMessage = (message: ServerMessage) => {
-      switch (message.type) {
-        case 'phoneStatus':
-          setPhone(PHONE_STATUS[message.state]);
-          break;
-        case 'rtcOffer':
-          link?.handleOffer(message.sdp).catch(() => end("The phone's video offer couldn't be used."));
-          break;
-        case 'iceCandidate':
-          void link?.addCandidate({ candidate: message.candidate, sdpMid: message.sdpMid, sdpMLineIndex: message.sdpMLineIndex });
-          break;
-        case 'pong':
-          setRttMs(Date.now() - message.t);
-          break;
-      }
-    };
-
-    let session: Session;
-    try {
-      session = Session.open({ onMessage, onClose: end }, 'phone');
-    } catch {
-      end('Not paired. Pair again.');
-      return;
-    }
-    sessionRef.current = session;
-    link = new PhoneLink(session.send.bind(session), videoRef.current!, {
+    let connector: PhoneConnector | null = null;
+    const link = new PhoneLink((candidate) => connector?.sendCandidate(candidate), videoRef.current!, {
       onState: (state) => {
         setMedia(state);
         if (state === 'failed') end('The video connection to the phone failed.');
       },
-      onChannel: setChannelOpen,
+      onChannel: (open) => {
+        setChannelOpen(open);
+        if (open) {
+          lastHeard.current = performance.now();
+          // Reached directly: the relay (and the server, and the internet) aren't needed any more.
+          connector?.connected();
+        } else {
+          end(bye.current ? describeBye(bye.current) : 'The connection to the phone closed.');
+        }
+      },
       onMessage: (message: FromPhone) => {
+        lastHeard.current = performance.now();
         if (message.type === 'screen') {
           phoneScreen.current = { width: message.width, height: message.height };
           // While choosing, the phone shows the whole screen; the crop to keep is the box.
@@ -223,16 +226,38 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
           const w = Math.round(message.region.width * message.width);
           const h = Math.round(message.region.height * message.height);
           setScreen(message.follow ? `${message.app ?? 'window'} ${w}×${h}` : `${w}×${h}`);
-        }
-        else if (message.type === 'result') onResult(message.of, message.ok);
+        } else if (message.type === 'result') onResult(message.of, message.ok);
+        else if (message.type === 'pong') setRttMs(Date.now() - message.t);
+        else if (message.type === 'bye') bye.current = message.reason;
       },
     });
     linkRef.current = link;
 
-    session.send({ type: 'ping', t: Date.now() });
-    const ping = setInterval(() => session.send({ type: 'ping', t: Date.now() }), PING_MS);
+    connector = new PhoneConnector(
+      openRelay,
+      {
+        onPhone: (state) => setPhone(PHONE_STATUS[state]),
+        onCode: setCode,
+        onOffer: (sdp) => link.handleOffer(sdp),
+        onCandidate: (candidate) => void link.addCandidate(candidate),
+        onPong: (t) => setRttMs(Date.now() - t),
+        onFailed: end,
+      },
+      pairAgain,
+    );
+    connectorRef.current = connector;
+
+    // On the channel, the ping is how each side knows the other is still there (no server to say
+    // so); before it opens, the relay's round trip.
+    const ping = setInterval(() => {
+      if (link.send({ type: 'ping', t: Date.now() })) {
+        if (performance.now() - lastHeard.current > SILENT_MS) end('The phone stopped answering (out of range, or its app stopped).');
+      } else {
+        connector?.ping();
+      }
+    }, PING_MS);
     const pathPoll = setInterval(() => {
-      link?.path().then(setPath, () => {});
+      link.path().then(setPath, () => {});
     }, 2000);
     let hiddenTimer: ReturnType<typeof setTimeout> | null = null;
     const onVisibility = () => {
@@ -251,10 +276,11 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
       if (hiddenTimer !== null) clearTimeout(hiddenTimer);
       clearInterval(ping);
       clearInterval(pathPoll);
-      link?.close();
+      // Closing the connection is what tells the phone (it ends its side when the channel closes).
+      link.close();
       linkRef.current = null;
-      session.close();
-      sessionRef.current = null;
+      connector?.close();
+      connectorRef.current = null;
     };
   }, []);
 
@@ -583,7 +609,7 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
   };
 
   const endSession = () => {
-    sessionRef.current?.close();
+    linkRef.current?.send({ type: 'end' });
     onLeaveRef.current();
   };
 
@@ -638,9 +664,17 @@ export function PhoneScreen({ onEnded, onLeave }: Props) {
         />
       )}
 
+      {code && (
+        <div className="phone-pair" role="status">
+          <p>Pair with the phone</p>
+          <p className="code">{`${code.slice(0, 3)} ${code.slice(3)}`}</p>
+          <p>Check the phone shows the same code, then tap Approve there.</p>
+        </div>
+      )}
+
       <div className="status">
         <span className={connected ? 'dot' : 'dot warn'}>●</span>
-        <span>{connected ? `live (${path ?? '…'})` : media === 'new' ? phone : media}</span>
+        <span>{connected ? `live (${path ?? '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
         <span className="input-trace">

@@ -1,10 +1,10 @@
 // The WebRTC side of a phone session. The phone's companion app offers a video track (its screen)
-// and a DataChannel "input"; the PC only relays the offer, the answer and the ICE candidates.
-// No STUN/TURN yet: the phone's own addresses are the candidates, and on the go the glasses'
-// traffic already goes out through the phone (architecture/phone-mode.md, P0).
+// and a DataChannel "input"; the offer, the answer and the ICE candidates go through the relay
+// (phoneConnect.ts). No STUN/TURN: the phone's own addresses are the candidates, and the glasses
+// reach them over their own link to the phone ("live (local)"), so the session needs no internet.
 import { mediaPath } from './mediaStats';
-import type { ClientMessage } from './protocol';
 import { parsePhoneMessage, type FromPhone, type ToPhone } from './phoneProtocol';
+import type { IceCandidate } from './phoneSignal';
 
 export interface PhoneLinkEvents {
   onState(state: RTCPeerConnectionState): void;
@@ -16,10 +16,10 @@ export class PhoneLink {
   private readonly pc = new RTCPeerConnection({ iceServers: [] });
   private channel: RTCDataChannel | null = null;
   private remoteSet = false;
-  private readonly pendingCandidates: RTCIceCandidateInit[] = [];
+  private readonly pendingCandidates: IceCandidate[] = [];
 
   constructor(
-    private readonly signal: (message: ClientMessage) => void,
+    private readonly onLocalCandidate: (candidate: IceCandidate) => void,
     video: HTMLVideoElement,
     private readonly events: PhoneLinkEvents,
   ) {
@@ -28,8 +28,7 @@ export class PhoneLink {
     };
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
-        this.signal({
-          type: 'iceCandidate',
+        this.onLocalCandidate({
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
           sdpMLineIndex: event.candidate.sdpMLineIndex,
@@ -51,17 +50,18 @@ export class PhoneLink {
     };
   }
 
-  async handleOffer(sdp: string): Promise<void> {
+  /** Sets the phone's (checked) offer and returns our answer's SDP. */
+  async handleOffer(sdp: string): Promise<string> {
     await this.pc.setRemoteDescription({ type: 'offer', sdp });
     this.remoteSet = true;
     for (const candidate of this.pendingCandidates.splice(0)) await this.addCandidate(candidate);
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
-    this.signal({ type: 'rtcAnswer', sdp: this.pc.localDescription!.sdp });
+    return this.pc.localDescription!.sdp;
   }
 
   /** The phone's trickled candidates; held until its offer is in place. */
-  async addCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+  async addCandidate(candidate: IceCandidate): Promise<void> {
     if (!this.remoteSet) {
       this.pendingCandidates.push(candidate);
       return;

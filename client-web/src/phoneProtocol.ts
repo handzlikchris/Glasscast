@@ -1,5 +1,5 @@
 // Glasses ⇄ phone, on the WebRTC DataChannel "input" (architecture/phone-mode.md). The PC never
-// sees these: it only relays the signalling. Must stay in sync with the companion app's parser
+// sees these: it only relays the setup, and once the channel is open it isn't needed at all. Must stay in sync with the companion app's parser
 // (android-companion/.../InputProtocol.kt).
 //
 // Positions are 0..1 within the video frame the glasses show; the phone maps them through its
@@ -32,7 +32,10 @@ export type ToPhone =
    * front. Fit then follows it. Never an app name: the phone keeps its own list.
    */
   | { type: 'switchApp'; dir: 'previous' | 'next' }
-  | { type: 'ping'; t: number };
+  /** Every couple of seconds: the phone ends a session it stops hearing from (no PC to tell it). */
+  | { type: 'ping'; t: number }
+  /** End on the glasses: the phone stops capturing. */
+  | { type: 'end' };
 
 /** The crop, in 0..1 of the phone's screen. */
 export type PhoneRegion = Region;
@@ -41,7 +44,14 @@ export type FromPhone =
   /** The phone's screen in pixels, the crop (0..1), whether it follows an app's window, and which app. */
   | { type: 'screen'; width: number; height: number; region: PhoneRegion; follow: boolean; app?: string }
   | { type: 'result'; of: 'typeText' | 'key' | 'switchApp'; ok: boolean }
-  | { type: 'pong'; t: number };
+  | { type: 'pong'; t: number }
+  /** The phone is ending the session, and why (just before it closes the connection). */
+  | { type: 'bye'; reason: PhoneByeReason };
+
+/** stopped: End session or Stop on the phone; capture: Android stopped the capture (the phone locked); replaced: another session took over; silent: nothing heard from the glasses. */
+export type PhoneByeReason = 'stopped' | 'capture' | 'replaced' | 'silent';
+
+const BYE_REASONS: readonly string[] = ['stopped', 'capture', 'replaced', 'silent'];
 
 export const SWIPE_MIN_MS = 50;
 export const SWIPE_MAX_MS = 2000;
@@ -81,8 +91,26 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
         : null;
     case 'pong':
       return isNumber(data.t) ? { type: 'pong', t: data.t } : null;
+    case 'bye':
+      return typeof data.reason === 'string' && BYE_REASONS.includes(data.reason)
+        ? { type: 'bye', reason: data.reason as PhoneByeReason }
+        : null;
     default:
       return null;
+  }
+}
+
+/** The ended screen's text for a phone that said goodbye. */
+export function describeBye(reason: PhoneByeReason): string {
+  switch (reason) {
+    case 'stopped':
+      return 'The session was ended on the phone.';
+    case 'capture':
+      return 'The phone stopped sharing its screen (it locked, or its capture chip was tapped).';
+    case 'replaced':
+      return 'Another session with the phone took over.';
+    case 'silent':
+      return 'The phone stopped hearing from the glasses.';
   }
 }
 

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { isDeviceRemembered } from './connection';
+import { forgetPairing, loadPairing } from './phoneTrust';
 import { PairingScreen } from './PairingScreen';
 import { PhoneScreen } from './PhoneScreen';
 import { usePinchPressesFocused } from './pinchPress';
@@ -13,7 +14,7 @@ const CHOOSE_GUARD_MS = 400;
 type Phase =
   | { kind: 'choose' }
   | { kind: 'pairing'; target: SessionTarget; attempt: number }
-  | { kind: 'session'; target: SessionTarget; attempt: number }
+  | { kind: 'session'; target: SessionTarget; attempt: number; pairAgain?: boolean }
   | { kind: 'ended'; target: SessionTarget; reason: string };
 
 export function App() {
@@ -24,12 +25,13 @@ export function App() {
   const leftAt = useRef(-Infinity);
   usePinchPressesFocused(phase.kind !== 'session');
 
-  // Remembered glasses (approved in the last 24 h) skip pairing; the PC gates both targets.
+  // PC: remembered glasses (approved in the last 24 h) skip pairing, which is approved on the PC.
+  // Phone: straight in; the phone pairs the glasses itself (Approve on the phone) when needed.
   const start = (target: SessionTarget) => {
     if (performance.now() - leftAt.current < CHOOSE_GUARD_MS) return;
     saveTarget(target);
     setPhase(
-      isDeviceRemembered()
+      target === 'phone' || isDeviceRemembered()
         ? { kind: 'session', target, attempt: Date.now() }
         : { kind: 'pairing', target, attempt: Date.now() },
     );
@@ -49,7 +51,7 @@ export function App() {
               Phone
             </button>
           </div>
-          <p>Phone needs its companion app running.</p>
+          <p>Phone needs its companion app running; it pairs on the phone.</p>
           <p className="build">Build {__BUILD__}</p>
         </main>
       );
@@ -72,7 +74,7 @@ export function App() {
         setPhase({ kind: 'choose' });
       };
       return phase.target === 'phone' ? (
-        <PhoneScreen key={phase.attempt} onEnded={onEnded} onLeave={onLeave} />
+        <PhoneScreen key={phase.attempt} pairAgain={phase.pairAgain} onEnded={onEnded} onLeave={onLeave} />
       ) : (
         <SessionScreen key={phase.attempt} onEnded={onEnded} onLeave={onLeave} />
       );
@@ -80,7 +82,16 @@ export function App() {
 
     case 'ended': {
       // Never automatic: reconnecting is your choice. Remembered glasses need no approval for it.
-      const remembered = isDeviceRemembered();
+      const phone = phase.target === 'phone';
+      const remembered = phone ? loadPairing() !== null : isDeviceRemembered();
+      const pairAgain = () => {
+        if (phone) {
+          forgetPairing();
+          setPhase({ kind: 'session', target: 'phone', attempt: Date.now(), pairAgain: true });
+        } else {
+          setPhase({ kind: 'pairing', target: 'pc', attempt: Date.now() });
+        }
+      };
       return (
         <main className="ended">
           <h1>Session ended</h1>
@@ -90,7 +101,7 @@ export function App() {
               Reconnect
             </button>
           )}
-          <button type="button" autoFocus={!remembered} onClick={() => setPhase({ kind: 'pairing', target: phase.target, attempt: Date.now() })}>
+          <button type="button" autoFocus={!remembered} onClick={pairAgain}>
             Pair again
           </button>
           <button type="button" onClick={() => setPhase({ kind: 'choose' })}>

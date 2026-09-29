@@ -25,6 +25,7 @@ describe('parsePhoneMessage', () => {
     expect(parsePhoneMessage('{"type":"screen","width":1,"height":1,"region":{"x":0,"y":0,"width":1,"height":1},"follow":true,"app":"Chrome"}')).toMatchObject({ app: 'Chrome' });
     expect(parsePhoneMessage('{"type":"result","of":"typeText","ok":false}')).toEqual({ type: 'result', of: 'typeText', ok: false });
     expect(parsePhoneMessage('{"type":"pong","t":5}')).toEqual({ type: 'pong', t: 5 });
+    expect(parsePhoneMessage('{"type":"bye","reason":"capture"}')).toEqual({ type: 'bye', reason: 'capture' });
   });
 
   it.each([
@@ -32,6 +33,7 @@ describe('parsePhoneMessage', () => {
     '{"type":"screen","width":1080}',
     '{"type":"result","of":"tap","ok":true}',
     '{"type":"tap","x":1,"y":1}',
+    '{"type":"bye","reason":"because"}',
     'null',
   ])('drops %s', (raw) => {
     expect(parsePhoneMessage(raw)).toBeNull();

@@ -7,8 +7,6 @@ export type ViewMode = 'overview' | 'view' | 'pointer' | 'scroll' | 'type';
 /** What a session controls: the PC, or the phone through its companion app (architecture/phone-mode.md). */
 export type SessionTarget = 'pc' | 'phone';
 
-/** Where the phone is in a phone session (PhoneRelay.cs, CompanionProtocol.StateName). */
-export type PhoneState = 'offline' | 'asking' | 'live';
 
 export type KeyName =
   | 'Enter'
@@ -124,14 +122,11 @@ export type ServerMessage =
   | { type: 'region'; region: Region }
   | { type: 'pong'; t: number; serverTime: number }
   | { type: 'appSwitch'; slot: number; result: AppSwitchResult }
-  | ({ type: 'mediaStats' } & PcMediaStats)
-  // Phone sessions only: the PC relays the phone's state and trickled ICE candidates.
-  | { type: 'phoneStatus'; state: PhoneState }
-  | { type: 'iceCandidate'; candidate: string; sdpMid: string | null; sdpMLineIndex: number | null };
+  | ({ type: 'mediaStats' } & PcMediaStats);
 
 export type ClientMessage =
-  | { type: 'authenticate'; token: string; target?: SessionTarget }
-  | { type: 'resume'; token: string; target?: SessionTarget }
+  | { type: 'authenticate'; token: string }
+  | { type: 'resume'; token: string }
   | { type: 'rtcAnswer'; sdp: string }
   | { type: 'iceCandidate'; candidate: string; sdpMid: string | null; sdpMLineIndex: number | null }
   | { type: 'setMode'; mode: ViewMode }
@@ -231,21 +226,6 @@ export function parseServerMessage(raw: string): ServerMessage | null {
         : null;
     case 'rtcOffer':
       return isString(data.sdp) ? { type: 'rtcOffer', sdp: data.sdp } : null;
-    case 'phoneStatus':
-      return data.state === 'offline' || data.state === 'asking' || data.state === 'live'
-        ? { type: 'phoneStatus', state: data.state }
-        : null;
-    case 'iceCandidate':
-      return isString(data.candidate) &&
-        (data.sdpMid === null || data.sdpMid === undefined || isString(data.sdpMid)) &&
-        (data.sdpMLineIndex === null || data.sdpMLineIndex === undefined || isNumber(data.sdpMLineIndex))
-        ? {
-            type: 'iceCandidate',
-            candidate: data.candidate,
-            sdpMid: isString(data.sdpMid) ? data.sdpMid : null,
-            sdpMLineIndex: isNumber(data.sdpMLineIndex) ? data.sdpMLineIndex : null,
-          }
-        : null;
     case 'region':
       return isRegion(data.region) ? { type: 'region', region: data.region } : null;
     case 'pong':
