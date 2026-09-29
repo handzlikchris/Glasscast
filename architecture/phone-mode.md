@@ -149,7 +149,7 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
 | Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
 | Type | The PC session's `TypePanel`, same steps: text box and composer → **Send text** → **Enter** (keys: Enter, ⌫). For 0.8 s after the panel moves focus to Send text or Enter, that button ignores presses (`guardMs`) | Same habit on both targets; the composer's Insert pinch reached the page late on the S25 |
-| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · Region · Fit · End (End returns to the PC/Phone choice) | Same habits on both targets |
+| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · Region · Fit · ? · End (? shows the shortcuts; End returns to the PC/Phone choice) | Same habits on both targets |
 | Typing | As a keyboard first (the accessibility service is also an input method), else `ACTION_SET_TEXT` | Apps that draw their own text take keyboard input once their keyboard is open |
 | Input | `AccessibilityService`: `dispatchGesture`, `performGlobalAction`, text | Public API, no ADB, no root |
 | Coordinates | Glasses send 0..1 **within the video frame**; the phone maps through its current crop | The phone alone knows the crop |

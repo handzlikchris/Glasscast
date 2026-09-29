@@ -88,6 +88,7 @@ client-web/             glasses client (600×600)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: Back targets, tap routing (pure, tested)
   src/swipes.ts         THE swipe rules for PC and phone: double left/right, what each does (pure, tested)
+  src/shortcuts.ts      the ? panel's rows (swipe doubles taken from swipes.ts; ShortcutsPanel.tsx)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
   src/mediaStats.ts     Stats panel: capture-to-display latency (RTP timestamp matching, clock offset
                         from ping/pong), receiver counters, PC pump figures (pure, tested)
@@ -188,9 +189,13 @@ glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──�
 
 ## Glasses controls (as tuned on the device)
 
-The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕n · ☀n · ♪ · Look · Stats · End** (one
+The mode bar: **Region · Pointer · Type · 1 · 2 … · Pan · ↕n · ☀n · ♪ · Look · Stats · ? · End** (one
 row; with two app buttons it has a little room to spare, and the e2e drive checks it fits). **End**
-goes back to the PC/Phone first screen (so does End in a phone session), never the ended screen. Model in
+goes back to the PC/Phone first screen (so does End in a phone session), never the ended screen.
+**?** (on the phone's bar too) shows the session's gestures and shortcuts under the bar; a second
+press closes it. **Keep it current:** any change to a gesture, swipe or Back updates the ? panel in
+the same piece of work. Swipe doubles come from `swipes.ts` by themselves; the other rows are text
+in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 

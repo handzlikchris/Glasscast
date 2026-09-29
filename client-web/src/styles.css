@@ -160,6 +160,7 @@ textarea:focus-visible {
 .toolbar.top {
   top: 6px;
   gap: 4px;
+  padding: 6px 4px;
   flex-wrap: nowrap;
 }
 
@@ -167,7 +168,7 @@ textarea:focus-visible {
 /* One line per button, always: a label that wraps makes the whole bar taller. Labels are short
    (☀80, ↕3) and the padding tight, so the bar fits the glasses' font too. */
 .toolbar.top button {
-  padding: 4px 6px;
+  padding: 4px 5px;
   white-space: nowrap;
 }
 
@@ -390,4 +391,31 @@ textarea:focus-visible {
   font: 700 56px/1 var(--mono);
   letter-spacing: 0.08em;
   color: var(--accent);
+}
+
+/* The ? panel: the session's gestures, under the bar (black is see-through, so a solid panel). */
+.shortcuts-panel {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 62px;
+  display: grid;
+  gap: 3px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--fg);
+  background: var(--panel);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.shortcuts-panel .shortcut {
+  display: grid;
+  grid-template-columns: 44% 1fr;
+  gap: 10px;
+}
+
+.shortcuts-panel .shortcut span:first-child {
+  color: var(--muted);
 }

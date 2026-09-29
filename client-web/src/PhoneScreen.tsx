@@ -42,6 +42,7 @@ import {
   type ToPhone,
 } from './phoneProtocol';
 import { PhoneConnector } from './phoneConnect';
+import { ShortcutsPanel } from './ShortcutsPanel';
 import { PhoneLink } from './phoneRtc';
 import { openRelay, type PhoneState } from './phoneSignal';
 import { usePinchPressesFocused } from './pinchPress';
@@ -157,6 +158,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
   const [follow, setFollow] = useState(false);
+  /** The ? panel (shortcuts), under the bar while it shows. */
+  const [showHelp, setShowHelp] = useState(false);
   /** Text the phone had no field for, handed back to the Type panel. */
   const [refill, setRefill] = useState<{ text: string } | null>(null);
 
@@ -677,6 +680,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         <button type="button" aria-pressed={follow} onClick={fitWindow}>
           Fit
         </button>
+        <button type="button" aria-pressed={showHelp} onClick={() => setShowHelp((v) => !v)}>
+          ?
+        </button>
         <button type="button" onClick={endSession}>
           End
         </button>
@@ -697,6 +703,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           guardMs={TYPE_GUARD_MS}
         />
       )}
+
+      {showHelp && focus === 'bar' && <ShortcutsPanel target="phone" />}
 
       {code && (
         <div className="phone-pair" role="status">

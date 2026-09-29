@@ -20,6 +20,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, key buttons, the focus chain. **Shared by PC and phone sessions** (same steps; the keys are a prop: `PC_KEYS`, `PHONE_KEYS` Enter and ⌫). |
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
 | `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
+| `src/shortcuts.ts`, `src/ShortcutsPanel.tsx` | The **?** button's panel on both bars: the session's gestures and shortcuts. Swipe doubles come from `swipes.ts`; pinch and Back rows are text here, updated with any gesture change (CLAUDE.md). |
 | `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)): `phoneConnect.ts` (relay, pairing, handshake), `phoneTrust.ts` (the crypto), `phoneSignal.ts` (relay socket), `phoneRtc.ts`, `phoneProtocol.ts`. |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms; an *armed* press, the second of a pair, drags with the button held, and `hold()` after `HOLD_DRAG_MS` 400 holds it still), `TapThenHold` (spots that second press), `DOUBLE_TAP_MS` 350. See "Pinches" below. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |

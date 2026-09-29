@@ -56,6 +56,7 @@ import { drawOverlay, type Look } from './overlay';
 import { textChunks, type ClientMessage, type KeyName, type PcMediaStats, type Region, type ServerMessage, type Size, type ViewMode } from './protocol';
 import { VideoReceiver, watchFrames } from './rtc';
 import { PC_KEYS, TypePanel } from './TypePanel';
+import { ShortcutsPanel } from './ShortcutsPanel';
 
 /** View pixels of cursor travel per pixel of pinch-drag. Tune on the device. */
 const POINTER_GAIN = 1.0;
@@ -207,6 +208,8 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const latency = useRef(new FrameLatency(clock.current));
   const pcStats = useRef<PcMediaStats[]>([]);
   const [showStats, setShowStats] = useState(false);
+  /** The ? panel (shortcuts), under the bar while the bar shows. */
+  const [showHelp, setShowHelp] = useState(false);
   const [statsText, setStatsText] = useState<string[]>([]);
 
   const content: Rect | null = useMemo(() => (region ? contentRect(region) : null), [region]);
@@ -1099,8 +1102,29 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
         <button type="button" data-look={look} onClick={() => setLook(nextLook)} title={`Display look: ${look}`}>
           Look
         </button>
-        <button type="button" data-toggle="stats" aria-pressed={showStats} onClick={() => setShowStats((v) => !v)} title="Latency stats">
+        <button
+          type="button"
+          data-toggle="stats"
+          aria-pressed={showStats}
+          onClick={() => {
+            setShowStats((v) => !v);
+            setShowHelp(false);
+          }}
+          title="Latency stats"
+        >
           Stats
+        </button>
+        <button
+          type="button"
+          data-toggle="help"
+          aria-pressed={showHelp}
+          onClick={() => {
+            setShowHelp((v) => !v);
+            setShowStats(false);
+          }}
+          title="Shortcuts: how the gestures work"
+        >
+          ?
         </button>
         <button
           type="button"
@@ -1114,6 +1138,8 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
           End
         </button>
       </nav>
+
+      {showHelp && !barHidden && <ShortcutsPanel target="pc" />}
 
       {showStats && mode !== 'overview' && mode !== 'type' && (
         <div className={barHidden ? 'stats-panel' : 'stats-panel below-bar'} aria-label="Latency stats">

@@ -669,6 +669,19 @@ try {
     wrappedLeft === 'end' && wrappedRight === 'overview' && oneLine,
     `left from Region → ${wrappedLeft}, right from End → ${wrappedRight}, one line ${oneLine}`);
 
+  // 19c. The ? button (still on the controls) shows the shortcuts under the bar, taken from the
+  //      same rules the swipes use, and a second press closes them.
+  await tapBar('button[data-toggle="help"]');
+  await sleep(200);
+  const helpText = await page.$eval('.shortcuts-panel', (el) => el.textContent).catch(() => null);
+  await shot('19c-shortcuts');
+  await tapBar('button[data-toggle="help"]');
+  await sleep(200);
+  const helpClosed = !(await page.$('.shortcuts-panel'));
+  check('the ? button shows the shortcuts and a second press closes them',
+    !!helpText && helpText.includes('swipe right ×2') && helpText.includes('next app') && helpClosed,
+    `shown ${!!helpText}, closed ${helpClosed}`);
+
   // 20. The mode bar (with End last) still fits on one row, and End goes back to the PC/Phone
   //     choice rather than the ended screen, with PC (the last choice) focused.
   const bar = await page.$eval('.toolbar.top', (el) => ({ fits: el.scrollWidth <= el.clientWidth, width: el.scrollWidth }));
