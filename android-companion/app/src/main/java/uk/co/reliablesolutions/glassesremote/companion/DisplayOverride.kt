@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
+import android.os.Process
 import android.view.Display
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
@@ -24,8 +25,11 @@ object DisplayOverride {
     /** Density for the square screen: more fits on it, still readable on the glasses. */
     const val SQUARE_DENSITY = 320
 
-    /** `UserHandle.USER_CURRENT`, as `wm density` uses. */
-    private const val USER_CURRENT = -2
+    /**
+     * The phone user this app runs as (0 normally). Not USER_CURRENT (-2), as `wm density` uses:
+     * an app asking for that is refused (it needs INTERACT_ACROSS_USERS_FULL; seen on the S25).
+     */
+    private val user: Int get() = Process.myUid() / 100_000
 
     const val GRANT_COMMAND =
         "adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS"
@@ -38,14 +42,14 @@ object DisplayOverride {
         val mode = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY).mode
         val side = minOf(mode.physicalWidth, mode.physicalHeight)
         call("setForcedDisplaySize", Display.DEFAULT_DISPLAY, side, side)
-        call("setForcedDisplayDensityForUser", Display.DEFAULT_DISPLAY, SQUARE_DENSITY, USER_CURRENT)
+        call("setForcedDisplayDensityForUser", Display.DEFAULT_DISPLAY, SQUARE_DENSITY, user)
         return "${side}×$side at density $SQUARE_DENSITY"
     }
 
     /** Back to the phone's own screen size and density. */
     fun reset() {
         call("clearForcedDisplaySize", Display.DEFAULT_DISPLAY)
-        call("clearForcedDisplayDensityForUser", Display.DEFAULT_DISPLAY, USER_CURRENT)
+        call("clearForcedDisplayDensityForUser", Display.DEFAULT_DISPLAY, user)
     }
 
     private fun call(name: String, vararg args: Int) {
