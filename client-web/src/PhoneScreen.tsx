@@ -144,7 +144,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [media, setMedia] = useState<RTCPeerConnectionState>('new');
   const [channelOpen, setChannelOpen] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
-  const [path, setPath] = useState<'local' | 'remote' | null>(null);
+  const [path, setPath] = useState<{ kind: 'local' | 'remote'; address: string } | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
   const [follow, setFollow] = useState(false);
@@ -674,7 +674,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
       <div className="status">
         <span className={connected ? 'dot' : 'dot warn'}>●</span>
-        <span>{connected ? `live (${path ?? '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
+        <span>{connected ? `live (${path ? `${path.kind} ${path.address}` : '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
         <span className="input-trace">
