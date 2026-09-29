@@ -502,9 +502,9 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
   logged; `media error` / `server error` close reasons). Open: F5-F14 (low), e.g. the Approve
   popup's stale "End session" text, stale cursor before clicks, region file written per pan step.
 - **Task briefs for new sessions live in `.claude/tasks/`.** Start there when asked to "pick up
-  the task". `phone-direct-dat.md` (2026-09-29, plan only): the phone drives the glasses itself
-  through Meta's DAT Display/Inputs/Speech, no PC and no internet; starts with an N0 frame-rate
-  spike on the S25. `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
+  the task". `phone-direct-dat.md` (2026-09-29): a native DAT glasses app instead of the web app was
+  **looked at and not pursued** (no live video in DAT Display; the companion already is the
+  native app); lists extras for later (mic dictation, cards, buttons, camera). `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
   mic via Meta's DAT) is planned but **on hold** at the user's request.
 - **Latency over mobile data (2026-09-27):** the session showed ~26% packet loss, all in the
   seconds keyframes went out, and only 1 in 5 frames shown. Pacing (`RtpPacer`) and heard PLIs
