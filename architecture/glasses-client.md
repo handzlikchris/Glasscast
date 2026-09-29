@@ -65,7 +65,9 @@ Effects:
 ## Pinches (interface decision, 2026-09-27)
 
 Like a laptop touchpad, on the PC and the phone alike (the user's choice); `GestureTracker`
-decides, the screens act.
+decides, the screens act. **A tap is the default** (2026-09-29): a pinch let go within 0.2 s
+(`tapGraceMs`) is a tap however much the hand drifted, and nothing moves during those 0.2 s; after
+them, 14 px of travel (`tapThreshold`, was 10) from where the hand then was starts a drag.
 
 | Pinch on the view | PC session (Pointer mode) | Phone session |
 | --- | --- | --- |

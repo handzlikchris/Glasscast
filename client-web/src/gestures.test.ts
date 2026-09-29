@@ -52,6 +52,36 @@ describe('GestureTracker', () => {
   });
 });
 
+describe('GestureTracker grace (a tap is the default)', () => {
+  const options = { tapThreshold: 14, tapMaxMs: 500, tapGraceMs: 200 };
+
+  it('a pinch let go within the grace is a tap, however far the hand drifted', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 100, 100, 0);
+    expect(g.move(1, 160, 130, 150)).toEqual([]);
+    expect(g.up(1, 170, 140, 190)).toEqual([{ kind: 'tap', x: 100, y: 100 }]);
+  });
+
+  it('after the grace, travel from where the hand then was makes a drag, without the drift', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 100, 100, 0);
+    g.move(1, 150, 100, 100); // drift in the grace
+    expect(g.move(1, 160, 100, 250)).toEqual([]); // 10 px since: still under the threshold
+    expect(g.move(1, 170, 100, 300)).toEqual([
+      { kind: 'dragStart', x: 100, y: 100 },
+      { kind: 'drag', dx: 20, dy: 0 },
+    ]);
+    expect(g.up(1, 170, 100, 400)).toEqual([{ kind: 'dragEnd' }]);
+  });
+
+  it('a slow pinch that stayed put is still a tap', () => {
+    const g = new GestureTracker(options);
+    g.down(1, 100, 100, 0);
+    g.move(1, 105, 104, 300);
+    expect(g.up(1, 105, 104, 450)).toEqual([{ kind: 'tap', x: 100, y: 100 }]);
+  });
+});
+
 describe('TapThenHold', () => {
   it('arms a press that starts soon after a tap', () => {
     const t = new TapThenHold();

@@ -996,7 +996,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const p = toLocal(e);
     lastPointer.current = p;
-    gestures.current.move(e.pointerId, p.x, p.y).forEach(handleGesture);
+    gestures.current.move(e.pointerId, p.x, p.y, e.timeStamp).forEach(handleGesture);
   };
   const clearHold = () => {
     if (holdTimer.current !== null) clearTimeout(holdTimer.current);

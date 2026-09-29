@@ -2,9 +2,11 @@
 //
 // On Meta Ray-Ban Display a Neural Band pinch-drag arrives as ordinary pointer
 // events (pointerdown / pointermove / pointerup), as long as the page's initial
-// CSS sets `touch-action: none`. A short pinch that stays within the tap
-// threshold is a tap; anything that travels further is a drag. On a laptop the
-// same code runs with mouse or trackpad drags.
+// CSS sets `touch-action: none`. A tap is the default: a pinch let go within the
+// grace time (tapGraceMs) is a tap however much the hand drifted, and its drift
+// moves nothing. After the grace, travel beyond the tap threshold (measured from
+// where the hand was when the grace ended) makes a drag. On a laptop the same code
+// runs with mouse or trackpad drags.
 //
 // Tap-and-a-half, as on a laptop touchpad: the second pinch of a quick pair is "armed" (the
 // caller passes armed to down()). An armed press that moves is a held drag (the mouse button or
@@ -18,9 +20,15 @@ export interface GestureOptions {
   tapThreshold: number;
   /** Longest press still counted as a tap (ms). */
   tapMaxMs: number;
+  /**
+   * The start of a press during which movement is ignored (ms): let go within it and it's a tap,
+   * whatever the hand did. Drags start only after it (user's choice, 2026-09-29: quick pinches
+   * were turning into drags). 0: none.
+   */
+  tapGraceMs?: number;
 }
 
-export const DEFAULT_GESTURES: GestureOptions = { tapThreshold: 10, tapMaxMs: 500 };
+export const DEFAULT_GESTURES: GestureOptions = { tapThreshold: 14, tapMaxMs: 500, tapGraceMs: 200 };
 
 /** An armed pinch (the second of a pair) kept still this long holds the button/finger down. */
 export const HOLD_DRAG_MS = 400;
@@ -40,6 +48,9 @@ interface Press {
   id: number;
   startX: number;
   startY: number;
+  /** Where travel is measured from: the start, or where the hand was when the grace ended. */
+  anchorX: number;
+  anchorY: number;
   lastX: number;
   lastY: number;
   startTime: number;
@@ -57,22 +68,30 @@ export class GestureTracker {
 
   down(id: number, x: number, y: number, time: number, armed = false): void {
     if (this.press) return;
-    this.press = { id, startX: x, startY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false, armed };
+    this.press = { id, startX: x, startY: y, anchorX: x, anchorY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false, armed };
   }
 
-  move(id: number, x: number, y: number): GestureEvent[] {
+  /** `time`: the event's timestamp, for the grace; without it the grace is over. */
+  move(id: number, x: number, y: number, time?: number): GestureEvent[] {
     const p = this.press;
     if (!p || p.id !== id) return [];
 
     const events: GestureEvent[] = [];
     if (!p.dragging) {
-      if (Math.hypot(x - p.startX, y - p.startY) <= this.options.tapThreshold) return [];
+      const grace = this.options.tapGraceMs ?? 0;
+      if (grace > 0 && time !== undefined && time - p.startTime < grace) {
+        // Still in the grace: a tap's drift. Nothing moves, and the drift doesn't count later.
+        p.anchorX = p.lastX = x;
+        p.anchorY = p.lastY = y;
+        return [];
+      }
+      if (Math.hypot(x - p.anchorX, y - p.anchorY) <= this.options.tapThreshold) return [];
       p.dragging = true;
       events.push(p.held || p.armed ? { kind: 'dragStart', x: p.startX, y: p.startY, held: true } : { kind: 'dragStart', x: p.startX, y: p.startY });
     }
 
-    // The first drag event includes the movement inside the threshold, so the
-    // cursor doesn't lag behind the hand by the threshold distance.
+    // The first drag event includes the movement inside the threshold (since the grace ended),
+    // so the cursor doesn't lag behind the hand by the threshold distance.
     events.push({ kind: 'drag', dx: x - p.lastX, dy: y - p.lastY });
     p.lastX = x;
     p.lastY = y;

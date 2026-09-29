@@ -560,7 +560,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   };
 
   const onPointerMove = (e: ReactPointerEvent) => {
-    tracker.current.move(e.pointerId, e.clientX, e.clientY).forEach(handleGesture);
+    tracker.current.move(e.pointerId, e.clientX, e.clientY, e.timeStamp).forEach(handleGesture);
   };
 
   const onPointerUp = (e: ReactPointerEvent) => {
