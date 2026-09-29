@@ -27,7 +27,10 @@ sealed interface InputCommand {
     data object FitWindow : InputCommand
     /** The previous (older) or next (newer) recently used app; Fit follows it. */
     data class SwitchApp(val previous: Boolean) : InputCommand
+    /** The glasses' heartbeat: the phone ends a session it stops hearing from. */
     data class Ping(val t: Double) : InputCommand
+    /** End on the glasses. */
+    data object End : InputCommand
 }
 
 /**
@@ -81,6 +84,7 @@ object InputProtocol {
                 null
             }
             "ping" -> if (only(o, "t")) num(o, "t")?.let { InputCommand.Ping(it) } else null
+            "end" -> if (only(o)) InputCommand.End else null
             else -> null
         }
     }

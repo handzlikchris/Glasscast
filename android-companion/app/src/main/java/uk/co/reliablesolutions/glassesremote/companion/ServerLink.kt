@@ -12,8 +12,9 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * What the companion keeps: the PC's companion socket URL and the companion token from pairing.
- * App-private storage, excluded from backups (allowBackup=false); the PC keeps only its hash.
+ * What the companion keeps: the PC's companion socket URL and the companion token from pairing
+ * with the PC (the PC keeps only its hash), and the paired glasses' key. App-private storage,
+ * excluded from backups (allowBackup=false).
  */
 class Prefs(context: Context) {
     companion object {
@@ -29,6 +30,26 @@ class Prefs(context: Context) {
     var token: String?
         get() = sp.getString("token", null)
         set(value) = sp.edit().putString("token", value).apply()
+
+    /**
+     * The glasses paired on this phone (Approve here), and the key both hold. The PC never sees it.
+     * One pair of glasses at a time: a new pairing replaces the old.
+     */
+    var glasses: PairedGlasses?
+        get() {
+            val id = sp.getString("glassesId", null) ?: return null
+            val key = sp.getString("glassesKey", null)?.let(GlassesTrust::unb64u) ?: return null
+            return PairedGlasses(id, key)
+        }
+        set(value) = sp.edit().apply {
+            if (value == null) {
+                remove("glassesId")
+                remove("glassesKey")
+            } else {
+                putString("glassesId", value.id)
+                putString("glassesKey", GlassesTrust.b64u(value.key))
+            }
+        }.apply()
 
     /** The last crop chosen on the glasses, so the next session starts there. */
     var region: Region

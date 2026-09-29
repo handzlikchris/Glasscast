@@ -18,9 +18,10 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * Setup, done once: pair with the PC (approve the code in its popup), turn on the accessibility
- * service, start the companion. After that the glasses start phone sessions from their side; the
- * phone only asks for the screen-capture consent each time.
+ * Setup, done once: pair with the PC (approve the code in its popup: that only lets this phone use
+ * the PC as a meeting point), turn on the accessibility service, start the companion. The glasses
+ * pair with this phone the first time they choose Phone (the same code on both, Approve in a
+ * notification here); after that the phone only asks for the screen-capture consent each time.
  */
 class MainActivity : Activity() {
     private lateinit var prefs: Prefs
@@ -69,9 +70,17 @@ class MainActivity : Activity() {
         button("Open accessibility settings") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
 
         text("3. Start", 18f, bold = true)
-        text("Keeps a connection to the PC so the glasses can reach this phone. Each session still asks you here first.")
+        text(
+            "Keeps a connection to the PC so the glasses can reach this phone to start a session. " +
+                "The first time, the glasses pair with this phone: approve the code in the notification. " +
+                "Each session still asks you here first, and once it runs it no longer needs the PC or the internet.",
+        )
         button("Start") { CompanionService.start(this) }
         button("Stop") { CompanionService.stop(this) }
+        button("Forget the glasses") {
+            prefs.glasses = null
+            refresh()
+        }
 
         // Android 15+ draws apps edge to edge: keep the content clear of the status and navigation bars.
         val scroll = ScrollView(this).apply { addView(column) }
@@ -109,6 +118,7 @@ class MainActivity : Activity() {
         status.text = listOf(
             "Companion: ${CompanionService.status}",
             "Paired with the PC: ${if (prefs.token != null) "yes" else "no"}",
+            "Glasses paired: ${if (prefs.glasses != null) "yes" else "no (they pair the first time they choose Phone)"}",
             "Input (accessibility): ${if (InputService.instance != null) "on" else "off"}",
         ).joinToString("\n")
     }

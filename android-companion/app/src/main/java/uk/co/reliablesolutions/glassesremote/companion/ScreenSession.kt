@@ -34,7 +34,13 @@ import kotlin.math.abs
 /**
  * One phone session: the screen (MediaProjection, whole display) as a WebRTC video track, and the
  * DataChannel "input" the glasses send taps, swipes, keys and text on. The phone offers; the PC
- * relays the offer, the answer and the ICE candidates (via [signal]) and nothing else.
+ * relays the offer, the answer and the ICE candidates (via [signal]) and nothing else. The offer
+ * carries a MAC under [sessionKey] (agreed with the glasses in [GlassesRelay]) and the answer must
+ * carry one, which ties this connection's DTLS fingerprints to the paired glasses.
+ *
+ * Once the channel is open the session needs no PC: the glasses ping every 2 s on it, and the
+ * session ends when they go quiet for [SILENT_MS], when the channel closes, or when they say "end".
+ * Before it opens, it gives up after [CONNECT_MS].
  *
  * Everything that touches state runs on the service's thread ([post]); WebRTC calls back on its
  * own threads and hops over.
@@ -42,6 +48,7 @@ import kotlin.math.abs
 class ScreenSession(
     private val context: Context,
     consent: Intent,
+    private val sessionKey: ByteArray,
     private val signal: (JSONObject) -> Unit,
     private val post: (() -> Unit) -> Unit,
     private val postDelayed: (Long, () -> Unit) -> Unit,
@@ -56,6 +63,11 @@ class ScreenSession(
         private const val MAX_INPUT_PER_SECOND = 120
         /** Window changes come in bursts while a pop-up is dragged: refit once they settle a little. */
         private const val REFIT_DELAY_MS = 120L
+        /** Nothing from the glasses this long on the channel: they're gone (they ping every 2 s). */
+        private const val SILENT_MS = 15_000L
+        /** From the consent to an open channel. */
+        private const val CONNECT_MS = 60_000L
+        private const val WATCH_MS = 2_500L
 
         @Volatile
         private var initialized = false
@@ -87,6 +99,11 @@ class ScreenSession(
     private val screenWidth: Int
     private val screenHeight: Int
     private var closed = false
+    /** The channel opened: from here on the session doesn't need the relay. Read from the service. */
+    var connected = false
+        private set
+    private val startedAt = System.currentTimeMillis()
+    private var lastHeard = 0L
     private var windowStart = 0L
     private var windowCount = 0
 
@@ -148,15 +165,24 @@ class ScreenSession(
             override fun onCreateSuccess(sdp: SessionDescription) {
                 pc.setLocalDescription(object : SdpAdapter() {
                     override fun onSetSuccess() = post {
-                        if (!closed) signal(JSONObject().put("type", "rtcOffer").put("sdp", sdp.description))
+                        if (!closed) {
+                            val mac = GlassesTrust.b64u(GlassesTrust.sdpMac(sessionKey, "offer", sdp.description))
+                            signal(JSONObject().put("type", "rtcOffer").put("sdp", sdp.description).put("mac", mac))
+                        }
                     }
                 }, sdp)
             }
         }, MediaConstraints())
+        watch()
     }
 
-    fun setAnswer(sdp: String) {
+    /** The glasses' answer, if it's MACed with this session's key (else the session ends). */
+    fun setAnswer(sdp: String, mac: String) {
         if (closed) return
+        if (!GlassesTrust.matches(GlassesTrust.sdpMac(sessionKey, "answer", sdp), mac)) {
+            end("answer not from the paired glasses")
+            return
+        }
         pc.setRemoteDescription(SdpAdapter(), SessionDescription(SessionDescription.Type.ANSWER, sdp))
     }
 
@@ -165,9 +191,13 @@ class ScreenSession(
         pc.addIceCandidate(IceCandidate(sdpMid ?: "", sdpMLineIndex, candidate))
     }
 
-    /** Ends the session here (the PC is told by the caller). */
-    fun close() {
+    /**
+     * Ends the session here. [bye] tells the glasses why first (stopped, capture, replaced, silent),
+     * when the channel is still open.
+     */
+    fun close(bye: String? = null) {
         if (closed) return
+        if (bye != null) send(JSONObject().put("type", "bye").put("reason", bye))
         closed = true
         InputService.instance?.let { input ->
             input.keepScreenOn(false)
@@ -189,6 +219,19 @@ class ScreenSession(
         if (closed) return
         Log.i(TAG, "session ended: $reason")
         onEnded(reason)
+    }
+
+    /** Ends a session whose glasses went quiet, or that never connected. */
+    private fun watch() {
+        postDelayed(WATCH_MS) {
+            if (closed) return@postDelayed
+            val now = System.currentTimeMillis()
+            when {
+                connected && now - lastHeard > SILENT_MS -> end("silent")
+                !connected && now - startedAt > CONNECT_MS -> end("never connected")
+                else -> watch()
+            }
+        }
     }
 
     private fun preferH264(transceiver: RtpTransceiver) {
@@ -213,10 +256,12 @@ class ScreenSession(
             windowCount = 0
         }
         if (++windowCount > MAX_INPUT_PER_SECOND) return
+        lastHeard = now
         val command = InputProtocol.parse(raw) ?: return
         val input = InputService.instance
         when (command) {
             is InputCommand.Ping -> send(JSONObject().put("type", "pong").put("t", command.t))
+            is InputCommand.End -> end("ended on the glasses")
             is InputCommand.SetRegion -> {
                 follow = false
                 prefs.followWindow = false
@@ -332,7 +377,16 @@ class ScreenSession(
         override fun onBufferedAmountChange(previousAmount: Long) {}
 
         override fun onStateChange() = post {
-            if (!closed && channel.state() == DataChannel.State.OPEN) sendScreen()
+            if (closed) return@post
+            when (channel.state()) {
+                DataChannel.State.OPEN -> {
+                    connected = true
+                    lastHeard = System.currentTimeMillis()
+                    sendScreen()
+                }
+                DataChannel.State.CLOSED -> if (connected) end("glasses left")
+                else -> {}
+            }
         }
 
         override fun onMessage(buffer: DataChannel.Buffer) {

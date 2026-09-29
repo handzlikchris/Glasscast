@@ -17,6 +17,8 @@ class InputProtocolTest {
         assertEquals(InputCommand.TypeText("hello"), InputProtocol.parse("""{"type":"typeText","text":"hello"}"""))
         assertEquals(InputCommand.Key(KeyName.ENTER), InputProtocol.parse("""{"type":"key","key":"Enter"}"""))
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
+        assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
+        assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))
         assertEquals(InputCommand.FitWindow, InputProtocol.parse("""{"type":"fitWindow"}"""))
         assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
         assertEquals(InputCommand.SwitchApp(previous = true), InputProtocol.parse("""{"type":"switchApp","dir":"previous"}"""))
