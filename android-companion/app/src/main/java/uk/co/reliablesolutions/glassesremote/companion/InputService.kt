@@ -77,10 +77,12 @@ class InputService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
+        CompanionService.changed()
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         instance = null
+        CompanionService.changed()
         keepScreenOn(false)
         return super.onUnbind(intent)
     }

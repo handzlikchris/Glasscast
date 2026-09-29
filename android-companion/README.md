@@ -39,7 +39,8 @@ Or open `android-companion/` in Android Studio.
 2. **Accessibility:** Settings > Accessibility > Installed apps > Glasses Remote > on. A
    sideloaded app is greyed out at first ("Restricted setting"): Settings > Apps > Glasses
    Remote > ⋮ > **Allow restricted settings**, then turn it on.
-3. Tap **Start**. A notification stays while the companion is connected (Stop is there too).
+3. Tap **Start** (the same button then says **Stop**). A notification stays while the companion is
+   connected (Stop is there too).
 4. Optional, **square screen for the glasses:** grant a one-off permission from a PC (it survives
    restarts; ⓘ on the setup screen shows this too):
    `adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS`.
@@ -71,5 +72,5 @@ glasses' ping.
 | `CropProcessor.kt` | Crops frames to the region, long side ≤ 600 |
 | `InputService.kt` | Accessibility service: gestures, global actions, text into the focused field, keep screen on |
 | `InputProtocol.kt` | Strict parser for the glasses' DataChannel messages (unit-tested) |
-| `MainActivity.kt` | Setup screen (with Square screen / Reset screen and the ⓘ setup pop-up) |
+| `MainActivity.kt` | Setup screen: a status card (companion, PC, glasses, input, screen) and one card per step, Material-style with plain views and the device theme's colours; Start/Stop in one button; Square screen / Reset screen and the ⓘ setup pop-up |
 | `DisplayOverride.kt` | Square screen and reset: the window manager's forced size and density (hidden API via HiddenApiBypass; needs `WRITE_SECURE_SETTINGS`, granted once over adb) |

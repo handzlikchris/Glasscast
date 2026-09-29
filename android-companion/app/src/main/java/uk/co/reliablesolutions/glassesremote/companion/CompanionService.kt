@@ -61,11 +61,19 @@ class CompanionService : Service() {
         var status: String = "Stopped"
             private set
 
+        /** Started and not stopped since (the setup screen's Start / Stop button). */
+        @Volatile
+        var running: Boolean = false
+            private set
+
         private val watchers = CopyOnWriteArrayList<() -> Unit>()
 
         fun watch(watcher: () -> Unit) = watchers.add(watcher)
 
         fun unwatch(watcher: () -> Unit) = watchers.remove(watcher)
+
+        /** Something the setup screen shows changed elsewhere (the input service came or went). */
+        fun changed() = watchers.forEach { it() }
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, CompanionService::class.java).setAction(ACTION_START))
@@ -121,6 +129,8 @@ class CompanionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
+                running = true
+                watchers.forEach { it() }
                 foreground(projection = false, "Connecting to the PC…")
                 handler.post { connect() }
             }
@@ -159,6 +169,8 @@ class CompanionService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
+        watchers.forEach { it() }
         handler.post {
             session?.close()
             session = null
