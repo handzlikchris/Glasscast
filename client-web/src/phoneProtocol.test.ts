@@ -45,9 +45,9 @@ describe('frame mapping', () => {
 });
 
 describe('appsSwipe', () => {
-  it('swipes across the middle of the screen, whatever the cursor', () => {
-    expect(appsSwipe('left')).toMatchObject({ type: 'swipe', x1: 0.68, x2: 0.32, y1: 0.5, y2: 0.5, ms: 350 });
-    expect(appsSwipe('right')).toMatchObject({ x1: 0.32, x2: 0.68 });
+  it('swipes across the middle of the screen, whatever the cursor; left moves the cards left', () => {
+    expect(appsSwipe('left')).toMatchObject({ type: 'swipe', x1: 0.32, x2: 0.68, y1: 0.5, y2: 0.5, ms: 350 });
+    expect(appsSwipe('right')).toMatchObject({ x1: 0.68, x2: 0.32 });
   });
 });
 
