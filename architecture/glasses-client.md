@@ -58,7 +58,10 @@ Effects:
   the glasses' own focus moves stop at the ends). The phone bar does the same.
 - Back from the view → controls (focus on Type from Pointer, Pointer otherwise); Back from the
   controls (and so from Type and Region) → home to Pointer mode. Two Backs within 400 ms count
-  once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch.
+  once (`SAME_BACK_MS`); a tap and an Enter within 500 ms are the same pinch, in either order
+  (a quick pinch on the glasses can send both). Only the first presses: otherwise a toggle (?,
+  Pan, ♪, Stats) switched on and straight back off, and seemed to need a long pinch. On the
+  phone bar and the screens outside a session, `pinchPress.ts` (`OnePressPerPinch`) does this.
 - The glasses reset focus after a Back and when the composer closes. Focus the app moves on
   purpose goes through `focusPinned`, which restores it for 600 ms (re-checked at 50/150/300/500 ms);
   any swipe or pinch ends the pin.

@@ -4,14 +4,32 @@
 // focused and clicked inside the pinch, which is what opens the glasses' voice/handwriting
 // composer. Used outside a session (first, pairing and ended screens) and on a phone session's
 // bar and Type panel. SessionScreen has its own, richer handling for the same problem.
+//
+// A quick pinch can also arrive as an Enter key on the focused button, before or after the tap.
+// Both are one pinch: a button pressed twice within SAME_PINCH_MS takes the first press only, or
+// a toggle (the ? button) would switch on and straight back off.
 
 import { useEffect } from 'react';
+import { SAME_PINCH_MS } from './focusnav';
+
+/** Presses of a button this close together are one pinch (its tap and its Enter). */
+export class OnePressPerPinch {
+  private last = -Infinity;
+
+  /** A button is being pressed at `now` (ms): false if it's the same pinch as the last press. */
+  press(now: number): boolean {
+    if (now - this.last < SAME_PINCH_MS) return false;
+    this.last = now;
+    return true;
+  }
+}
 
 export function usePinchPressesFocused(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     let pressing: number | null = null;
     let swallowClick = false;
+    const presses = new OnePressPerPinch();
 
     const focusedControl = (): HTMLButtonElement | HTMLTextAreaElement | null => {
       const active = document.activeElement;
@@ -38,9 +56,16 @@ export function usePinchPressesFocused(enabled: boolean): void {
       control?.click();
     };
     const onClick = (e: MouseEvent) => {
-      // The browser's own click for that pinch: the button has already been pressed.
-      if (!swallowClick || !e.isTrusted) return;
-      swallowClick = false;
+      if (swallowClick && e.isTrusted) {
+        // The browser's own click for that pinch: the button has already been pressed.
+        swallowClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Every press of a button ends up here: ours above, a tap on the button itself, an Enter.
+      if (!(e.target instanceof Element) || !e.target.closest('button')) return;
+      if (presses.press(performance.now())) return;
       e.preventDefault();
       e.stopPropagation();
     };

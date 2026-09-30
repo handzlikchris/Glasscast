@@ -26,6 +26,7 @@ import {
 import {
   ARROW_STEPS,
   enterIsSamePinch,
+  SAME_PINCH_MS,
   menuFocusFor,
   backTarget,
   nextAppSlot,
@@ -556,6 +557,8 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
     // on anything but the focused control presses the focused control instead. Only when focus
     // was last moved by swipes/keys, so mouse clicks on a laptop are left alone.
     let redirectedPointer: number | null = null;
+    /** The redirected pinch presses the focused control on release (false: its Enter already did). */
+    let pressOnUp = true;
     let swallowClick = false;
     const onPointerDownCapture = (e: globalThis.PointerEvent) => {
       swallowClick = false;
@@ -563,6 +566,15 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       const active = document.activeElement;
       const target = e.target;
       if (!(target instanceof Element) || target.classList.contains('gesture-layer')) return; // taps handled there
+      if (performance.now() - lastEnterAt.current < SAME_PINCH_MS) {
+        // The same pinch's Enter came first and pressed the focused control: pressing again
+        // would switch a toggle (?, Pan, ♪, Stats) straight back.
+        e.preventDefault();
+        e.stopPropagation();
+        redirectedPointer = e.pointerId;
+        pressOnUp = false;
+        return;
+      }
       const activeControl =
         (active instanceof HTMLButtonElement || active instanceof HTMLTextAreaElement) && stage.contains(active)
           ? active
@@ -576,6 +588,7 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       e.preventDefault();
       e.stopPropagation();
       redirectedPointer = e.pointerId;
+      pressOnUp = true;
       lastPointerAt.current = performance.now();
       focused.current = activeControl;
     };
@@ -585,6 +598,10 @@ export function SessionScreen({ onEnded, onLeave }: Props) {
       e.stopPropagation();
       lastPointerAt.current = performance.now();
       swallowClick = true;
+      if (!pressOnUp) {
+        setLastInput(`tap (${e.pointerType}) → same pinch as Enter`);
+        return;
+      }
       setLastInput(`tap (${e.pointerType}) → focused`);
       pressFocused();
     };
