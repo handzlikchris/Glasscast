@@ -213,9 +213,13 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   flattened, never Enter), `key{key}` (`Enter`, `Backspace`, `Send`: the app's send button),
   `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: left twice
   now opens the app overview with `nav{recents}`, and the phone shows the whole screen until an
-  app comes to the front, which the view then follows), `ping{t}` (every 2 s: the phone's only
+  app comes to the front, which the view then follows), `overviewApps{}` (swipe down in the
+  overview: where its row of apps is), `ping{t}` (every 2 s: the phone's only
   sign the glasses are there), `end{}` (End on the glasses).
-- Phone → glasses: `screen{width, height, region, app?}` (the crop and the followed app's name), `result{of, ok}`, `pong{t}`,
+- Phone → glasses: `screen{width, height, region, app?}` (the crop and the followed app's name),
+  `overviewApps{apps: [{x, y, label}]}` (≤ 12: the overview's row of apps, centres 0..1 in the frame,
+  in order; read at that moment from the overview's window, the clickable text items; empty if
+  there's none or the overview has closed; the glasses move their cursor there and a pinch taps), `result{of, ok}`, `pong{t}`,
   `bye{reason}` just before it closes: `stopped` (Stop / End session on the phone), `capture`
   (the phone locked or its capture chip was tapped), `replaced` (newer glasses), `silent`.
 - The companion parses these as strictly as `ControlProtocol` does.

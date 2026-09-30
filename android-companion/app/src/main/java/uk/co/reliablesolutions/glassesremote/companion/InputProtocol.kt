@@ -24,6 +24,8 @@ sealed interface InputCommand {
     data class Key(val key: KeyName) : InputCommand
     /** The previous (older) or next (newer) recently used app; the view follows it. */
     data class SwitchApp(val previous: Boolean) : InputCommand
+    /** Where the app overview's row of apps (its suggestions) is, to step through with swipes. */
+    data object OverviewApps : InputCommand
     /** The glasses' heartbeat: the phone ends a session it stops hearing from. */
     data class Ping(val t: Double) : InputCommand
     /** End on the glasses. */
@@ -78,6 +80,7 @@ object InputProtocol {
             }
             "ping" -> if (only(o, "t")) num(o, "t")?.let { InputCommand.Ping(it) } else null
             "end" -> if (only(o)) InputCommand.End else null
+            "overviewApps" -> if (only(o)) InputCommand.OverviewApps else null
             else -> null
         }
     }

@@ -59,6 +59,6 @@ export function shortcutRows(target: 'pc' | 'phone'): ShortcutRow[] {
     { gesture: 'pinch, hold 0.2 s, move', action: 'move the cursor' },
     { gesture: 'pinch, then pinch and move', action: target === 'pc' ? 'drag (button held)' : 'drag (finger held)' },
     { gesture: 'Back (middle pinch)', action: target === 'pc' ? 'the bar · from the bar: Pointer' : 'the bar · again: the view' },
-    ...(target === 'phone' ? [{ gesture: 'in the app overview', action: 'left / right move, pinch picks, Back leaves' }] : []),
+    ...(target === 'phone' ? [{ gesture: 'in the app overview', action: 'left / right move, down: the row of apps (up: back), pinch picks, Back leaves' }] : []),
   ];
 }

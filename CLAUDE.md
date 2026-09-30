@@ -202,7 +202,8 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
   twice → next app** (PC) / **the app overview** (phone: Recents; swipe left/right, which act at
-  once there, pinch to pick, Back leaves; the view follows the pick); phone only: **down twice →
+  once there, pinch to pick, Back leaves; the view follows the pick; down there steps the cursor along the
+  row of apps under the cards, up goes back); phone only: **down twice →
   Back** (closes the keyboard). Nothing on up twice, so up scrolls at once (user's choices,
   2026-09-29). Doubles within 0.3 s.
   A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); up
@@ -358,7 +359,8 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   request with an `Origin` header (web pages). The companion parses DataChannel input as
   strictly as `ControlProtocol`, and typed text never presses Enter. It only brings back apps
   you've used on the phone (its own recent list, from accessibility; the glasses send
-  previous/next, never an app name) and never opens URLs (user's choice, 2026-09-28).
+  previous/next, never an app name; for the overview's row of apps the phone sends positions
+  and the glasses tap there) and never opens URLs (user's choice, 2026-09-28).
 - Approve popup: Reject is the focused/Cancel button, no AcceptButton. The cast-area frame and the
   session banner are excluded from capture (`WDA_EXCLUDEFROMCAPTURE`) and never take focus.
 

@@ -20,6 +20,16 @@ describe('parsePhoneMessage', () => {
     expect(parsePhoneMessage('{"type":"result","of":"typeText","ok":false}')).toEqual({ type: 'result', of: 'typeText', ok: false });
     expect(parsePhoneMessage('{"type":"pong","t":5}')).toEqual({ type: 'pong', t: 5 });
     expect(parsePhoneMessage('{"type":"bye","reason":"capture"}')).toEqual({ type: 'bye', reason: 'capture' });
+    expect(parsePhoneMessage('{"type":"overviewApps","apps":[{"x":0.15,"y":0.85,"label":"WhatsApp"},{"x":1.2,"y":0.85,"label":"Gmail"}]}')).toEqual({
+      type: 'overviewApps',
+      apps: [
+        { x: 0.15, y: 0.85, label: 'WhatsApp' },
+        { x: 1, y: 0.85, label: 'Gmail' },
+      ],
+    });
+    expect(parsePhoneMessage('{"type":"overviewApps","apps":[]}')).toEqual({ type: 'overviewApps', apps: [] });
+    expect(parsePhoneMessage('{"type":"overviewApps","apps":[{"x":0.5,"y":0.5}]}')).toBeNull();
+    expect(parsePhoneMessage(JSON.stringify({ type: 'overviewApps', apps: Array(13).fill({ x: 0, y: 0, label: '' }) }))).toBeNull();
   });
 
   it.each([

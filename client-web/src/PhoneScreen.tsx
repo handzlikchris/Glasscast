@@ -13,6 +13,8 @@
 //   up scrolls around the cursor at once, down scrolls and left/right page after a 0.3 s wait for
 //   a second swipe; right twice opens Type, down twice presses Back, left twice opens the app
 //   overview (swipe left/right through it, pinch to pick; the view follows the app you pick).
+//   There, down goes to the row of apps under the cards (the cursor steps along it with left and
+//   right, a pinch opens the one under it) and up goes back to the cards.
 // - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · ? · End.
 //   Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
@@ -30,6 +32,7 @@ import {
   toFrame,
   describeBye,
   type FromPhone,
+  type OverviewApp,
   type PhoneByeReason,
   type PhoneNav,
   type ToPhone,
@@ -72,7 +75,7 @@ const PHONE_STATUS: Record<PhoneState, string> = {
   live: 'phone sharing',
 };
 
-const APPS_HINT = 'apps: swipe left/right, pinch to pick, Back to leave';
+const APPS_HINT = 'apps: swipe left/right, down for the row of apps, pinch to pick, Back to leave';
 
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'back', label: 'Back' },
@@ -105,6 +108,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
    * (a card swiped up closes that app), a pinch picks one, Back leaves.
    */
   const pickingApps = useRef(false);
+  /** In the overview, the row of apps under the cards (swipe down): left/right step the cursor along it. */
+  const appsRow = useRef<{ apps: OverviewApp[]; at: number } | null>(null);
+  const stopPicking = () => {
+    pickingApps.current = false;
+    appsRow.current = null;
+  };
   /** A finger is down on the phone (tap-and-a-half). */
   const touchDown = useRef(false);
   const swipeRef = useRef<(gesture: SwipeGesture) => void>(() => {});
@@ -195,6 +204,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           const h = Math.round(message.region.height * message.height);
           setScreen(message.app ? `${message.app} ${w}×${h}` : `${w}×${h}`);
         } else if (message.type === 'result') onResult(message.of, message.ok);
+        else if (message.type === 'overviewApps') onOverviewApps(message.apps);
         else if (message.type === 'pong') setRttMs(Date.now() - message.t);
         else if (message.type === 'bye') bye.current = message.reason;
       },
@@ -270,7 +280,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const back = () => {
     const current = focusRef.current;
     if (current === 'view' && pickingApps.current) {
-      pickingApps.current = false;
+      stopPicking();
       send({ type: 'nav', action: 'back' }, 'left the apps');
       return;
     }
@@ -295,7 +305,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
   useLayoutEffect(() => {
     // Leaving the view for the bar or Type: the app overview's swipes are over.
-    if (focus !== 'view') pickingApps.current = false;
+    if (focus !== 'view') stopPicking();
     if (focus === 'bar') {
       barRef.current?.querySelector('button')?.focus();
     } else if (focus !== 'type' && document.activeElement instanceof HTMLElement) {
@@ -321,7 +331,20 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         e.stopPropagation();
         if (pickingApps.current) {
           swipes.current.cancel();
+          const row = appsRow.current;
+          if (row) {
+            // On the row of apps: left/right step along it, up goes back to the cards.
+            if (swipe === 'left' || swipe === 'right') {
+              row.at = Math.min(row.apps.length - 1, Math.max(0, row.at + (swipe === 'right' ? 1 : -1)));
+              showRowApp();
+            } else if (swipe === 'up') {
+              appsRow.current = null;
+              setLastInput(APPS_HINT);
+            }
+            return;
+          }
           if (swipe === 'left' || swipe === 'right') send(appsSwipe(swipe), `apps: swipe ${swipe}`);
+          else if (swipe === 'down') send({ type: 'overviewApps' }, 'looking for the row of apps…');
           else setLastInput(APPS_HINT);
           return;
         }
@@ -394,7 +417,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     switch (event.kind) {
       case 'tap':
         // Picking an app in the overview: the tap takes it, and the overview is gone.
-        pickingApps.current = false;
+        stopPicking();
         if (pendingTap.current) {
           const at = pendingTap.current.at;
           clearPendingTap();
@@ -487,7 +510,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (action === 'recents') {
       openApps();
     } else {
-      pickingApps.current = false;
+      stopPicking();
       send({ type: 'nav', action }, action);
     }
     setFocus('view');
@@ -496,6 +519,28 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const openApps = () => {
     pickingApps.current = true;
     send({ type: 'nav', action: 'recents' }, APPS_HINT);
+  };
+
+  /** The phone's answer to swipe down in the overview: the cursor goes to the first app of its row. */
+  const onOverviewApps = (apps: OverviewApp[]) => {
+    if (!pickingApps.current || focusRef.current !== 'view') return;
+    if (apps.length === 0) {
+      setLastInput('no row of apps in the overview (yet): swipe down again');
+      return;
+    }
+    appsRow.current = { apps, at: 0 };
+    showRowApp();
+  };
+
+  /** Puts the cursor on the row's current app; a pinch then taps it, as anywhere else. */
+  const showRowApp = () => {
+    const row = appsRow.current;
+    if (!row) return;
+    const app = row.apps[row.at];
+    const f = frame.current;
+    cursor.current = clampToFrame({ x: f.x + app.x * f.width, y: f.y + app.y * f.height });
+    drawCursor();
+    setLastInput(`${app.label || 'app'} (${row.at + 1}/${row.apps.length}): pinch opens · up: the cards`);
   };
 
   const sendText = (text: string) => {

@@ -7,6 +7,7 @@ import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.util.Log
 import android.view.Display
+import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
@@ -306,6 +307,7 @@ class ScreenSession(
                 input?.nav(command.action)
                 if (command.action == NavAction.RECENTS) pickApp()
             }
+            is InputCommand.OverviewApps -> sendOverviewApps(input)
             is InputCommand.TypeText -> sendResult("typeText", input?.typeText(command.text) ?: false)
             is InputCommand.Key -> sendResult("key", input?.key(command.key) ?: false)
         }
@@ -397,6 +399,24 @@ class ScreenSession(
                 if (pkg != null) InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
             },
         )
+    }
+
+    /**
+     * The overview's row of apps as points in the frame the glasses see (0..1), with names for
+     * their status bar; empty when the overview isn't open or has no row. The glasses move their
+     * cursor there and a pinch taps, as anywhere else: nothing is opened from here.
+     */
+    private fun sendOverviewApps(input: InputService?) {
+        val apps = JSONArray()
+        if (picking && input != null) {
+            val r = crop.region
+            input.overviewApps().forEach { (bounds, label) ->
+                val x = (bounds.exactCenterX().toDouble() / screenWidth - r.x) / r.width
+                val y = (bounds.exactCenterY().toDouble() / screenHeight - r.y) / r.height
+                if (x in 0.0..1.0 && y in 0.0..1.0) apps.put(JSONObject().put("x", x).put("y", y).put("label", label.take(24)))
+            }
+        }
+        send(JSONObject().put("type", "overviewApps").put("apps", apps))
     }
 
     private fun sendResult(of: String, ok: Boolean) = send(JSONObject().put("type", "result").put("of", of).put("ok", ok))

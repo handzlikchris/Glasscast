@@ -19,6 +19,7 @@ class InputProtocolTest {
         assertEquals(InputCommand.Key(KeyName.SEND), InputProtocol.parse("""{"type":"key","key":"Send"}"""))
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
+        assertEquals(InputCommand.OverviewApps, InputProtocol.parse("""{"type":"overviewApps"}"""))
         assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))
         assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
         assertEquals(InputCommand.SwitchApp(previous = true), InputProtocol.parse("""{"type":"switchApp","dir":"previous"}"""))
@@ -58,6 +59,7 @@ class InputProtocolTest {
             """{"type":"swipe","x1":0,"y1":0,"x2":1,"y2":1}""",
             """{"x":1}""",
             """{"type":"fitWindow"}""",
+            """{"type":"overviewApps","package":"com.example"}""",
             """{"type":"setRegion","x":0,"y":0,"width":1,"height":1}""",
             """{"type":"touch","phase":"hover","x":0,"y":0}""",
             """{"type":"switchApp","dir":"sideways"}""",

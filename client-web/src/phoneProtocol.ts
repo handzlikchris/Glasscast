@@ -29,6 +29,8 @@ export type ToPhone =
    * front. The view then follows it. Never an app name: the phone keeps its own list.
    */
   | { type: 'switchApp'; dir: 'previous' | 'next' }
+  /** Where the app overview's row of apps is (answered with overviewApps). */
+  | { type: 'overviewApps' }
   /** Every couple of seconds: the phone ends a session it stops hearing from (no PC to tell it). */
   | { type: 'ping'; t: number }
   /** End on the glasses: the phone stops capturing. */
@@ -41,9 +43,21 @@ export type FromPhone =
   /** The phone's screen in pixels, the crop (0..1): the window of the app in front, named if known. */
   | { type: 'screen'; width: number; height: number; region: PhoneRegion; app?: string }
   | { type: 'result'; of: 'typeText' | 'key' | 'switchApp'; ok: boolean }
+  /** The app overview's row of apps, in order; empty when there's none (or the overview closed). */
+  | { type: 'overviewApps'; apps: OverviewApp[] }
   | { type: 'pong'; t: number }
   /** The phone is ending the session, and why (just before it closes the connection). */
   | { type: 'bye'; reason: PhoneByeReason };
+
+/** An app in the overview's row: its centre, 0..1 in the frame, and its name (for the status bar). */
+export interface OverviewApp {
+  x: number;
+  y: number;
+  label: string;
+}
+
+/** The most apps taken from the phone's overview row (the phone sends a handful). */
+export const MAX_OVERVIEW_APPS = 12;
 
 /** stopped: End session or Stop on the phone; capture: Android stopped the capture (the phone locked); replaced: another session took over; silent: nothing heard from the glasses. */
 export type PhoneByeReason = 'stopped' | 'capture' | 'replaced' | 'silent';
@@ -87,6 +101,15 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
         : null;
     case 'pong':
       return isNumber(data.t) ? { type: 'pong', t: data.t } : null;
+    case 'overviewApps': {
+      if (!Array.isArray(data.apps) || data.apps.length > MAX_OVERVIEW_APPS) return null;
+      const apps: OverviewApp[] = [];
+      for (const a of data.apps) {
+        if (!isObject(a) || !isNumber(a.x) || !isNumber(a.y) || typeof a.label !== 'string') return null;
+        apps.push({ x: clamp01(a.x), y: clamp01(a.y), label: a.label.slice(0, 24) });
+      }
+      return { type: 'overviewApps', apps };
+    }
     case 'bye':
       return typeof data.reason === 'string' && BYE_REASONS.includes(data.reason)
         ? { type: 'bye', reason: data.reason as PhoneByeReason }

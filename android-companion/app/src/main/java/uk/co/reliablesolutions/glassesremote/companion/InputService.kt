@@ -50,6 +50,8 @@ class InputService : AccessibilityService() {
          * speed: Android's fling velocity comes from the last ~100 ms of movement.
          */
         private const val SETTLE_MS = 150L
+        /** The most apps read from the overview's row (it shows a handful). */
+        const val MAX_OVERVIEW_APPS = 12
 
         /** Nodes searched for a text field when none has input focus (a screen has a few hundred). */
         private const val MAX_NODES = 1500
@@ -163,6 +165,32 @@ class InputService : AccessibilityService() {
         return runCatching { startActivity(intent) }
             .onFailure { Log.w(TAG, "switchApp: couldn't bring $pkg forward", it) }
             .isSuccess.also { if (it) Log.i(TAG, "switchApp: brought $pkg forward") }
+    }
+
+    /**
+     * The app overview's row of apps (Samsung's suggestions under the cards), in screen pixels
+     * with their names, top to bottom and left to right; however many it shows. They're the
+     * clickable text items of the overview's window (the top app window while it's open): the
+     * cards have no text and Close all is a button. Empty when there's no such row.
+     */
+    fun overviewApps(): List<Pair<Rect, String>> {
+        val overview = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.maxByOrNull { it.layer }
+        val root = overview?.root ?: return emptyList()
+        val found = mutableListOf<Pair<Rect, String>>()
+        collectOverviewApps(root, 0, found)
+        return found.sortedWith(compareBy({ it.first.top }, { it.first.left }))
+    }
+
+    private fun collectOverviewApps(node: AccessibilityNodeInfo, depth: Int, found: MutableList<Pair<Rect, String>>) {
+        if (depth > 12 || found.size >= MAX_OVERVIEW_APPS) return
+        val text = node.text?.toString()
+        if (node.isClickable && node.isVisibleToUser && node.className == "android.widget.TextView" && !text.isNullOrBlank()) {
+            val bounds = Rect()
+            node.getBoundsInScreen(bounds)
+            found += bounds to text
+            return
+        }
+        for (i in 0 until node.childCount) node.getChild(i)?.let { collectOverviewApps(it, depth + 1, found) }
     }
 
     /** The app's name as the launcher shows it (for the glasses' status bar). */
