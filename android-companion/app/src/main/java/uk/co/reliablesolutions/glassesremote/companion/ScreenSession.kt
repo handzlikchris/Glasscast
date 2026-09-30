@@ -68,6 +68,12 @@ class ScreenSession(
         /** From the consent to an open channel. */
         private const val CONNECT_MS = 60_000L
         private const val WATCH_MS = 2_500L
+        /**
+         * A still screen makes no frames, and a picture the encoder dropped or the network lost
+         * then stays wrong on the glasses until something moves (seen: seconds of a stale page
+         * until a scroll). So the last frame goes again after this long without one.
+         */
+        private const val STILL_REPEAT_MS = 400L
 
         @Volatile
         private var initialized = false
@@ -178,6 +184,7 @@ class ScreenSession(
             }
         }, MediaConstraints())
         watch()
+        repeatWhileStill()
     }
 
     /** The glasses' answer, if it's MACed with this session's key (else the session ends). */
@@ -224,6 +231,15 @@ class ScreenSession(
         if (closed) return
         Log.i(TAG, "session ended: $reason")
         onEnded(reason)
+    }
+
+    /** Sends the last frame again while the screen is still (see [STILL_REPEAT_MS]). */
+    private fun repeatWhileStill() {
+        postDelayed(STILL_REPEAT_MS / 2) {
+            if (closed) return@postDelayed
+            if (System.nanoTime() - crop.lastFrameAtNs >= STILL_REPEAT_MS * 1_000_000) helper.forceFrame()
+            repeatWhileStill()
+        }
     }
 
     /** Ends a session whose glasses went quiet, or that never connected. */
@@ -297,6 +313,7 @@ class ScreenSession(
     private fun pickApp() {
         picking = true
         crop.region = Region.FULL
+        helper.forceFrame()
         sendScreen()
         InputService.instance?.onAppFront = { pkg -> post { if (!closed) appPicked(pkg) } }
     }
@@ -311,6 +328,8 @@ class ScreenSession(
     private fun setRegion(region: Region) {
         picking = false
         crop.region = region
+        // The new crop shows at once, not with the screen's next change.
+        helper.forceFrame()
         sendScreen()
     }
 

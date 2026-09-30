@@ -18,12 +18,23 @@ data class Region(val x: Double, val y: Double, val width: Double, val height: D
  * Crops each captured frame to the region the glasses look at and scales it so its long side is
  * at most [maxSide] (the glasses show 600×600). The frame keeps the crop's shape; the glasses
  * letterbox it. cropAndScale on a texture buffer is a GPU transform, not a copy.
+ *
+ * The screen capture only makes a frame when the screen changes, so the last one is sent again
+ * now and then (SurfaceTextureHelper.forceFrame, see ScreenSession): those repeats come through
+ * here with the old timestamp, which libwebrtc would drop as not newer, so timestamps are kept
+ * rising.
  */
 class CropProcessor(private val maxSide: Int = 600) : VideoProcessor {
     @Volatile
     var region: Region = Region.FULL
 
+    /** When the last frame went to the encoder (System.nanoTime). */
+    @Volatile
+    var lastFrameAtNs = 0L
+        private set
+
     private var sink: VideoSink? = null
+    private var lastTimestampNs = 0L
 
     override fun setSink(sink: VideoSink?) {
         this.sink = sink
@@ -45,7 +56,11 @@ class CropProcessor(private val maxSide: Int = 600) : VideoProcessor {
         val cropH = max(2, even(r.height * h)).coerceAtMost(h - cropY)
         val scale = min(1.0, maxSide.toDouble() / max(cropW, cropH))
         val scaled = buffer.cropAndScale(cropX, cropY, cropW, cropH, max(2, even(cropW * scale)), max(2, even(cropH * scale)))
-        val cropped = VideoFrame(scaled, frame.rotation, frame.timestampNs)
+        val now = System.nanoTime()
+        val timestampNs = if (frame.timestampNs > lastTimestampNs) frame.timestampNs else max(now, lastTimestampNs + 1_000_000)
+        lastTimestampNs = timestampNs
+        lastFrameAtNs = now
+        val cropped = VideoFrame(scaled, frame.rotation, timestampNs)
         out.onFrame(cropped)
         cropped.release()
     }
