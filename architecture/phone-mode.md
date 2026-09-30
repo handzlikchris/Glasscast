@@ -100,6 +100,21 @@ that:
   Meta's native Device Access Toolkit over Bluetooth, set aside for its still-frame video
   (`.claude/tasks/phone-direct-dat.md`).
 
+### iPhone and iPad: not feasible as it stands (looked at 2026-09-29)
+
+- **Showing the screen: possible.** ReplayKit's broadcast upload extension captures the whole
+  screen (as Zoom and Teams share it); the user starts it from Control Center or a picker each
+  session, and the extension's memory limit (about 50 MB) still fits H.264 over WebRTC.
+- **Controlling it: not possible for an app.** iOS has no public way for an app to tap, swipe or
+  type into other apps (no equivalent of Android's AccessibilityService); remote-control apps
+  are view-only on iPhone and iPad for that reason.
+- **The only route to control is hardware:** iPadOS takes a Bluetooth mouse and keyboard (and
+  iPhone does through AssistiveTouch), so a device posing as one (an ESP32, or an Android phone
+  using its Bluetooth HID device role) could move a pointer, tap and type. A separate project,
+  with a pointer to move rather than taps at a point.
+- So: a view-only iPad companion would be modest work; control needs the hardware route. Not
+  planned.
+
 ## Pairing and authentication
 
 Between the glasses (`client-web/src/phoneTrust.ts`) and the phone (`GlassesTrust.kt`,
