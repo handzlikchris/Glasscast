@@ -148,7 +148,7 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | Capture | `MediaProjection`, **entire screen** (`createConfigForDefaultDisplay`), cropped to a region on the phone | Input mapping needs screen coordinates; single-app capture gives no window position |
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
 | Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
-| Type | The PC session's `TypePanel`, same steps: text box and composer → **Send text** → **Enter** (keys: Enter, ⌫). For 0.8 s after the panel moves focus to Send text or Enter, that button ignores presses (`guardMs`) | Same habit on both targets; the composer's Insert pinch reached the page late on the S25 |
+| Type | The PC session's `TypePanel`, same steps: text box and composer → **Send text** → **Send** (keys: Send, ⏎, ⌫). Send presses the app's own send button: a clickable view labelled "Send" or "Send …", the one nearest the text field (Claude, ChatGPT and WhatsApp take Enter as a new line); else the field's editor action (send/go/done); else Enter. ⏎ is a plain Enter. For 0.8 s after the panel moves focus to Send text or Send, that button ignores presses (`guardMs`) | Same habit on both targets; the composer's Insert pinch reached the page late on the S25 |
 | Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · Region · Fit · ? · End (? shows the shortcuts; End returns to the PC/Phone choice) | Same habits on both targets |
 | Typing | As a keyboard first (the accessibility service is also an input method), else `ACTION_SET_TEXT` | Apps that draw their own text take keyboard input once their keyboard is open |
 | Input | `AccessibilityService`: `dispatchGesture`, `performGlobalAction`, text | Public API, no ADB, no root |
@@ -192,7 +192,7 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   held down by tap-and-a-half, ~25 moves a second; lifted when the session ends),
   `longPress{x,y}` (still parsed, no longer sent), `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
-  flattened, never Enter), `key{key}` (`Enter`, `Backspace`), `setRegion{x,y,width,height}`,
+  flattened, never Enter), `key{key}` (`Enter`, `Backspace`, `Send`: the app's send button), `setRegion{x,y,width,height}`,
   `fitWindow{}`, `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: left twice
   now opens the app overview with `nav{recents}`, and the phone shows the whole screen until an
   app comes to the front, which Fit then follows), `ping{t}` (every 2 s: the phone's only

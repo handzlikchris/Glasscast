@@ -230,7 +230,10 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   and in Region.
 - **Type flow (PC and phone, one `TypePanel`):** entering Type focuses and clicks the text box (tries to open the composer at
   once) → when the composer hands text back (`change`), **Send text** → **Enter** → Enter itself
-  returns to Pointer mode. Only a swipe of the user's stops the chain. No length limit: long
+  returns to Pointer mode. On the phone the last step is **Send** instead (2026-09-29): the
+  companion presses the app's own send button (chat apps like Claude take Enter as a new line),
+  else the field's editor action, else Enter; **⏎** is a plain Enter. Only a swipe of the user's
+  stops the chain. No length limit: long
   text goes as several ≤500-character `typeText` messages (`textChunks`).
 - **App buttons:** the current app is highlighted (moves only on a confirmed switch).
 - **Mode bar focus wraps round** (2026-09-28): swiping left from its first button lands on the last,
@@ -332,7 +335,8 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   outside Development.
 - Strict protocol: unknown types/properties rejected, sizes capped (16 KB msg, 500 chars text),
   coordinates clamped, rate-limited; invalid input closes the session and raises an alert.
-- Typed text never presses Enter (newlines are flattened); Enter is a separate key message.
+- Typed text never presses Enter (newlines are flattened); Enter is a separate key message. So is
+  the phone's Send (the app's send button): a deliberate press, never automatic.
 - Sound flows one way only: what the PC plays, to an authenticated session, while the glasses
   have ♪ on (the banner then says "sound on"). No microphone, and nothing from the glasses.
 - App shortcuts are configured only on the PC. The glasses send a slot number, never a process

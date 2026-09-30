@@ -696,8 +696,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           onSendText={sendText}
           onKey={(key) => {
             send({ type: 'key', key }, key);
-            // Enter usually finishes the job: straight back to the view.
-            if (key === 'Enter') setFocus('view');
+            // Send finishes the job: straight back to the view. ⏎ (a new line) stays in Type.
+            if (key === 'Send') setFocus('view');
           }}
           refill={refill}
           guardMs={TYPE_GUARD_MS}

@@ -116,7 +116,8 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 
 Entering Type (`flushSync` so the panel exists inside the same user gesture) focuses and
 clicks the textarea to try to open the composer → the composer's `change` moves focus to
-**Send text** → sending moves focus to **Enter** → Enter returns to Pointer mode. A swipe of
+**Send text** → sending moves focus to the first key, **Enter** on the PC or **Send** on the phone
+(the app's send button, see phone-mode.md) → that key returns to the view (Pointer mode on the PC). A swipe of
 the user's breaks the chain. Text has no length limit: `textChunks` sends it as `typeText`
 messages of at most 500 characters, split between two non-space characters (the server trims
 each message) and never inside an emoji; the server flattens newlines.

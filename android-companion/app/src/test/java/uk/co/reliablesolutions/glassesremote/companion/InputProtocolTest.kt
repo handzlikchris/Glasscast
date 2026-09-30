@@ -16,6 +16,7 @@ class InputProtocolTest {
         assertEquals(InputCommand.Nav(NavAction.RECENTS), InputProtocol.parse("""{"type":"nav","action":"recents"}"""))
         assertEquals(InputCommand.TypeText("hello"), InputProtocol.parse("""{"type":"typeText","text":"hello"}"""))
         assertEquals(InputCommand.Key(KeyName.ENTER), InputProtocol.parse("""{"type":"key","key":"Enter"}"""))
+        assertEquals(InputCommand.Key(KeyName.SEND), InputProtocol.parse("""{"type":"key","key":"Send"}"""))
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
         assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))

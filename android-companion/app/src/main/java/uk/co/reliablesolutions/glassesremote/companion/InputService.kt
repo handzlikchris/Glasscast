@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.Rect
+import android.view.inputmethod.EditorInfo
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.accessibilityservice.InputMethod
@@ -331,6 +332,7 @@ class InputService : AccessibilityService() {
     }
 
     fun key(key: KeyName): Boolean {
+        if (key == KeyName.SEND) return send()
         keyboardInput()?.let { input ->
             val code = if (key == KeyName.ENTER) KeyEvent.KEYCODE_ENTER else KeyEvent.KEYCODE_DEL
             input.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
@@ -344,7 +346,7 @@ class InputService : AccessibilityService() {
             return false
         }
         return when (key) {
-            KeyName.ENTER -> node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+            KeyName.ENTER, KeyName.SEND -> node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
             KeyName.BACKSPACE -> {
                 val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
                 val (start, end) = selection(node, current.length)
@@ -358,6 +360,63 @@ class InputService : AccessibilityService() {
                     else -> true
                 }
             }
+        }
+    }
+
+    /**
+     * Sends what's in the text box, as a person would: many chat apps (Claude, ChatGPT, WhatsApp)
+     * take Enter as a new line and send only with their own button. So: the app's send button (a
+     * clickable view labelled "Send" or "Send …", the one nearest the text field), else the text
+     * field's own editor action (IME_ACTION_SEND/GO/DONE), else Enter.
+     */
+    private fun send(): Boolean {
+        val root = rootInActiveWindow
+        if (root != null) {
+            val buttons = ArrayList<AccessibilityNodeInfo>()
+            collectSendButtons(root, buttons, budget = intArrayOf(MAX_NODES))
+            val field = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
+            val near = field?.let { f -> Rect().also { f.getBoundsInScreen(it) } }
+            val button = buttons.minByOrNull { b ->
+                if (near == null) 0 else Rect().also { b.getBoundsInScreen(it) }.let { r ->
+                    val dx = (r.centerX() - near.centerX()).toLong()
+                    val dy = (r.centerY() - near.centerY()).toLong()
+                    dx * dx + dy * dy
+                }
+            }
+            if (button != null) {
+                val ok = button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                // The button's label only ("Send message"): never the text being sent.
+                Log.i(TAG, "send: pressed '${label(button)}' (${buttons.size} found) -> $ok")
+                if (ok) return true
+            }
+        }
+        keyboardInput()?.let { input ->
+            val action = inputMethod?.currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
+            if (action == EditorInfo.IME_ACTION_SEND || action == EditorInfo.IME_ACTION_GO || action == EditorInfo.IME_ACTION_DONE) {
+                input.performEditorAction(action)
+                Log.i(TAG, "send: editor action $action in ${editorName()}")
+                return true
+            }
+        }
+        Log.i(TAG, "send: no send button or action; Enter")
+        return key(KeyName.ENTER)
+    }
+
+    private fun label(node: AccessibilityNodeInfo): String =
+        (node.contentDescription ?: node.text)?.toString()?.trim().orEmpty()
+
+    /** Clickable, enabled views on screen labelled "Send" or "Send …" (a chat's send button). */
+    private fun collectSendButtons(node: AccessibilityNodeInfo, into: MutableList<AccessibilityNodeInfo>, budget: IntArray) {
+        if (--budget[0] < 0) return
+        val label = label(node).lowercase()
+        if (node.isClickable && node.isEnabled && node.isVisibleToUser && !node.isEditable &&
+            (label == "send" || label.startsWith("send "))
+        ) {
+            into.add(node)
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            collectSendButtons(child, into, budget)
         }
     }
 

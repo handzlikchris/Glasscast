@@ -7,7 +7,7 @@ interface Props<K extends string> {
   focusPinned(el: HTMLElement): void;
   onSendText(text: string): void;
   onKey(key: K): void;
-  /** The key buttons under the text box; the one for 'Enter' gets focus after Send text. */
+  /** The key buttons under the text box; the first gets focus after Send text (Enter, the phone's Send). */
   keys: readonly { key: K; label: string }[];
   placeholder?: string;
   /** Text the target couldn't take, put back in the (empty) box; a new object each time. */
@@ -33,9 +33,13 @@ export const PC_KEYS: readonly { key: KeyName; label: string }[] = [
   { key: 'Win+Shift+Right', label: 'Win⇧→' },
 ];
 
-/** A phone session's keys (sent as a keyboard's key presses). */
+/**
+ * A phone session's keys. Send presses the app's own send button (chat apps such as Claude take
+ * Enter as a new line), falling back to Enter; ⏎ is a plain Enter.
+ */
 export const PHONE_KEYS: readonly { key: PhoneKey; label: string }[] = [
-  { key: 'Enter', label: 'Enter' },
+  { key: 'Send', label: 'Send' },
+  { key: 'Enter', label: '⏎' },
   { key: 'Backspace', label: '⌫' },
 ];
 
@@ -46,8 +50,9 @@ export const PHONE_KEYS: readonly { key: PhoneKey; label: string }[] = [
  *
  * Focus is walked along for the glasses, so each step is just another pinch:
  * text box (clicked, to open the composer) when the panel opens → Send text once the composer hands text back
- * (a "change" event) → Enter after sending; Enter itself returns to the view (Pointer mode on the
- * PC). The same panel, and the same steps, in PC and phone sessions; only the keys differ.
+ * (a "change" event) → the first key after sending (Enter on the PC, Send on the phone), which
+ * itself returns to the view (Pointer mode on the PC). The same panel, and the same steps, in PC
+ * and phone sessions; only the keys differ.
  */
 const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
 
@@ -112,7 +117,7 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
   };
 
   const pressKey = (key: K) => {
-    if (key === 'Enter' && guarded(enterRef.current)) return;
+    if (key === keys[0]?.key && guarded(enterRef.current)) return;
     onKey(key);
   };
 
@@ -140,7 +145,7 @@ export function TypePanel<K extends string>({ focusPinned, onSendText, onKey, ke
       </div>
       <div className="row keys">
         {keys.map((s) => (
-          <button key={s.key} ref={s.key === 'Enter' ? enterRef : undefined} type="button" onClick={() => pressKey(s.key)}>
+          <button key={s.key} ref={s === keys[0] ? enterRef : undefined} type="button" onClick={() => pressKey(s.key)}>
             {s.label}
           </button>
         ))}

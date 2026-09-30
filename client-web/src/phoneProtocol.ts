@@ -8,7 +8,8 @@ import { fit, type Point, type Rect } from './geometry';
 import { textChunks, type Region, type Size } from './protocol';
 
 export type PhoneNav = 'back' | 'home' | 'recents' | 'notifications';
-export type PhoneKey = 'Enter' | 'Backspace';
+/** Send: the app's send button (else its editor action, else Enter). */
+export type PhoneKey = 'Enter' | 'Backspace' | 'Send';
 
 export type ToPhone =
   | { type: 'tap'; x: number; y: number }

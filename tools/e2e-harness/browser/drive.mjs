@@ -734,8 +734,8 @@ try {
   await page.mouse.click(300, 200); // your pinch on Send text
   await sleep(300);
   const phoneAfterSend = await page.evaluate(() => document.activeElement?.textContent?.trim());
-  check('phone Type: the Insert pinch does not send; your next pinch sends, then focus is on Enter',
-    phoneAfterComposer === 'Send text' && phoneBoxKept === 'hello phone' && phoneAfterSend === 'Enter',
+  check('phone Type: the Insert pinch does not send; your next pinch sends, then focus is on Send (presses the send button of the app)',
+    phoneAfterComposer === 'Send text' && phoneBoxKept === 'hello phone' && phoneAfterSend === 'Send',
     `after composer ${phoneAfterComposer} (box "${phoneBoxKept}"), after Send ${phoneAfterSend}`);
 } finally {
   await browser.close();

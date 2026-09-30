@@ -6,7 +6,8 @@ import org.json.JSONObject
 /** Global actions the glasses may ask for (AccessibilityService.performGlobalAction). */
 enum class NavAction { BACK, HOME, RECENTS, NOTIFICATIONS }
 
-enum class KeyName { ENTER, BACKSPACE }
+/** SEND: press the app's own send button (a chat's arrow), else its editor action, else Enter. */
+enum class KeyName { ENTER, BACKSPACE, SEND }
 
 enum class TouchPhase { DOWN, MOVE, UP }
 
@@ -52,7 +53,7 @@ object InputProtocol {
         "recents" to NavAction.RECENTS,
         "notifications" to NavAction.NOTIFICATIONS,
     )
-    private val KEYS = mapOf("Enter" to KeyName.ENTER, "Backspace" to KeyName.BACKSPACE)
+    private val KEYS = mapOf("Enter" to KeyName.ENTER, "Backspace" to KeyName.BACKSPACE, "Send" to KeyName.SEND)
     private val PHASES = mapOf("down" to TouchPhase.DOWN, "move" to TouchPhase.MOVE, "up" to TouchPhase.UP)
 
     fun parse(raw: String): InputCommand? {
