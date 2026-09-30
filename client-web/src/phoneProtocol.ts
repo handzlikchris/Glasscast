@@ -145,7 +145,7 @@ export function toFrame(point: Point, frame: Rect): Point {
 
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right';
 
-/** How far a swipe travels, as a share of the frame, per strength step (see scrollSwipe). */
+/** How far a swipe travels, as a share of the frame, at full strength (see scrollSwipe). */
 const SWIPE_SPAN = 0.35;
 const SWIPE_MS = 220;
 
@@ -154,8 +154,10 @@ const SWIPE_MS = 220;
  * and the PC's swipe down), so the finger moves up; "left" pages to the next item, so the finger
  * moves left. Centred on `at` (0..1 in the frame) and kept inside the frame.
  */
-export function scrollSwipe(direction: SwipeDirection, at: Point): ToPhone {
-  const half = SWIPE_SPAN / 2;
+export function scrollSwipe(direction: SwipeDirection, at: Point, strength = 1): ToPhone {
+  // strength (the ↕ level, 1 = 100 %) sets how far an up/down scroll goes; a sideways page stays whole.
+  const vertical = direction === 'up' || direction === 'down';
+  const half = (SWIPE_SPAN * (vertical ? Math.min(1.5, Math.max(0.1, strength)) : 1)) / 2;
   const centre = (v: number) => Math.min(1 - half - 0.05, Math.max(half + 0.05, v));
   const cx = centre(at.x);
   const cy = centre(at.y);

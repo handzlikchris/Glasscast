@@ -329,7 +329,7 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name, the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`) and the phone pairing `{id, key}` (`phoneTrust.ts`) (localStorage;
+- The client stores only the brightness level, scroll strengths per app name (PC and phone apart), the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`) and the phone pairing `{id, key}` (`phoneTrust.ts`) (localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); after a
   page (re)load one pinch on the first screen (last target focused) resumes.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off

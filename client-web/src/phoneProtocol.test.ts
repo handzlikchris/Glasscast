@@ -78,6 +78,14 @@ describe('scrollSwipe', () => {
     }
   });
 
+  it('a gentler level makes a shorter scroll, not a shorter page', () => {
+    const length = (s: ReturnType<typeof scrollSwipe>) =>
+      s.type === 'swipe' ? Math.hypot(s.x2 - s.x1, s.y2 - s.y1) : NaN;
+    const full = length(scrollSwipe('down', { x: 0.5, y: 0.5 }));
+    expect(length(scrollSwipe('down', { x: 0.5, y: 0.5 }, 0.75))).toBeCloseTo(full * 0.75);
+    expect(length(scrollSwipe('left', { x: 0.5, y: 0.5 }, 0.25))).toBeCloseTo(full);
+  });
+
   it('paging left drags the finger left', () => {
     const swipe = scrollSwipe('left', { x: 0.5, y: 0.5 });
     if (swipe.type !== 'swipe') throw new Error();

@@ -1,5 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { edgeUnitsPerSecond, levelFor, nextScrollLevel, parseScrollLevels, swipeUnits } from './scrollPrefs';
+import {
+  edgeUnitsPerSecond,
+  levelFor,
+  nextPhoneScrollLevel,
+  nextScrollLevel,
+  parsePhoneScrollLevels,
+  parseScrollLevels,
+  phoneLevelFor,
+  swipeUnits,
+} from './scrollPrefs';
+
+describe('phone scroll levels', () => {
+  it('start at three quarters, step down and wrap round', () => {
+    expect(phoneLevelFor({}, 'Claude')).toBe(75);
+    expect(nextPhoneScrollLevel(75)).toBe(50);
+    expect(nextPhoneScrollLevel(25)).toBe(150);
+  });
+
+  it('keep only well-formed stored levels', () => {
+    expect(parsePhoneScrollLevels('{"Claude":50,"Chrome":3,"x":"75"}')).toEqual({ Claude: 50 });
+    expect(parsePhoneScrollLevels('nope')).toEqual({});
+    expect(parsePhoneScrollLevels(null)).toEqual({});
+  });
+});
 
 describe('scroll levels', () => {
   it('step down and wrap round', () => {

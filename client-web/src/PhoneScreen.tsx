@@ -15,7 +15,8 @@
 //   overview (swipe left/right through it, pinch to pick; the view follows the app you pick).
 //   There, down goes to the row of apps under the cards (the cursor steps along it with left and
 //   right, a pinch opens the one under it) and up goes back to the cards.
-// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · ? · End.
+// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · ↕ · ? · End
+//   (↕: how far a scroll swipe goes, per app, 150/100/75/50/25 % of the first one; 75 to start).
 //   Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
 //   the text goes to whatever has keyboard input on the phone. Enter is separate.
@@ -42,6 +43,13 @@ import { ShortcutsPanel } from './ShortcutsPanel';
 import { PhoneLink } from './phoneRtc';
 import { openRelay, type PhoneState } from './phoneSignal';
 import { usePinchPressesFocused } from './pinchPress';
+import {
+  loadPhoneScrollLevels,
+  nextPhoneScrollLevel,
+  phoneLevelFor,
+  savePhoneScrollLevels,
+  type PhoneScrollLevels,
+} from './scrollPrefs';
 import { PHONE_KEYS, TypePanel } from './TypePanel';
 import { PHONE_DOUBLES, SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
@@ -146,6 +154,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [lastInput, setLastInput] = useState('');
   /** The ? panel (shortcuts), under the bar while it shows. */
   const [showHelp, setShowHelp] = useState(false);
+  /** How far scroll swipes go (↕ on the bar), per app the phone shows; '' when it names none. */
+  const [scrollLevels, setScrollLevels] = useState<PhoneScrollLevels>(loadPhoneScrollLevels);
+  const scrollLevelsRef = useRef(scrollLevels);
+  const [appName, setAppName] = useState('');
+  const appNameRef = useRef('');
   /** Text the phone had no field for, handed back to the Type panel. */
   const [refill, setRefill] = useState<{ text: string } | null>(null);
 
@@ -203,6 +216,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           const w = Math.round(message.region.width * message.width);
           const h = Math.round(message.region.height * message.height);
           setScreen(message.app ? `${message.app} ${w}×${h}` : `${w}×${h}`);
+          appNameRef.current = message.app ?? '';
+          setAppName(message.app ?? '');
         } else if (message.type === 'result') onResult(message.of, message.ok);
         else if (message.type === 'overviewApps') onOverviewApps(message.apps);
         else if (message.type === 'pong') setRttMs(Date.now() - message.t);
@@ -381,7 +396,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     } else if (action.kind === 'apps') {
       openApps();
     } else {
-      send(scrollSwipe(action.direction, atCursor()), `swipe ${action.direction}`);
+      const strength = phoneLevelFor(scrollLevelsRef.current, appNameRef.current) / 100;
+      send(scrollSwipe(action.direction, atCursor(), strength), `swipe ${action.direction}`);
     }
   };
 
@@ -543,6 +559,17 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     setLastInput(`${app.label || 'app'} (${row.at + 1}/${row.apps.length}): pinch opens · up: the cards`);
   };
 
+  /** ↕: the next scroll strength for the app the phone shows, remembered on this device. */
+  const cycleScrollLevel = () => {
+    const app = appNameRef.current;
+    const next = nextPhoneScrollLevel(phoneLevelFor(scrollLevelsRef.current, app));
+    const levels = { ...scrollLevelsRef.current, [app]: next };
+    scrollLevelsRef.current = levels;
+    setScrollLevels(levels);
+    savePhoneScrollLevels(levels);
+    setLastInput(`${app || 'scroll'}: swipes ${next} %`);
+  };
+
   const sendText = (text: string) => {
     const pieces = phoneText(text);
     if (pieces.length > 0) pendingText.current = text;
@@ -616,6 +643,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         ))}
         <button type="button" aria-pressed={focus === 'type'} onClick={() => setFocus(focus === 'type' ? 'view' : 'type')}>
           Type
+        </button>
+        <button type="button" onClick={cycleScrollLevel} title="Scroll strength for this app">
+          ↕{phoneLevelFor(scrollLevels, appName)}
         </button>
         <button type="button" aria-pressed={showHelp} onClick={() => setShowHelp((v) => !v)}>
           ?

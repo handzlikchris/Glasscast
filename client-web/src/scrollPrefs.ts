@@ -58,3 +58,58 @@ export function saveScrollLevels(levels: ScrollLevels): void {
     // No storage: it just won't be remembered.
   }
 }
+
+// ---- phone sessions ----
+// A scroll there is a finger swipe on the phone, so its level is how long that swipe is, in
+// percent of the first one (a third of the view in 220 ms). Kept apart from the PC's levels, by
+// the name of the app the phone shows.
+
+/** Percent of the first swipe's length (the phone's own fling makes the scroll go further). */
+export const PHONE_SCROLL_LEVELS = [150, 100, 75, 50, 25] as const;
+export type PhoneScrollLevel = (typeof PHONE_SCROLL_LEVELS)[number];
+/** The first swipe scrolled too far in Claude's app; three quarters to start (2026-09-30). */
+export const DEFAULT_PHONE_SCROLL_LEVEL: PhoneScrollLevel = 75;
+
+const PHONE_STORAGE_KEY = 'glasses.phoneScrollLevels';
+
+export type PhoneScrollLevels = Record<string, PhoneScrollLevel>;
+
+/** The next level down, wrapping from the gentlest back to the strongest. */
+export function nextPhoneScrollLevel(current: PhoneScrollLevel): PhoneScrollLevel {
+  return PHONE_SCROLL_LEVELS[(PHONE_SCROLL_LEVELS.indexOf(current) + 1) % PHONE_SCROLL_LEVELS.length];
+}
+
+export const phoneLevelFor = (levels: PhoneScrollLevels, app: string): PhoneScrollLevel =>
+  levels[app] ?? DEFAULT_PHONE_SCROLL_LEVEL;
+
+/** Stored phone levels, keeping only well-formed entries. */
+export function parsePhoneScrollLevels(stored: string | null): PhoneScrollLevels {
+  const levels: PhoneScrollLevels = {};
+  try {
+    const data: unknown = JSON.parse(stored ?? '{}');
+    if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+      for (const [app, level] of Object.entries(data)) {
+        if (app.length <= 32 && PHONE_SCROLL_LEVELS.includes(level as PhoneScrollLevel)) levels[app] = level as PhoneScrollLevel;
+      }
+    }
+  } catch {
+    // Unreadable: defaults.
+  }
+  return levels;
+}
+
+export function loadPhoneScrollLevels(): PhoneScrollLevels {
+  try {
+    return parsePhoneScrollLevels(localStorage.getItem(PHONE_STORAGE_KEY));
+  } catch {
+    return {};
+  }
+}
+
+export function savePhoneScrollLevels(levels: PhoneScrollLevels): void {
+  try {
+    localStorage.setItem(PHONE_STORAGE_KEY, JSON.stringify(levels));
+  } catch {
+    // No storage: it just won't be remembered.
+  }
+}
