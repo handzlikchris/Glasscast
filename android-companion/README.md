@@ -72,5 +72,5 @@ glasses' ping.
 | `CropProcessor.kt` | Crops frames to the region, long side ≤ 600 |
 | `InputService.kt` | Accessibility service: gestures, global actions, text into the focused field, keep screen on |
 | `InputProtocol.kt` | Strict parser for the glasses' DataChannel messages (unit-tested) |
-| `MainActivity.kt` | Setup screen: a status card (companion, PC, glasses, input, screen) and one card per step, Material-style with plain views and the device theme's colours; Start/Stop in one button; Square screen / Reset screen and the ⓘ setup pop-up |
+| `MainActivity.kt` | Setup screen: a status card (companion, PC, glasses, input, screen) and one card per step, Material-style with plain views and the device theme's colours; Start/Stop in one button (the first card once paired; before that, Pair leads, and once paired Unpair replaces it); Square screen / Reset screen and the ⓘ setup pop-up |
 | `DisplayOverride.kt` | Square screen and reset: the window manager's forced size and density (hidden API via HiddenApiBypass; needs `WRITE_SECURE_SETTINGS`, granted once over adb) |

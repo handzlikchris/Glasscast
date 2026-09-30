@@ -47,6 +47,8 @@ class MainActivity : Activity() {
     private lateinit var screen: TextView
     private lateinit var runButton: Button
     private lateinit var pairButton: Button
+    private lateinit var pairCard: View
+    private lateinit var unpairButton: Button
     private val statusRows = mutableMapOf<String, Pair<TextView, TextView>>()
     private var pairing: Pairing? = null
     private val watcher: () -> Unit = { runOnUiThread { refresh() } }
@@ -88,7 +90,7 @@ class MainActivity : Activity() {
             margins(top = 16),
         )
 
-        // 1. Pair with the PC.
+        // Pair with the PC.
         server = EditText(this).apply {
             setText(prefs.server)
             inputType = InputType.TYPE_TEXT_VARIATION_URI
@@ -96,31 +98,17 @@ class MainActivity : Activity() {
             textSize = 14f
         }
         code = text("", 22f, bold = true).apply { visibility = View.GONE }
-        column.addView(
-            card(
-                title("Pair with the PC"),
-                body("The PC is only the meeting point the glasses use to reach this phone. Approve the code in its popup."),
-                server,
-                buttonRow(filledButton("Pair") { startPairing() }.also { pairButton = it }),
-                code,
-            ),
-            margins(top = 16),
+        // Shown only until the phone is paired: then Run is the first card, and Unpair is in it.
+        pairCard = card(
+            title("Pair with the PC"),
+            body("The PC is only the meeting point the glasses use to reach this phone. Approve the code in its popup."),
+            server,
+            buttonRow(filledButton("Pair") { startPairing() }.also { pairButton = it }),
+            code,
         )
+        column.addView(pairCard, margins(top = 16))
 
-        // 2. Input.
-        column.addView(
-            card(
-                title("Allow input"),
-                body(
-                    "Settings > Accessibility > Installed apps > Glasses Remote: on. If it's greyed out: " +
-                        "Settings > Apps > Glasses Remote > menu (top right) > Allow restricted settings, then try again.",
-                ),
-                buttonRow(tonalButton("Open accessibility settings") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }),
-            ),
-            margins(top = 16),
-        )
-
-        // 3. Run.
+        // Run: Start / Stop, first once paired.
         runButton = filledButton("") { if (CompanionService.running) CompanionService.stop(this) else CompanionService.start(this) }
         column.addView(
             card(
@@ -135,12 +123,26 @@ class MainActivity : Activity() {
                         prefs.glasses = null
                         refresh()
                     },
+                    textButton("Unpair from the PC") { confirmUnpair() }.also { unpairButton = it },
                 ),
             ),
             margins(top = 16),
         )
 
-        // 4. Screen for the glasses.
+        // Input.
+        column.addView(
+            card(
+                title("Allow input"),
+                body(
+                    "Settings > Accessibility > Installed apps > Glasses Remote: on. If it's greyed out: " +
+                        "Settings > Apps > Glasses Remote > menu (top right) > Allow restricted settings, then try again.",
+                ),
+                buttonRow(tonalButton("Open accessibility settings") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }),
+            ),
+            margins(top = 16),
+        )
+
+        // Screen for the glasses.
         screen = body("").apply { visibility = View.GONE }
         column.addView(
             card(
@@ -215,10 +217,27 @@ class MainActivity : Activity() {
             if (square) good else idle,
         )
         runButton.text = if (running) "■  Stop" else "▶  Start"
-        // Once paired, pairing is a quiet "Pair again": Start is the one main action left.
+        // Not paired: the Pair card leads. Paired: it goes, Run leads, and Unpair takes its place.
         val paired = prefs.token != null
-        pairButton.text = if (paired) "Pair again" else "Pair"
-        if (paired) styleTonal(pairButton) else styleFilled(pairButton)
+        pairCard.visibility = if (paired) View.GONE else View.VISIBLE
+        unpairButton.visibility = if (paired) View.VISIBLE else View.GONE
+    }
+
+    /** Forgets the PC's companion token here (the PC still lists the phone until Forget phone in its tray). */
+    private fun confirmUnpair() {
+        AlertDialog.Builder(this)
+            .setTitle("Unpair from the PC?")
+            .setMessage(
+                "The companion stops and forgets this PC. To use the glasses again, pair with the PC again " +
+                    "(approve the code in its popup). On the PC, Forget phone in the tray removes it there too.",
+            )
+            .setPositiveButton("Unpair") { _, _ ->
+                if (CompanionService.running) CompanionService.stop(this)
+                prefs.token = null
+                refresh()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /** Runs a screen change, or says how to allow it (a one-off permission over adb). */
