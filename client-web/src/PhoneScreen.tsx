@@ -12,33 +12,26 @@
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
 //   up scrolls around the cursor at once, down scrolls and left/right page after a 0.3 s wait for
 //   a second swipe; right twice opens Type, down twice presses Back, left twice opens the app
-//   overview (swipe left/right through it, pinch to pick; Fit follows the app you pick).
-// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · Region · Fit
-//   · End. Swipe left/right along it, pinch to press; up/down or Back return to the view.
+//   overview (swipe left/right through it, pinch to pick; the view follows the app you pick).
+// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · ? · End.
+//   Swipe left/right along it, pinch to press; up/down or Back return to the view.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
 //   the text goes to whatever has keyboard input on the phone. Enter is separate.
-// - Region: the whole phone screen with a square box; drag moves it, swipe up/down zooms, a pinch
-//   uses it, Back cancels. Fit: the phone crops to its top app window (a Samsung pop-up view
-//   window made square) and follows it.
+// - The view is always the app in front: the phone crops to its window (a Samsung pop-up view
+//   window made square, a split-screen half, or the whole screen) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, type GestureEvent } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
-  FULL_REGION,
   frameRect,
-  moveRegion,
   phoneText,
-  regionOnView,
   scrollSwipe,
   appsSwipe,
-  squareAround,
   toFrame,
-  zoomRegion,
   describeBye,
   type FromPhone,
   type PhoneByeReason,
   type PhoneNav,
-  type PhoneRegion,
   type ToPhone,
 } from './phoneProtocol';
 import { PhoneConnector } from './phoneConnect';
@@ -47,7 +40,6 @@ import { PhoneLink } from './phoneRtc';
 import { openRelay, type PhoneState } from './phoneSignal';
 import { usePinchPressesFocused } from './pinchPress';
 import { PHONE_KEYS, TypePanel } from './TypePanel';
-import type { Size } from './protocol';
 import { PHONE_DOUBLES, SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
 interface Props {
@@ -58,16 +50,7 @@ interface Props {
   onLeave(): void;
 }
 
-type Focus = 'view' | 'bar' | 'type' | 'region';
-
-/** Region mode: the box being placed, and the crop to go back to on Back. */
-interface Choosing {
-  box: PhoneRegion;
-  before: { region: PhoneRegion; follow: boolean };
-}
-
-/** Swipe up zooms in (a smaller box), down zooms out. */
-const ZOOM_STEP = 1.25;
+type Focus = 'view' | 'bar' | 'type';
 
 const PING_MS = 2000;
 /** Nothing from the phone this long over the direct connection: it's gone (the phone uses 15 s). */
@@ -101,11 +84,6 @@ const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
 export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const phoneScreen = useRef<Size | null>(null);
-  const phoneRegion = useRef<PhoneRegion>(FULL_REGION);
-  const following = useRef(false);
-  const choosing = useRef<Choosing | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<PhoneLink | null>(null);
   const connectorRef = useRef<PhoneConnector | null>(null);
@@ -157,7 +135,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [path, setPath] = useState<'local' | 'remote' | null>(null);
   const [rttMs, setRttMs] = useState<number | null>(null);
   const [lastInput, setLastInput] = useState('');
-  const [follow, setFollow] = useState(false);
   /** The ? panel (shortcuts), under the bar while it shows. */
   const [showHelp, setShowHelp] = useState(false);
   /** Text the phone had no field for, handed back to the Type panel. */
@@ -185,22 +162,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   };
 
   const atCursor = () => toFrame(cursor.current, frame.current);
-
-  /** The Region box over the whole screen's frame (which the phone sends while choosing). */
-  const drawBox = () => {
-    const el = boxRef.current;
-    const choice = choosing.current;
-    if (!el) return;
-    if (!choice) {
-      el.style.display = 'none';
-      return;
-    }
-    const r = regionOnView(choice.box, frame.current);
-    el.style.display = 'block';
-    el.style.transform = `translate(${r.x}px, ${r.y}px)`;
-    el.style.width = `${r.width}px`;
-    el.style.height = `${r.height}px`;
-  };
 
   // ---- connection ----
   useEffect(() => {
@@ -230,14 +191,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       onMessage: (message: FromPhone) => {
         lastHeard.current = performance.now();
         if (message.type === 'screen') {
-          phoneScreen.current = { width: message.width, height: message.height };
-          // While choosing, the phone shows the whole screen; the crop to keep is the box.
-          if (!choosing.current) phoneRegion.current = message.region;
-          following.current = message.follow;
-          setFollow(message.follow);
           const w = Math.round(message.region.width * message.width);
           const h = Math.round(message.region.height * message.height);
-          setScreen(message.follow ? `${message.app ?? 'window'} ${w}×${h}` : `${w}×${h}`);
+          setScreen(message.app ? `${message.app} ${w}×${h}` : `${w}×${h}`);
         } else if (message.type === 'result') onResult(message.of, message.ok);
         else if (message.type === 'pong') setRttMs(Date.now() - message.t);
         else if (message.type === 'bye') bye.current = message.reason;
@@ -304,51 +260,13 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       frame.current = frameRect({ width: video.videoWidth, height: video.videoHeight });
       cursor.current = clampToFrame(cursor.current);
       drawCursor();
-      drawBox();
     };
     video.addEventListener('resize', onResize);
     drawCursor();
     return () => video.removeEventListener('resize', onResize);
   }, []);
 
-  // ---- region ----
-  const startRegion = () => {
-    const screenSize = phoneScreen.current;
-    if (!screenSize) {
-      setLastInput('phone not connected yet');
-      return;
-    }
-    choosing.current = {
-      box: squareAround(screenSize, phoneRegion.current),
-      before: { region: phoneRegion.current, follow: following.current },
-    };
-    send({ type: 'setRegion', ...FULL_REGION }, 'choosing a region');
-    setFocus('region');
-    drawBox();
-  };
-
-  const finishRegion = (use: boolean) => {
-    const choice = choosing.current;
-    choosing.current = null;
-    drawBox();
-    setFocus('view');
-    if (!choice) return;
-    if (use) {
-      phoneRegion.current = choice.box;
-      send({ type: 'setRegion', ...choice.box }, 'region set');
-    } else if (choice.before.follow) {
-      send({ type: 'fitWindow' }, 'region cancelled');
-    } else {
-      send({ type: 'setRegion', ...choice.before.region }, 'region cancelled');
-    }
-  };
-
-  const fitWindow = () => {
-    send({ type: 'fitWindow' }, 'fit to window');
-    setFocus('view');
-  };
-
-  // ---- focus: view, bar, type, region ----
+  // ---- focus: view, bar, type ----
   const back = () => {
     const current = focusRef.current;
     if (current === 'view' && pickingApps.current) {
@@ -356,8 +274,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       send({ type: 'nav', action: 'back' }, 'left the apps');
       return;
     }
-    if (current === 'region') finishRegion(false);
-    else setFocus(current === 'view' ? 'bar' : 'view');
+    setFocus(current === 'view' ? 'bar' : 'view');
   };
   const backRef = useRef(back);
   backRef.current = back;
@@ -377,7 +294,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   }, []);
 
   useLayoutEffect(() => {
-    // Leaving the view for the bar, Type or Region: the app overview's swipes are over.
+    // Leaving the view for the bar or Type: the app overview's swipes are over.
     if (focus !== 'view') pickingApps.current = false;
     if (focus === 'bar') {
       barRef.current?.querySelector('button')?.focus();
@@ -409,13 +326,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           return;
         }
         swipes.current.swipe(swipe);
-      } else if (current === 'region') {
-        const screenSize = phoneScreen.current;
-        const choice = choosing.current;
-        if (!screenSize || !choice || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-        e.preventDefault();
-        choice.box = zoomRegion(screenSize, choice.box, e.key === 'ArrowUp' ? 1 / ZOOM_STEP : ZOOM_STEP);
-        drawBox();
       } else if (current === 'bar') {
         const buttons = Array.from(barRef.current?.querySelectorAll('button') ?? []);
         const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
@@ -479,16 +389,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   };
 
   const handleGesture = (event: GestureEvent) => {
-    if (focusRef.current === 'region') {
-      if (event.kind === 'drag' && choosing.current) {
-        const f = frame.current;
-        choosing.current.box = moveRegion(choosing.current.box, event.dx / f.width, event.dy / f.height);
-        drawBox();
-      } else if (event.kind === 'tap' || event.kind === 'holdEnd') {
-        finishRegion(true);
-      }
-      return;
-    }
     if (focusRef.current !== 'view') return;
 
     switch (event.kind) {
@@ -546,11 +446,10 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
-    const current = focusRef.current;
-    if (current !== 'view' && current !== 'region') return;
+    if (focusRef.current !== 'view') return;
     e.currentTarget.setPointerCapture(e.pointerId);
     // The second pinch of a quick pair (a tap is waiting): armed, tap-and-a-half.
-    const armed = current === 'view' && pendingTap.current !== null;
+    const armed = pendingTap.current !== null;
     // Its first tap waits until this pinch is decided: a quick release makes a double tap, a drag
     // or a hold drops it.
     if (armed) clearTimeout(pendingTap.current!.timer);
@@ -653,7 +552,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const connected = media === 'connected' && channelOpen;
 
   return (
-    <div className={`stage look-lifted phone-stage${focus === 'region' ? ' choosing' : ''}`}>
+    <div className="stage look-lifted phone-stage">
       <video ref={videoRef} autoPlay playsInline muted />
       <div
         className="gesture-layer"
@@ -663,7 +562,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         onPointerCancel={onPointerCancel}
       />
       <div ref={cursorRef} className="phone-cursor" />
-      <div ref={boxRef} className="phone-region" />
 
       <div ref={barRef} className={`toolbar top${focus === 'view' ? ' dimmed' : ''}`}>
         {NAV_BUTTONS.map(({ action, label }) => (
@@ -673,12 +571,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         ))}
         <button type="button" aria-pressed={focus === 'type'} onClick={() => setFocus(focus === 'type' ? 'view' : 'type')}>
           Type
-        </button>
-        <button type="button" onClick={startRegion}>
-          Region
-        </button>
-        <button type="button" aria-pressed={follow} onClick={fitWindow}>
-          Fit
         </button>
         <button type="button" aria-pressed={showHelp} onClick={() => setShowHelp((v) => !v)}>
           ?
@@ -719,9 +611,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         <span>{connected ? `live (${path ?? '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
-        <span className="input-trace">
-          {focus === 'region' ? 'drag moves · swipe ↑↓ zooms · pinch uses · Back cancels' : lastInput}
-        </span>
+        <span className="input-trace">{lastInput}</span>
       </div>
     </div>
   );

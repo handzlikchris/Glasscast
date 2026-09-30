@@ -23,14 +23,10 @@ export type ToPhone =
   | { type: 'nav'; action: PhoneNav }
   | { type: 'typeText'; text: string }
   | { type: 'key'; key: PhoneKey }
-  /** Crop to this part of the screen (0..1), and stop following a window. */
-  | { type: 'setRegion'; x: number; y: number; width: number; height: number }
-  /** Crop to the top app window (e.g. a Samsung pop-up) and keep following it. */
-  | { type: 'fitWindow' }
   /**
    * Switch to the phone's previous (older) or next (newer) recently used app, like Alt+Tab: one
    * on screen (a split-screen half, a pop-up) is just selected, one that isn't is brought to the
-   * front. Fit then follows it. Never an app name: the phone keeps its own list.
+   * front. The view then follows it. Never an app name: the phone keeps its own list.
    */
   | { type: 'switchApp'; dir: 'previous' | 'next' }
   /** Every couple of seconds: the phone ends a session it stops hearing from (no PC to tell it). */
@@ -42,8 +38,8 @@ export type ToPhone =
 export type PhoneRegion = Region;
 
 export type FromPhone =
-  /** The phone's screen in pixels, the crop (0..1), whether it follows an app's window, and which app. */
-  | { type: 'screen'; width: number; height: number; region: PhoneRegion; follow: boolean; app?: string }
+  /** The phone's screen in pixels, the crop (0..1): the window of the app in front, named if known. */
+  | { type: 'screen'; width: number; height: number; region: PhoneRegion; app?: string }
   | { type: 'result'; of: 'typeText' | 'key' | 'switchApp'; ok: boolean }
   | { type: 'pong'; t: number }
   /** The phone is ending the session, and why (just before it closes the connection). */
@@ -80,7 +76,6 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
             width: data.width,
             height: data.height,
             region: { x: r.x, y: r.y, width: r.width, height: r.height },
-            follow: data.follow === true,
             // The followed app's name, for the status bar only; capped.
             ...(typeof data.app === 'string' && data.app.length > 0 ? { app: data.app.slice(0, 24) } : {}),
           }
@@ -170,66 +165,4 @@ export function phoneText(text: string): string[] {
   // Line feed, carriage return, tab, line and paragraph separators (by code: no escapes to mangle).
   const flat = Array.from(text, (c) => (LINE_BREAKS.has(c.charCodeAt(0)) ? ' ' : c)).join('').trim();
   return flat ? textChunks(flat) : [];
-}
-
-// ---- choosing a region (Region mode) ----
-
-export const FULL_REGION: PhoneRegion = { x: 0, y: 0, width: 1, height: 1 };
-/** Smallest square, as a share of the screen's short side (the phone refuses under 0.1). */
-export const MIN_SQUARE = 0.25;
-
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
-/**
- * A region that is square in the phone's pixels, `side` (share of the screen's short side)
- * wide, centred on `centre` (0..1) and kept on the screen.
- */
-export function squareRegion(screen: Size, centre: { x: number; y: number }, side: number): PhoneRegion {
-  const short = Math.min(screen.width, screen.height);
-  const px = clamp(side, MIN_SQUARE, 1) * short;
-  const width = px / screen.width;
-  const height = px / screen.height;
-  return {
-    x: clamp(centre.x - width / 2, 0, 1 - width),
-    y: clamp(centre.y - height / 2, 0, 1 - height),
-    width,
-    height,
-  };
-}
-
-/** The square nearest a region, keeping its centre (for starting Region mode from any crop). */
-export function squareAround(screen: Size, region: PhoneRegion): PhoneRegion {
-  const short = Math.min(screen.width, screen.height);
-  const side = Math.min(region.width * screen.width, region.height * screen.height) / short;
-  return squareRegion(screen, centreOf(region), side);
-}
-
-/** Moves a region by (dx, dy) in 0..1 of the screen, kept on it. */
-export function moveRegion(region: PhoneRegion, dx: number, dy: number): PhoneRegion {
-  return {
-    ...region,
-    x: clamp(region.x + dx, 0, 1 - region.width),
-    y: clamp(region.y + dy, 0, 1 - region.height),
-  };
-}
-
-/** Grows (factor > 1) or shrinks a square region around its centre. */
-export function zoomRegion(screen: Size, region: PhoneRegion, factor: number): PhoneRegion {
-  const short = Math.min(screen.width, screen.height);
-  const side = (region.width * screen.width * factor) / short;
-  return squareRegion(screen, centreOf(region), side);
-}
-
-/** Where a region sits on the view, given where the whole screen's frame is. */
-export function regionOnView(region: PhoneRegion, frame: Rect): Rect {
-  return {
-    x: frame.x + region.x * frame.width,
-    y: frame.y + region.y * frame.height,
-    width: region.width * frame.width,
-    height: region.height * frame.height,
-  };
-}
-
-function centreOf(region: PhoneRegion) {
-  return { x: region.x + region.width / 2, y: region.y + region.height / 2 };
 }

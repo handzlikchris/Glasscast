@@ -88,17 +88,17 @@ class ScreenSession(
     private val source: VideoSource
     private val track: VideoTrack
     private val crop = CropProcessor()
-    private val prefs = Prefs(context)
-    /** The crop follows an app's window (Fit on the glasses). */
-    private var follow = prefs.followWindow
-    /** The app Fit follows (set by Fit and by the glasses' previous/next app swipes). */
-    private var followPackage = prefs.followPackage
+    /**
+     * The app whose window the crop follows (the glasses always see the app in front). Set by
+     * picking an app in the overview; when it leaves the screen, whatever is in front instead.
+     */
+    private var followPackage: String? = null
     private var refitPending = false
     /**
-     * The app overview is open (down twice, or Apps on the bar): the whole screen shows, and the
-     * app picked next is followed (with Fit on) or this crop comes back (without).
+     * The app overview is open (left twice, or Apps on the bar): the whole screen shows, and the
+     * app picked next is followed.
      */
-    private var picking: Region? = null
+    private var picking = false
     private val pc: PeerConnection
     private val channel: DataChannel
     private val screenWidth: Int
@@ -127,7 +127,6 @@ class ScreenSession(
         display.getRealSize(size)
         screenWidth = size.x
         screenHeight = size.y
-        crop.region = prefs.region
 
         capturer = ScreenCapturerAndroid(consent, object : MediaProjection.Callback() {
             // The user tapped the status-bar chip's Stop, the phone locked, or another app took over.
@@ -164,7 +163,7 @@ class ScreenSession(
         channel.registerObserver(ChannelObserver())
 
         watchWindows()
-        if (follow) refit()
+        refit()
 
         pc.createOffer(object : SdpAdapter() {
             override fun onCreateSuccess(sdp: SessionDescription) {
@@ -268,16 +267,6 @@ class ScreenSession(
         when (command) {
             is InputCommand.Ping -> send(JSONObject().put("type", "pong").put("t", command.t))
             is InputCommand.End -> end("ended on the glasses")
-            is InputCommand.SetRegion -> {
-                follow = false
-                prefs.followWindow = false
-                setRegion(Region(command.x, command.y, command.width, command.height))
-            }
-            is InputCommand.FitWindow -> {
-                followApp(input?.appToFit(screenWidth, screenHeight))
-                // Answer even when nothing changed, so the glasses see Fit took.
-                sendScreen()
-            }
             is InputCommand.SwitchApp -> {
                 val target = input?.recentApps?.step(command.previous, System.currentTimeMillis())
                 if (target == null || !input.bringToFront(target)) {
@@ -306,31 +295,27 @@ class ScreenSession(
 
     /** Shows the whole screen while the app overview is open, until an app comes to the front. */
     private fun pickApp() {
-        if (picking == null) picking = crop.region
+        picking = true
         crop.region = Region.FULL
         sendScreen()
         InputService.instance?.onAppFront = { pkg -> post { if (!closed) appPicked(pkg) } }
     }
 
     private fun appPicked(pkg: String) {
-        val before = picking ?: return
-        picking = null
+        if (!picking) return
+        picking = false
         InputService.instance?.onAppFront = null
-        if (follow) followApp(pkg) else setRegion(before)
+        followApp(pkg)
     }
 
     private fun setRegion(region: Region) {
-        picking = null
+        picking = false
         crop.region = region
-        prefs.region = region
         sendScreen()
     }
 
     private fun followApp(pkg: String?) {
-        follow = true
         followPackage = pkg
-        prefs.followWindow = true
-        prefs.followPackage = pkg
         watchWindows()
         refit()
     }
@@ -339,7 +324,7 @@ class ScreenSession(
     private fun watchWindows() {
         InputService.instance?.onWindowsChanged = {
             post {
-                if (!closed && follow && !refitPending) {
+                if (!closed && !refitPending) {
                     refitPending = true
                     handlerDelay { refitPending = false; refit() }
                 }
@@ -350,14 +335,17 @@ class ScreenSession(
     private fun handlerDelay(block: () -> Unit) = postDelayed(REFIT_DELAY_MS) { if (!closed) block() }
 
     /**
-     * Crops to the followed app's window (a split-screen half, a pop-up, or the full screen); if it
-     * isn't on screen, the crop stays. Without a followed app: the floating window, or everything.
+     * Crops to the followed app's window (a split-screen half, a pop-up, or the full screen). When
+     * it isn't on screen any more (it opened another app, or you went home and opened one), the
+     * app in front is followed instead; with none, the whole screen shows.
      */
     private fun refit() {
-        if (!follow || picking != null) return
+        if (picking) return
         val input = InputService.instance ?: return
-        val pkg = followPackage
-        val bounds = if (pkg != null) input.appWindow(pkg) ?: return else input.floatingAppWindow(screenWidth, screenHeight)
+        val pkg = followPackage?.takeIf { input.appWindow(it) != null } ?: input.appToFit(screenWidth, screenHeight)
+        val renamed = pkg != followPackage
+        followPackage = pkg
+        val bounds = pkg?.let { input.appWindow(it) }
         val region = if (bounds == null) {
             Region.FULL
         } else {
@@ -367,7 +355,7 @@ class ScreenSession(
             val bottom = bounds.bottom.coerceIn(0, screenHeight).toDouble() / screenHeight
             Region(x, y, right - x, bottom - y)
         }
-        if (!same(region, crop.region)) setRegion(region)
+        if (!same(region, crop.region)) setRegion(region) else if (renamed) sendScreen()
     }
 
     private fun same(a: Region, b: Region): Boolean =
@@ -383,9 +371,9 @@ class ScreenSession(
             JSONObject().put("type", "screen").put("width", screenWidth).put("height", screenHeight).put(
                 "region",
                 JSONObject().put("x", r.x).put("y", r.y).put("width", r.width).put("height", r.height),
-            ).put("follow", follow).apply {
+            ).apply {
                 val pkg = followPackage
-                if (follow && pkg != null) InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
+                if (pkg != null) InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
             },
         )
     }

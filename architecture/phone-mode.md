@@ -164,7 +164,8 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
 | Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
 | Type | The PC session's `TypePanel`, same steps: text box and composer → **Send text** → **Send** (keys: Send, ⏎, ⌫). Send presses the app's own send button: a clickable view labelled "Send" or "Send …", the one nearest the text field (Claude, ChatGPT and WhatsApp take Enter as a new line); else the field's editor action (send/go/done); else Enter. ⏎ is a plain Enter. For 0.8 s after the panel moves focus to Send text or Send, that button ignores presses (`guardMs`) | Same habit on both targets; the composer's Insert pinch reached the page late on the S25 |
-| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · Region · Fit · ? · End (? shows the shortcuts; End returns to the PC/Phone choice) | Same habits on both targets |
+| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · ? · End (? shows the shortcuts; End returns to the PC/Phone choice) | Same habits on both targets |
+| What the glasses see | Always the app in front: the phone crops to its window (a pop-up view, a split-screen half, or the whole screen) and follows it. When that app leaves the screen (it opened another, or Home and another app), the app in front is followed instead (`appToFit`: the top floating window's app, else the active one); with none, the whole screen. No Region or Fit (removed 2026-09-30, user's choice: never used) | Nothing to set up; a hand-placed crop went stale as soon as the app changed |
 | Typing | As a keyboard first (the accessibility service is also an input method), else `ACTION_SET_TEXT` | Apps that draw their own text take keyboard input once their keyboard is open |
 | Input | `AccessibilityService`: `dispatchGesture`, `performGlobalAction`, text | Public API, no ADB, no root |
 | Coordinates | Glasses send 0..1 **within the video frame**; the phone maps through its current crop | The phone alone knows the crop |
@@ -207,12 +208,12 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   held down by tap-and-a-half, ~25 moves a second; lifted when the session ends),
   `longPress{x,y}` (still parsed, no longer sent), `swipe{x1,y1,x2,y2,ms}` (ms 50..2000),
   `nav{action}` (`back`, `home`, `recents`, `notifications`), `typeText{text}` (≤ 500 chars,
-  flattened, never Enter), `key{key}` (`Enter`, `Backspace`, `Send`: the app's send button), `setRegion{x,y,width,height}`,
-  `fitWindow{}`, `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: left twice
+  flattened, never Enter), `key{key}` (`Enter`, `Backspace`, `Send`: the app's send button),
+  `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: left twice
   now opens the app overview with `nav{recents}`, and the phone shows the whole screen until an
-  app comes to the front, which Fit then follows), `ping{t}` (every 2 s: the phone's only
+  app comes to the front, which the view then follows), `ping{t}` (every 2 s: the phone's only
   sign the glasses are there), `end{}` (End on the glasses).
-- Phone → glasses: `screen{width, height, region, follow, app?}`, `result{of, ok}`, `pong{t}`,
+- Phone → glasses: `screen{width, height, region, app?}` (the crop and the followed app's name), `result{of, ok}`, `pong{t}`,
   `bye{reason}` just before it closes: `stopped` (Stop / End session on the phone), `capture`
   (the phone locked or its capture chip was tapped), `replaced` (newer glasses), `silent`.
 - The companion parses these as strictly as `ControlProtocol` does.
@@ -250,7 +251,7 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 | P2 | Glasses: PC/Phone chooser, phone session screen | done |
 | P3 | Companion app: pairing with the PC, foreground service, consent, capture → WebRTC, DataChannel → accessibility | done, used from the glasses |
 | P3b | **Pairing on the phone, sessions that outlive the server** (2026-09-29) | done; pairing works on the device. Offline sessions: not possible (Meta) |
-| P4 | Region: fit to the top app window, Samsung pop-up view, the PC-style Region mode. **Region and Fit built**; rotation and opening apps in pop-up view still to do | yes |
+| P4 | Region: fit to the top app window, Samsung pop-up view, the PC-style Region mode. Region and Fit were built, then **removed 2026-09-30**: the view always follows the app in front. Rotation and opening apps in pop-up view still to do | yes |
 | P5 | On the go: keep the screen on while live, lock handling | yes |
 | P6 | Later: the phone's sound (`AudioPlaybackCapture`), stats figures, a fake phone in the e2e harness | yes |
 
@@ -266,7 +267,7 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   exempt from Android's background-activity-start limits. The notification is the fallback.
 - **Accessibility for a sideloaded app:** App info → ⋮ → **Allow restricted settings**, then enable.
 - **Samsung windows:** pop-up view windows resize by hand; accessibility's `getWindows()` gives
-  each window's bounds, which is how Fit crops to the app window.
+  each window's bounds, which is how the crop follows the app window.
 - **Protected content** (banking apps, DRM video, `FLAG_SECURE`) captures black.
 - **WebRTC library:** `io.getstream:stream-webrtc-android` 1.3.10.
 - **Network on the go:** the glasses' WebView reports no network of its own (`netType` 8); its

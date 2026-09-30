@@ -348,26 +348,6 @@ textarea:focus-visible {
   margin: 0;
 }
 
-/* Region mode: the square being placed over the whole phone screen. */
-.phone-region {
-  display: none;
-  position: absolute;
-  left: 0;
-  top: 0;
-  border: 3px solid var(--focus);
-  box-shadow: 0 0 0 2px #000;
-  pointer-events: none;
-}
-
-.phone-stage.choosing .phone-cursor {
-  display: none;
-}
-
-/* The hint is longer than a last-input readout. */
-.phone-stage.choosing .status .input-trace {
-  max-width: none;
-}
-
 /* Pairing with the phone: the code to compare with the one on the phone (black is see-through). */
 .phone-pair {
   position: absolute;

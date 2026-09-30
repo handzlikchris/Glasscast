@@ -102,7 +102,7 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 | up, up | (acts at once, no double) | two scrolls |
 | down, down (within 0.3 s) | (acts at once, no double) | the phone's **Back** (closes the keyboard, a dialog, goes back a screen; user's choice, 2026-09-29) |
 | right, right (within 0.3 s) | **Type** | **Type** |
-| left, left (within 0.3 s) | **next app** shortcut | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; Fit then follows it (or the Region crop comes back). While it's open, left/right act at once across the middle of the screen, up/down do nothing (a card swiped up closes that app), Back leaves it |
+| left, left (within 0.3 s) | **next app** shortcut | the phone's **app overview** (Recents): the whole screen shows; swipe left/right through the apps, pinch to pick one; the view then follows it. While it's open, left/right act at once across the middle of the screen, up/down do nothing (a card swiped up closes that app), Back leaves it |
 | right or left once | after 0.3 s: nothing in Pointer mode, pan with Pan on / View / Scroll | after 0.3 s: page (a sideways swipe on the phone) |
 
 - Why doubles: the shortcuts are the same on both targets, and a single stray swipe can't open
@@ -112,8 +112,7 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
 - An up or down swipe while a left/right waits drops the waiting one: the band reads some
   down-swipes as left, and that stray left must not act.
 - A waiting swipe that lands after the swipes left the view (Back, a panel opened) is ignored.
-- Swipes on the controls, in Type and in Region don't go through this: they move focus (or zoom
-  the Region box).
+- Swipes on the controls, in Type and in Region (PC) don't go through this: they move focus.
 
 ## Type flow
 

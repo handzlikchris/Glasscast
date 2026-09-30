@@ -20,7 +20,6 @@ class InputProtocolTest {
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
         assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))
-        assertEquals(InputCommand.FitWindow, InputProtocol.parse("""{"type":"fitWindow"}"""))
         assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
         assertEquals(InputCommand.SwitchApp(previous = true), InputProtocol.parse("""{"type":"switchApp","dir":"previous"}"""))
         assertEquals(InputCommand.SwitchApp(previous = false), InputProtocol.parse("""{"type":"switchApp","dir":"next"}"""))
@@ -31,15 +30,11 @@ class InputProtocolTest {
     }
 
     @Test
-    fun clamps_positions_durations_and_regions() {
+    fun clamps_positions_and_durations() {
         assertEquals(InputCommand.Tap(1.0, 0.0), InputProtocol.parse("""{"type":"tap","x":7,"y":-2}"""))
         assertEquals(
             InputCommand.Swipe(0.0, 0.0, 1.0, 1.0, InputProtocol.SWIPE_MAX_MS),
             InputProtocol.parse("""{"type":"swipe","x1":0,"y1":0,"x2":1,"y2":1,"ms":99999}"""),
-        )
-        assertEquals(
-            InputCommand.SetRegion(0.9, 0.0, 0.1, 1.0),
-            InputProtocol.parse("""{"type":"setRegion","x":0.95,"y":-1,"width":0.01,"height":5}"""),
         )
     }
 
@@ -62,7 +57,8 @@ class InputProtocolTest {
             """{"type":"launch","package":"com.example"}""",
             """{"type":"swipe","x1":0,"y1":0,"x2":1,"y2":1}""",
             """{"x":1}""",
-            """{"type":"fitWindow","package":"com.example"}""",
+            """{"type":"fitWindow"}""",
+            """{"type":"setRegion","x":0,"y":0,"width":1,"height":1}""",
             """{"type":"touch","phase":"hover","x":0,"y":0}""",
             """{"type":"switchApp","dir":"sideways"}""",
             """{"type":"switchApp","package":"com.example"}""",

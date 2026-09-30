@@ -125,7 +125,10 @@ class InputService : AccessibilityService() {
             }
     }
 
-    /** What Fit follows when pressed: the top floating window's app, else the app you're using. */
+    /**
+     * The app the glasses' view follows when nothing else says which: the top floating window's
+     * (a Samsung pop-up view, a split-screen half), else the app you're using. Null for us.
+     */
     fun appToFit(screenWidth: Int, screenHeight: Int): String? {
         val apps = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }.sortedByDescending { it.layer }
         val bounds = Rect()
@@ -161,24 +164,6 @@ class InputService : AccessibilityService() {
     fun appLabel(pkg: String): String? = runCatching {
         packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
     }.getOrNull()
-
-    /**
-     * The window Fit follows: the top-most app window that doesn't fill the screen, such as a
-     * Samsung pop-up view window (freeform windows sit above full-screen apps). Null when every
-     * app window fills the screen. In screen pixels.
-     */
-    fun floatingAppWindow(screenWidth: Int, screenHeight: Int): Rect? {
-        val bounds = Rect()
-        return windows
-            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-            .sortedByDescending { it.layer }
-            .firstNotNullOfOrNull { window ->
-                window.getBoundsInScreen(bounds)
-                val own = window.root?.packageName?.toString() == packageName
-                val fillsScreen = bounds.width() * bounds.height() >= 0.9 * screenWidth * screenHeight
-                if (own || fillsScreen || bounds.width() < 100 || bounds.height() < 100) null else Rect(bounds)
-            }
-    }
 
     override fun onInterrupt() {}
 

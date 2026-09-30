@@ -22,11 +22,7 @@ sealed interface InputCommand {
     data class Nav(val action: NavAction) : InputCommand
     data class TypeText(val text: String) : InputCommand
     data class Key(val key: KeyName) : InputCommand
-    /** The crop, 0..1 of the phone's screen. Stops following a window. */
-    data class SetRegion(val x: Double, val y: Double, val width: Double, val height: Double) : InputCommand
-    /** Crop to the top app window (a pop-up view) and keep following it. */
-    data object FitWindow : InputCommand
-    /** The previous (older) or next (newer) recently used app; Fit follows it. */
+    /** The previous (older) or next (newer) recently used app; the view follows it. */
     data class SwitchApp(val previous: Boolean) : InputCommand
     /** The glasses' heartbeat: the phone ends a session it stops hearing from. */
     data class Ping(val t: Double) : InputCommand
@@ -44,8 +40,6 @@ object InputProtocol {
     const val MAX_TEXT_LENGTH = 500
     const val SWIPE_MIN_MS = 50L
     const val SWIPE_MAX_MS = 2000L
-    /** Smallest crop side, as a share of the screen. */
-    const val MIN_REGION = 0.1
 
     private val NAV = mapOf(
         "back" to NavAction.BACK,
@@ -73,8 +67,6 @@ object InputProtocol {
             "nav" -> if (only(o, "action")) (o.opt("action") as? String)?.let(NAV::get)?.let { InputCommand.Nav(it) } else null
             "typeText" -> typeText(o)
             "key" -> if (only(o, "key")) (o.opt("key") as? String)?.let(KEYS::get)?.let { InputCommand.Key(it) } else null
-            "setRegion" -> region(o)
-            "fitWindow" -> if (only(o)) InputCommand.FitWindow else null
             "switchApp" -> if (only(o, "dir")) {
                 when (o.opt("dir")) {
                     "previous" -> InputCommand.SwitchApp(previous = true)
@@ -149,14 +141,5 @@ object InputProtocol {
         if (text.length > MAX_TEXT_LENGTH) return null
         val flat = flatten(text)
         return if (flat.isBlank()) null else InputCommand.TypeText(flat)
-    }
-
-    private fun region(o: JSONObject): InputCommand? {
-        if (!only(o, "x", "y", "width", "height")) return null
-        val width = (num(o, "width") ?: return null).coerceIn(MIN_REGION, 1.0)
-        val height = (num(o, "height") ?: return null).coerceIn(MIN_REGION, 1.0)
-        val x = (num(o, "x") ?: return null).coerceIn(0.0, 1.0 - width)
-        val y = (num(o, "y") ?: return null).coerceIn(0.0, 1.0 - height)
-        return InputCommand.SetRegion(x, y, width, height)
     }
 }
