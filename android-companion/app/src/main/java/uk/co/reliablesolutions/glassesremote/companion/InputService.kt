@@ -45,6 +45,11 @@ class InputService : AccessibilityService() {
         /** Double tap: two taps this long, this far apart (inside Android's 40..300 ms double-tap window). */
         private const val DOUBLE_TAP_TAP_MS = 50L
         private const val DOUBLE_TAP_GAP_MS = 100L
+        /**
+         * A settled swipe holds still this long at its end before lifting, so it carries no
+         * speed: Android's fling velocity comes from the last ~100 ms of movement.
+         */
+        private const val SETTLE_MS = 150L
 
         /** Nodes searched for a text field when none has input focus (a screen has a few hundred). */
         private const val MAX_NODES = 1500
@@ -267,12 +272,28 @@ class InputService : AccessibilityService() {
         }
     }
 
-    fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long): Boolean {
+    /**
+     * A finger drawn from (x1, y1) to (x2, y2) in [ms]. [settle]: it stops there and holds still
+     * before lifting, so it doesn't fling. The app overview then moves one card: a swipe that
+     * lifted while moving flung it two apps on (seen on the S25, 2026-09-30).
+     */
+    fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, ms: Long, settle: Boolean = false): Boolean {
         val path = Path().apply {
             moveTo(x1, y1)
             lineTo(x2, y2)
         }
-        return stroke(path, ms)
+        if (!settle) return stroke(path, ms)
+        val move = GestureDescription.StrokeDescription(path, 0, ms, true)
+        return dispatchGesture(GestureDescription.Builder().addStroke(move).build(), object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                val hold = move.continueStroke(pointPath(x2, y2), 0, SETTLE_MS, false)
+                dispatchGesture(GestureDescription.Builder().addStroke(hold).build(), logCancelled("settled swipe's hold"), null)
+            }
+
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                Log.w(TAG, "settled swipe cancelled")
+            }
+        }, null)
     }
 
     fun nav(action: NavAction): Boolean = performGlobalAction(

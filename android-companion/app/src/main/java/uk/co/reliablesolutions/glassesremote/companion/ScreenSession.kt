@@ -297,8 +297,10 @@ class ScreenSession(
             is InputCommand.LongPress -> input?.longPress(screenX(command.x), screenY(command.y))
             is InputCommand.DoubleTap -> input?.doubleTap(screenX(command.x), screenY(command.y))
             is InputCommand.Touch -> input?.touch(command.phase, screenX(command.x), screenY(command.y))
+            // In the app overview a swipe settles before lifting, so it moves one app, not a fling's two.
             is InputCommand.Swipe -> input?.swipe(
                 screenX(command.x1), screenY(command.y1), screenX(command.x2), screenY(command.y2), command.ms,
+                settle = picking,
             )
             is InputCommand.Nav -> {
                 input?.nav(command.action)
