@@ -88,6 +88,11 @@ try {
     Write-Host "Copying $source..."
     & $msdeploy @copy
     $copied = $LASTEXITCODE
+
+    # An app_offline.htm left on the server (Web Deploy's AppOffline rule, from an interrupted
+    # deploy) would keep the site showing "Site Under Construction": remove it if it's there.
+    & $msdeploy '-verb:delete' "-dest:contentPath=`"$Site/app_offline.htm`",$remote" @common 2>&1 |
+        Where-Object { "$_" -match 'Deleting' } | ForEach-Object { Write-Host "$_" }
 }
 finally {
     Write-Host "Starting $Site..."
