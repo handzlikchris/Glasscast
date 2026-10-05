@@ -545,7 +545,7 @@ or a commit message: the repo is going public. Tracked files use `glasses.exampl
   mic via Meta's DAT) is planned but **on hold** at the user's request.
 - **Hosted phone relay (2026-10-05, on `main`):** `relay-server/` runs in IIS on the user's server
   and is used from the glasses and the S25: many phones, connect codes, the companion released
-  as a debug-signed APK (pre-release `companion-v0.1`). Deploys with `scripts/deploy-relay.ps1`
+  as a debug-signed APK (GitHub release `companion-v0.1`). Deploys with `scripts/deploy-relay.ps1`
   (Web Deploy). How to publish and run it: `architecture/deployment-and-networking.md`, "Hosted
   phone relay".
 - **Latency over mobile data (2026-09-27):** the session showed ~26% packet loss, all in the
