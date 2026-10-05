@@ -65,7 +65,7 @@ server? See [Host it yourself](#host-it-yourself). What the relay can and can't 
 
 Then two optional steps that make the phone much easier to use from the glasses: the
 [square screen](#square-screen-recommended-one-off-setup) and
-[a small keyboard](#a-small-keyboard-optional-recommended).
+[a small keyboard](#a-small-keyboard-optional-recommended-one-off-setup). Each is done once.
 
 #### Square screen (recommended, one-off setup)
 
@@ -95,7 +95,7 @@ That's it: unplug, and use **Square screen** / **Reset screen** in the app whene
 (change it before starting a session). The ⓘ next to them in the app shows the same steps and
 copies the command for you. USB debugging can be turned off again afterwards.
 
-#### A small keyboard (optional, recommended)
+#### A small keyboard (optional, recommended, one-off setup)
 
 When an app on the phone opens a text field, its keyboard pops up on the phone's screen, and
 that's the screen the glasses show. The stock **Samsung Keyboard** takes about half of it, so
@@ -108,7 +108,8 @@ handwriting), so the phone's keyboard only has to stay out of the way:
 2. Shrink it: in Gboard's toolbar, **Resize** and drag its top edge down (or **Floating**).
 3. In Gboard's settings, turn off the number row and the suggestion strip.
 
-Swipe down twice on the glasses to put the keyboard away. A keyboard that switches to a small
+That's a one-off: Gboard keeps its size and settings, and stays your keyboard for everything
+else on the phone too. Swipe down twice on the glasses to put the keyboard away. A keyboard that switches to a small
 one by itself on the square screen is planned.
 
 ### 2. The glasses: add Glasscast
