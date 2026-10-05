@@ -123,8 +123,11 @@ try {
 
     # An app_offline.htm left on the server (Web Deploy's AppOffline rule, from an interrupted
     # deploy) would keep the site showing "Site Under Construction": remove it if it's there.
-    & $msdeploy '-verb:delete' "-dest:contentPath=`"$Site/app_offline.htm`",$remote" @common 2>&1 |
-        Where-Object { "$_" -match 'Deleting' } | ForEach-Object { Write-Host "$_" }
+    # Usually there's none, and Web Deploy reports that on stderr (FileOrFolderNotFound): not an error here.
+    $ErrorActionPreference = 'Continue'
+    $cleanup = & $msdeploy '-verb:delete' "-dest:contentPath=`"$Site/app_offline.htm`",$remote" @common 2>&1
+    $ErrorActionPreference = 'Stop'
+    $cleanup | Where-Object { "$_" -match 'Deleting' } | ForEach-Object { Write-Host "$_" }
 }
 finally {
     Write-Host "Starting $Site..."
