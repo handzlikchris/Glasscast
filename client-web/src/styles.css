@@ -320,6 +320,18 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
+/* What an app profile highlighted on the phone (apps/highlight.ts): bright on dark (the display is additive). */
+.phone-highlight {
+  position: absolute;
+  margin: -4px 0 0 -4px;
+  padding: 2px;
+  box-sizing: content-box;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px #000;
+  pointer-events: none;
+}
+
 /* ---------- PC or phone ---------- */
 
 .choose {

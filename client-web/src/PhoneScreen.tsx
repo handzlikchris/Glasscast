@@ -15,14 +15,25 @@
 //   overview (swipe left/right through it, pinch to pick; the view follows the app you pick).
 //   There, down goes to the row of apps under the cards (the cursor steps along it with left and
 //   right, a pinch opens the one under it) and up goes back to the cards.
-// - Back (middle-finger pinch) brings up the bar: Back · Home · Apps · Notif · Type · ↕ · ? · End
-//   (↕: how far a scroll swipe goes, per app, 150/100/75/50/25 % of the first one; 75 to start).
-//   Swipe left/right along it, pinch to press; up/down or Back return to the view.
+// - Back (middle-finger pinch) brings up the bar, Apps focused (so Back then a pinch opens the app
+//   overview from anywhere): Apps · Back · Home · Notif · Type · ↕ · ✦ · ? · End
+//   (↕: how far a scroll swipe goes, per app, 150/100/75/50/25 % of the first one; 75 to start;
+//   ✦: the app's profile on or off, below). Swipe left/right along it, pinch to press; up/down or
+//   Back return to the view.
+// - App profiles (apps/, architecture/app-profiles.md): the app in front may have gestures of its
+//   own (Chrome, Claude; Walk for any app once ✦ turns it on). They come first on the view and the
+//   rest stay generic. They highlight something on the phone (a box, the cursor on it): a map
+//   profile's swipes then step between named controls, a pinch presses it, a text field opens Type.
 // - Type: the same panel and steps as a PC session (text box and composer → Send text → Enter);
 //   the text goes to whatever has keyboard input on the phone. Enter is separate.
 // - The view is always the app in front: the phone crops to its window (a Samsung pop-up view
 //   window made square, a split-screen half, or the whole screen) and follows it.
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { activeProfile, ownProfile, profileMark } from './apps';
+import { highlightStatus, mapMove, notFoundStatus, opensType, type Highlight } from './apps/highlight';
+import { firstOnScreen } from './apps/match';
+import { loadProfileSwitches, saveProfileSwitches, withSwitch, type ProfileSwitches } from './apps/prefs';
+import { describeAction, type AppProfile, type ProfileAction } from './apps/profile';
 import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, type GestureEvent } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
@@ -35,6 +46,7 @@ import {
   type FromPhone,
   type OverviewApp,
   type PhoneByeReason,
+  type PhoneItem,
   type PhoneNav,
   type ToPhone,
 } from './phoneProtocol';
@@ -51,7 +63,7 @@ import {
   type PhoneScrollLevels,
 } from './scrollPrefs';
 import { PHONE_KEYS, TypePanel } from './TypePanel';
-import { PHONE_DOUBLES, SwipeReader, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
+import { PHONE_DOUBLES, SwipeReader, phoneDoubles, phoneSwipeAction, swipeOf, waitingHint, type SwipeGesture } from './swipes';
 
 interface Props {
   /** Pair with the phone again even if a pairing is remembered. */
@@ -85,10 +97,12 @@ const PHONE_STATUS: Record<PhoneState, string> = {
 
 const APPS_HINT = 'apps: swipe left/right, down for the row of apps, pinch to pick, Back to leave';
 
+// Apps first: the bar opens with it focused, so Back then a pinch is the app overview from anywhere
+// (an app profile may take left twice). The glasses also reset focus to the first button after a Back.
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
+  { action: 'recents', label: 'Apps' },
   { action: 'back', label: 'Back' },
   { action: 'home', label: 'Home' },
-  { action: 'recents', label: 'Apps' },
   { action: 'notifications', label: 'Notif' },
 ];
 
@@ -128,7 +142,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const swipes = useRef(
     new SwipeReader(
       (gesture) => swipeRef.current(gesture),
-      (swipe) => setLastInput(waitingHint(swipe, 'phone')),
+      (swipe) => setLastInput(waitingHint(swipe, 'phone', profileRef.current)),
       undefined,
       PHONE_DOUBLES,
     ),
@@ -166,6 +180,21 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const scrollLevelsRef = useRef(scrollLevels);
   const [appName, setAppName] = useState('');
   const appNameRef = useRef('');
+  /** The followed app's package, which picks its profile; '' when the phone names none. */
+  const [pkg, setPkg] = useState('');
+  const pkgRef = useRef('');
+  /** ✦ per app (apps/prefs.ts). */
+  const [switches, setSwitches] = useState<ProfileSwitches>(loadProfileSwitches);
+  const switchesRef = useRef(switches);
+  const active = activeProfile(pkg, switches);
+  /** The profile at work for the app in front, if any. */
+  const profileRef = useRef<AppProfile | null>(null);
+  profileRef.current = active.profile;
+  /** What the profile highlighted (apps/highlight.ts) and its box on the view. */
+  const highlight = useRef<Highlight | null>(null);
+  const [highlightBox, setHighlightBox] = useState<Rect | null>(null);
+  /** A profile action waiting for the phone's answer (controls or walked), for the app it was asked in. */
+  const pendingAction = useRef<{ action: ProfileAction; names: readonly string[]; pkg: string } | null>(null);
   /** Text the phone had no field for, handed back to the Type panel. */
   const [refill, setRefill] = useState<{ text: string } | null>(null);
 
@@ -225,8 +254,17 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           setScreen(message.app ? `${message.app} ${w}×${h}` : `${w}×${h}`);
           appNameRef.current = message.app ?? '';
           setAppName(message.app ?? '');
+          const followed = message.pkg ?? '';
+          if (followed !== pkgRef.current) {
+            // Another app in front: its own profile (if any), and nothing highlighted.
+            pkgRef.current = followed;
+            setPkg(followed);
+            clearHighlight();
+          }
         } else if (message.type === 'result') onResult(message.of, message.ok);
         else if (message.type === 'overviewApps') onOverviewApps(message.apps);
+        else if (message.type === 'controls') onControls(message.pkg, message.items);
+        else if (message.type === 'walked') onWalked(message.pkg, message.item);
         else if (message.type === 'pong') setRttMs(Date.now() - message.t);
         else if (message.type === 'bye') bye.current = message.reason;
       },
@@ -298,6 +336,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     const onResize = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       frame.current = frameRect({ width: video.videoWidth, height: video.videoHeight });
+      // The highlight's box was for the old frame.
+      clearHighlight();
       cursor.current = clampToFrame(cursor.current);
       drawCursor();
     };
@@ -314,6 +354,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       send({ type: 'nav', action: 'back' }, 'left the apps');
       return;
     }
+    clearHighlight();
     setFocus(current === 'view' ? 'bar' : 'view');
   };
   const backRef = useRef(back);
@@ -334,8 +375,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   }, []);
 
   useLayoutEffect(() => {
-    // Leaving the view for the bar or Type: the app overview's swipes are over.
-    if (focus !== 'view') stopPicking();
+    // Leaving the view for the bar or Type: the app overview's swipes and any highlight are over.
+    if (focus !== 'view') {
+      stopPicking();
+      clearHighlight();
+    }
     if (focus === 'bar') {
       barRef.current?.querySelector('button')?.focus();
     } else if (focus !== 'type' && document.activeElement instanceof HTMLElement) {
@@ -378,6 +422,20 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           else setLastInput(APPS_HINT);
           return;
         }
+        const hl = highlight.current;
+        const profile = profileRef.current;
+        if (hl && profile?.whileHighlighted === 'map') {
+          // A map's swipes step between its controls at once (no doubles); one it doesn't list lets go.
+          swipes.current.cancel();
+          const to = mapMove(profile, hl, swipe);
+          if (to) {
+            runProfileAction({ highlight: to[0] }, to);
+          } else {
+            clearHighlight();
+            setLastInput(`${profile.name}: highlight off`);
+          }
+          return;
+        }
         swipes.current.swipe(swipe);
       } else if (current === 'bar') {
         const buttons = Array.from(barRef.current?.querySelectorAll('button') ?? []);
@@ -402,7 +460,13 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   swipeRef.current = (gesture: SwipeGesture) => {
     // A left/right that waited for a double may land after the swipes left the view.
     if (focusRef.current !== 'view') return;
-    const action = phoneSwipeAction(gesture);
+    const action = phoneSwipeAction(gesture, profileRef.current);
+    if (action.kind === 'profile') {
+      runProfileAction(action.action);
+      return;
+    }
+    // Any other gesture (a scroll above all) ends the highlight: its box would be stale.
+    clearHighlight();
     if (action.kind === 'type') {
       setFocus('type');
       setLastInput('swipe right twice → type');
@@ -446,9 +510,18 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (focusRef.current !== 'view') return;
 
     switch (event.kind) {
-      case 'tap':
+      case 'tap': {
         // Picking an app in the overview: the tap takes it, and the overview is gone.
         stopPicking();
+        const hl = highlight.current;
+        if (hl && !pendingTap.current) {
+          // A highlighted thing is pressed at once (no wait for a double tap), and a text field
+          // opens Type within this pinch, so the composer may open with it.
+          clearHighlight();
+          send({ type: 'tap', ...atCursor() }, 'tap');
+          if (opensType(hl.item)) setFocus('type');
+          break;
+        }
         if (pendingTap.current) {
           const at = pendingTap.current.at;
           clearPendingTap();
@@ -464,11 +537,14 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           };
         }
         break;
+      }
       case 'hold':
         clearPendingTap();
         touch('down');
         break;
       case 'dragStart':
+        // Moving the cursor by hand lets go of a highlight.
+        clearHighlight();
         if (event.held) {
           clearPendingTap();
           touch('down');
@@ -574,6 +650,88 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     setLastInput(`${app.label || 'app'} (${row.at + 1}/${row.apps.length}): pinch opens · up: the cards`);
   };
 
+  // ---- app profiles ----
+  const clearHighlight = () => {
+    highlight.current = null;
+    pendingAction.current = null;
+    setHighlightBox(null);
+  };
+
+  /** Puts the cursor on a highlighted thing and draws its box; a pinch then presses it. */
+  const showHighlight = (profile: AppProfile, h: Highlight) => {
+    highlight.current = h;
+    const f = frame.current;
+    const box = { x: f.x + h.item.x * f.width, y: f.y + h.item.y * f.height, width: h.item.w * f.width, height: h.item.h * f.height };
+    setHighlightBox(box);
+    cursor.current = clampToFrame({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    drawCursor();
+    setLastInput(highlightStatus(profile, h));
+  };
+
+  /** Asks the phone for what a profile action needs: its controls (to find `names` in), or a walk. */
+  const runProfileAction = (action: ProfileAction, names?: readonly string[]) => {
+    const profile = profileRef.current;
+    if (!profile) return;
+    const wanted = names ?? ('highlight' in action ? [action.highlight] : []);
+    pendingAction.current = { action, names: wanted, pkg: pkgRef.current };
+    const label = `${profile.name}: ${describeAction(profile, action)}…`;
+    if ('walk' in action) send({ type: 'walk', dir: action.walk, unit: action.unit }, label);
+    else send({ type: 'controls' }, label);
+  };
+
+  /** The answer pending for this app, taken; null if there's none (or it's for another app, or too late). */
+  const takePending = (answerPkg: string, walk: boolean) => {
+    const pending = pendingAction.current;
+    const profile = profileRef.current;
+    if (!pending || !profile || 'walk' in pending.action !== walk) return null;
+    if (answerPkg !== pending.pkg || answerPkg !== pkgRef.current || focusRef.current !== 'view') return null;
+    pendingAction.current = null;
+    return { pending, profile };
+  };
+
+  /** The phone's controls: the first of the wanted ones on screen is highlighted. */
+  const onControls = (answerPkg: string, items: PhoneItem[]) => {
+    const taken = takePending(answerPkg, false);
+    if (!taken) return;
+    const { pending, profile } = taken;
+    const found = firstOnScreen(profile, pending.names, items);
+    // Not found: say so; anything highlighted stays where it was.
+    if (found) showHighlight(profile, { item: found.item, name: found.name });
+    else setLastInput(notFoundStatus(profile, { highlight: pending.names[0] }));
+  };
+
+  /** Where a walk landed (the phone scrolled it into view); at the end, the highlight stays. */
+  const onWalked = (answerPkg: string, item?: PhoneItem) => {
+    const taken = takePending(answerPkg, true);
+    if (!taken) return;
+    const { pending, profile } = taken;
+    if (item) showHighlight(profile, { item });
+    else setLastInput(notFoundStatus(profile, pending.action));
+  };
+
+  /** ✦: this app's profile on or off (Walk for an app without its own), remembered on this device. */
+  const toggleProfile = () => {
+    const app = pkgRef.current;
+    if (!app) return;
+    const own = ownProfile(app);
+    const on = !activeProfile(app, switchesRef.current).on;
+    const next = withSwitch(switchesRef.current, app, own !== null, on);
+    switchesRef.current = next;
+    setSwitches(next);
+    saveProfileSwitches(next);
+    const name = own?.name ?? 'Walk';
+    setLastInput(on ? `${name} on in ${appNameRef.current || 'this app'}` : `${name} off: generic gestures`);
+  };
+
+  // The app's profile changed (another app, or ✦): its doubles wait for a second swipe, nothing is
+  // highlighted any more, and the status bar says once what it does.
+  const profile = active.profile;
+  useEffect(() => {
+    swipes.current.setWaitFor(phoneDoubles(profile));
+    clearHighlight();
+    if (profile) setLastInput(`${profile.name}: ${profile.hint} · ✦ turns it off`);
+  }, [profile]);
+
   /** ↕: the next scroll strength for the app the phone shows, remembered on this device. */
   const cycleScrollLevel = () => {
     const app = appNameRef.current;
@@ -649,6 +807,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         onPointerCancel={onPointerCancel}
       />
       <div ref={cursorRef} className="phone-cursor" />
+      {highlightBox && focus === 'view' && (
+        <div
+          className="phone-highlight"
+          style={{ left: highlightBox.x, top: highlightBox.y, width: highlightBox.width, height: highlightBox.height }}
+        />
+      )}
 
       <div ref={barRef} className={`toolbar top${focus === 'view' ? ' dimmed' : ''}`}>
         {NAV_BUTTONS.map(({ action, label }) => (
@@ -662,6 +826,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         <button type="button" onClick={cycleScrollLevel} title="Scroll strength for this app">
           ↕{phoneLevelFor(scrollLevels, appName)}
         </button>
+        {pkg && (
+          <button type="button" aria-pressed={active.on} onClick={toggleProfile} title="This app's profile on or off">
+            ✦
+          </button>
+        )}
         <button type="button" aria-pressed={showHelp} onClick={() => setShowHelp((v) => !v)}>
           ?
         </button>
@@ -686,7 +855,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         />
       )}
 
-      {showHelp && focus === 'bar' && <ShortcutsPanel target="phone" />}
+      {showHelp && focus === 'bar' && (
+        <ShortcutsPanel
+          target="phone"
+          app={{ profile: active.profile, offName: active.own && !active.on ? ownProfile(pkg)?.name : undefined }}
+        />
+      )}
 
       {connectCode && (
         <div className="phone-pair" role="status">
@@ -716,7 +890,12 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       <div className="status">
         <span className={connected ? 'dot' : 'dot warn'}>●</span>
         <span>{connected ? `live (${path ?? '…'})` : connectCode ? 'waiting for the code on the phone' : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
-        {screen && <span>{screen}</span>}
+        {screen && (
+          <span>
+            {profileMark(active)}
+            {screen}
+          </span>
+        )}
         {rttMs !== null && <span>{rttMs} ms</span>}
         <span className="input-trace">{lastInput}</span>
       </div>
