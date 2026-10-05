@@ -32,6 +32,32 @@ describe('parsePhoneMessage', () => {
     expect(parsePhoneMessage(JSON.stringify({ type: 'overviewApps', apps: Array(13).fill({ x: 0, y: 0, label: '' }) }))).toBeNull();
   });
 
+  it("reads the followed app's package, and drops a malformed one", () => {
+    const screen = (pkg: unknown) =>
+      parsePhoneMessage(JSON.stringify({ type: 'screen', width: 1, height: 1, region: { x: 0, y: 0, width: 1, height: 1 }, app: 'Chrome', pkg }));
+    expect(screen('com.android.chrome')).toMatchObject({ app: 'Chrome', pkg: 'com.android.chrome' });
+    expect(screen('../etc')).not.toHaveProperty('pkg');
+    expect(screen('a'.repeat(101))).not.toHaveProperty('pkg');
+  });
+
+  it('accepts controls and walked, clamping boxes and capping labels', () => {
+    const send = { x: 0.75, y: 0.875, w: 0.5, h: 0.2, kind: 'button', label: 'Send', id: '' };
+    expect(parsePhoneMessage(JSON.stringify({ type: 'controls', pkg: 'com.anthropic.claude', items: [send] }))).toEqual({
+      type: 'controls',
+      pkg: 'com.anthropic.claude',
+      items: [{ x: 0.75, y: 0.875, w: 0.25, h: 0.125, kind: 'button', label: 'Send', id: '' }],
+    });
+    expect(parsePhoneMessage('{"type":"controls","pkg":"","items":[]}')).toEqual({ type: 'controls', pkg: '', items: [] });
+    expect(parsePhoneMessage(JSON.stringify({ type: 'walked', pkg: 'com.android.chrome', item: { ...send, kind: 'link', label: 'x'.repeat(99) } })))
+      .toMatchObject({ item: { kind: 'link', label: 'x'.repeat(40) } });
+    expect(parsePhoneMessage('{"type":"walked","pkg":"com.android.chrome"}')).toEqual({ type: 'walked', pkg: 'com.android.chrome' });
+    // Too many, a bad kind or a missing field: the whole message goes.
+    expect(parsePhoneMessage(JSON.stringify({ type: 'controls', pkg: '', items: Array(65).fill(send) }))).toBeNull();
+    expect(parsePhoneMessage(JSON.stringify({ type: 'controls', pkg: '', items: [{ ...send, kind: 'script' }] }))).toBeNull();
+    expect(parsePhoneMessage(JSON.stringify({ type: 'walked', pkg: 'x y', item: send }))).toBeNull();
+    expect(parsePhoneMessage(JSON.stringify({ type: 'walked', pkg: '', item: { ...send, label: undefined } }))).toBeNull();
+  });
+
   it.each([
     'nope',
     '{"type":"screen","width":1080}',

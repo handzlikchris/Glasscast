@@ -11,6 +11,30 @@ export type PhoneNav = 'back' | 'home' | 'recents' | 'notifications';
 /** Send: the app's send button (else its editor action, else Enter). */
 export type PhoneKey = 'Enter' | 'Backspace' | 'Send';
 
+/** What a walk steps to, in reading order (app profiles, architecture/app-profiles.md). */
+export type WalkUnit = 'item' | 'link' | 'heading' | 'field' | 'article' | 'landmark';
+export const WALK_UNITS: readonly WalkUnit[] = ['item', 'link', 'heading', 'field', 'article', 'landmark'];
+
+export type PhoneItemKind = 'button' | 'link' | 'field' | 'heading' | 'toggle' | 'text';
+const ITEM_KINDS: readonly string[] = ['button', 'link', 'field', 'heading', 'toggle', 'text'];
+
+/**
+ * Something on the phone's screen an app profile can highlight: its box, 0..1 in the frame the
+ * glasses show; its label (a field's hint, never its text) and resource id name ('' if none).
+ */
+export interface PhoneItem {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: PhoneItemKind;
+  label: string;
+  id: string;
+}
+
+/** The most items the phone lists in one controls answer. */
+export const MAX_CONTROLS = 64;
+
 export type ToPhone =
   | { type: 'tap'; x: number; y: number }
   | { type: 'doubleTap'; x: number; y: number }
@@ -31,6 +55,10 @@ export type ToPhone =
   | { type: 'switchApp'; dir: 'previous' | 'next' }
   /** Where the app overview's row of apps is (answered with overviewApps). */
   | { type: 'overviewApps' }
+  /** What you can press in the followed app's window (answered with controls). */
+  | { type: 'controls' }
+  /** The next or previous thing of a kind in the followed app, in reading order (answered with walked). */
+  | { type: 'walk'; dir: 'next' | 'previous'; unit: WalkUnit }
   /** Every couple of seconds: the phone ends a session it stops hearing from (no PC to tell it). */
   | { type: 'ping'; t: number }
   /** End on the glasses: the phone stops capturing. */
@@ -40,11 +68,18 @@ export type ToPhone =
 export type PhoneRegion = Region;
 
 export type FromPhone =
-  /** The phone's screen in pixels, the crop (0..1): the window of the app in front, named if known. */
-  | { type: 'screen'; width: number; height: number; region: PhoneRegion; app?: string }
+  /**
+   * The phone's screen in pixels, the crop (0..1): the window of the app in front, named if known
+   * (`app` for the status bar, `pkg` for picking its profile).
+   */
+  | { type: 'screen'; width: number; height: number; region: PhoneRegion; app?: string; pkg?: string }
   | { type: 'result'; of: 'typeText' | 'key' | 'switchApp'; ok: boolean }
   /** The app overview's row of apps, in order; empty when there's none (or the overview closed). */
   | { type: 'overviewApps'; apps: OverviewApp[] }
+  /** What you can press in the window of `pkg` ('' when the phone follows no app). */
+  | { type: 'controls'; pkg: string; items: PhoneItem[] }
+  /** Where a walk landed; no item at the end (or with nothing followed). */
+  | { type: 'walked'; pkg: string; item?: PhoneItem }
   | { type: 'pong'; t: number }
   /** The phone is ending the session, and why (just before it closes the connection). */
   | { type: 'bye'; reason: PhoneByeReason };
@@ -70,6 +105,28 @@ export const SWIPE_MAX_MS = 2000;
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const PACKAGE = /^[A-Za-z0-9_.]{1,100}$/;
+
+/** A package name as the phone sends it, '' allowed (nothing followed); null if malformed. */
+function packageOf(v: unknown): string | null {
+  return v === '' ? '' : typeof v === 'string' && PACKAGE.test(v) ? v : null;
+}
+
+function itemOf(v: unknown): PhoneItem | null {
+  if (!isObject(v) || !isNumber(v.x) || !isNumber(v.y) || !isNumber(v.w) || !isNumber(v.h)) return null;
+  if (typeof v.kind !== 'string' || !ITEM_KINDS.includes(v.kind) || typeof v.label !== 'string' || typeof v.id !== 'string') return null;
+  const x = clamp01(v.x);
+  const y = clamp01(v.y);
+  return {
+    x,
+    y,
+    w: Math.min(1 - x, Math.max(0, v.w)),
+    h: Math.min(1 - y, Math.max(0, v.h)),
+    kind: v.kind as PhoneItemKind,
+    label: v.label.slice(0, 40),
+    id: v.id.slice(0, 40),
+  };
+}
 
 /** Validates a message from the phone; anything unexpected is dropped. */
 export function parsePhoneMessage(raw: string): FromPhone | null {
@@ -92,6 +149,8 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
             region: { x: r.x, y: r.y, width: r.width, height: r.height },
             // The followed app's name, for the status bar only; capped.
             ...(typeof data.app === 'string' && data.app.length > 0 ? { app: data.app.slice(0, 24) } : {}),
+            // Its package, which picks the app profile; dropped if malformed.
+            ...(packageOf(data.pkg) ? { pkg: packageOf(data.pkg)! } : {}),
           }
         : null;
     }
@@ -109,6 +168,24 @@ export function parsePhoneMessage(raw: string): FromPhone | null {
         apps.push({ x: clamp01(a.x), y: clamp01(a.y), label: a.label.slice(0, 24) });
       }
       return { type: 'overviewApps', apps };
+    }
+    case 'controls': {
+      const pkg = packageOf(data.pkg);
+      if (pkg === null || !Array.isArray(data.items) || data.items.length > MAX_CONTROLS) return null;
+      const items: PhoneItem[] = [];
+      for (const raw of data.items) {
+        const item = itemOf(raw);
+        if (!item) return null;
+        items.push(item);
+      }
+      return { type: 'controls', pkg, items };
+    }
+    case 'walked': {
+      const pkg = packageOf(data.pkg);
+      if (pkg === null) return null;
+      if (data.item === undefined) return { type: 'walked', pkg };
+      const item = itemOf(data.item);
+      return item ? { type: 'walked', pkg, item } : null;
     }
     case 'bye':
       return typeof data.reason === 'string' && BYE_REASONS.includes(data.reason)
