@@ -95,7 +95,7 @@ These come from web sources read on 2026-09-25, not from hands-on use:
   with a code comparison and a single-use token exchanged for a session. Its connection must be
   authenticated, Origin/rate-limited as appropriate, and never unauthenticated. Camera and audio
   data are sensitive: only to this server, never logged, never stored longer than needed.
-  No new public ports: reuse `https://glasses.example.com` (Caddy on 8443) and add
+  No new public ports: reuse the public host (`Web:PublicHost`, Caddy on 8443) and add
   paths to the Caddy allowlist deliberately.
 - **Protocol:** extend `ControlProtocol.cs` and `client-web/src/protocol.ts` together, strictly
   (allowlisted types, size caps). Binary uploads (JPEG, audio) need their own size limits.

@@ -114,7 +114,7 @@ cd client-web; npm test; npx tsc --noEmit; npm run build   # ~110 client tests, 
 cd android-companion; .\gradlew.bat assembleDebug testDebugUnitTest   # companion app (see its README)
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
-.\tools\bin\caddy.exe run --config deploy\Caddyfile          # public HTTPS
+$env:GLASSES_HOST='<host>'; .\tools\bin\caddy.exe run --config deploy\Caddyfile   # public HTTPS
 dotnet run --project tools/e2e-harness          # then: cd tools/e2e-harness/browser; npm run drive
 ```
 
@@ -149,7 +149,7 @@ Server or `appsettings.Local.json` changes need the user to restart the server i
 ```
 glasses/phone ──HTTPS+WSS──► router :443 ──► Caddy :8443 ──► 127.0.0.1:5080 server ──► SendInput
       ▲                                                          │ GDI capture → H.264 → SIPSorcery
-      └──────────── WebRTC video: UDP 203.0.113.10:50000 ◄───────┘ (router → 192.168.1.114:50000)
+      └──────────── WebRTC video: UDP <public IP>:50000 ◄─────────┘ (router → <PC LAN IP>:50000)
 ```
 
 1. `/ws/pair`: server opens a request (6-char code), the tray shows the **ApprovePopup**; Approve
@@ -364,24 +364,14 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
 - Approve popup: Reject is the focused/Cancel button, no AcceptButton. The cast-area frame and the
   session banner are excluded from capture (`WDA_EXCLUDEFROMCAPTURE`) and never take focus.
 
-## This machine's deployment (facts, not defaults)
+## This machine's deployment
 
-- Hostname `glasses.example.com`, A record at GoDaddy → static public IP **203.0.113.10**.
-- Router: external **TCP 443 → 192.168.1.114:8443** (Caddy), **UDP 50000 → 192.168.1.114:50000**.
-- **IIS runs on this PC and owns 443 and 80** (http.sys, `CN=localhost` cert). That's why Caddy
-  uses `https_port 8443` and the HTTP-01 challenge is disabled. Don't try to take 443 back.
-- **Two adapters on the LAN:** Ethernet 192.168.1.114 (forward target) and Wi-Fi 192.168.1.200
-  (Windows' preferred outbound route). `Media:BindAddress=192.168.1.114` is required, or UDP
-  replies leave via Wi-Fi and video hangs at "connecting".
-- `server/appsettings.Local.json` (git-ignored) holds `Media:PublicIp`, `Media:BindAddress` and the
-  app shortcuts (1 = Claude: Windows Terminal titled `CHRIS-PC:` where Herdr runs; 2 = Browser:
-  `chrome`); see `appsettings.Local.example.json`. It's read at startup only; restart after changes.
-- Firewall rules come from `deploy/firewall.ps1` (admin): TCP 8443, UDP 50000, optional TCP 5080 LAN-only.
-- Caddy certificate is stored in `%APPDATA%\Caddy`; access log `caddy-access.log` in the repo root
-  (git-ignored). The log's User-Agent tells devices apart: `Greatwhite` = the glasses; the phone
-  is a Galaxy S25 (SM-S931B, Android 16, One UI 8.0). It's paired for **wireless adb** (`adb devices`
-  lists it as 192.168.1.233:<port>; the port changes when wireless debugging restarts). A mobile-network IP there means the real outside path.
-- Remote is `origin` = github.com/handzlikchris/GlassesRemote; the user asks for pushes ("check in").
+Machine-specific facts (host name, public IP, router forwards, adapters, the phone) live in
+**`CLAUDE.local.md`** (git-ignored). Never put the real host name or public IP in a tracked file
+or a commit message: the repo is going public. Tracked files use `glasses.example.com` and
+`203.0.113.x`; the real values go in `server/appsettings.Local.json` (`Web:PublicHost`,
+`Media:PublicIp`), `GLASSES_HOST` for Caddy and `android-companion/local.properties`
+(`glassesServer`).
 
 ## Gotchas already paid for
 

@@ -23,6 +23,7 @@ Thumbs.db
 # Runtime state and secrets
 *.log
 appsettings.Local.json
+CLAUDE.local.md
 server/data/
 
 # Android companion (android-companion/)
