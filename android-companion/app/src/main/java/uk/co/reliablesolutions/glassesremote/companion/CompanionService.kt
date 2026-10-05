@@ -263,7 +263,7 @@ class CompanionService : Service() {
         )
         val shown = "${code.take(3)} ${code.drop(3)}"
         val notification = Notification.Builder(this, ASK_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Pair glasses? Code $shown")
             .setContentText("Approve only if the glasses show $shown")
             .setOngoing(true)
@@ -284,7 +284,7 @@ class CompanionService : Service() {
         runCatching { startActivity(intent) }.onFailure { Log.w(TAG, "consent activity not started", it) }
         val pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = Notification.Builder(this, ASK_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Glasses want to control this phone")
             .setContentText("Tap to choose whether to share the screen")
             .setContentIntent(pending)
@@ -375,7 +375,7 @@ class CompanionService : Service() {
         )
         val open = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Glasscast")
             .setContentText(text)
             .setContentIntent(open)

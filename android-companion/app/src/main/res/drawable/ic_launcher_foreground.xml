@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Glasscast icon: glasses casting (paths in favicon.svg's 512 space, scaled into the 66dp safe zone). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.145"
+        android:scaleY="0.145"
+        android:translateX="16.88"
+        android:translateY="20.5">
+        <path
+            android:fillColor="#3DFFFFFF"
+            android:pathData="M104,256 H234 L229,300 C225,334 204,352 174,352 H162 C130,352 113,333 109,302 Z M408,256 H278 L283,300 C287,334 308,352 338,352 H350 C382,352 399,333 403,302 Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="22" />
+        <path
+            android:pathData="M80,236 L100,256 H412 L432,236"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="24" />
+        <path
+            android:pathData="M210.04,183.43 A60,60 0 0 1 301.96,183.43"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeWidth="22" />
+        <path
+            android:pathData="M170.2,150 A112,112 0 0 1 341.8,150"
+            android:strokeAlpha="0.75"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeWidth="22" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M242,222 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    </group>
+</vector>
