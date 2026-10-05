@@ -12,6 +12,33 @@ code](#getting-started).
 
 https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
 
+## What it does
+
+The glasses have only a handful of apps of their own. Your phone already has every app you use:
+WhatsApp, Gmail, Maps, Spotify, ChatGPT, Claude, the one you wrote yourself. Glasscast puts them on
+the glasses as they are, with nothing for their makers to build.
+
+They look right there, too. The glasses' display is a 600×600 square, and **Square screen** in
+the companion turns the phone's screen into a 1080×1080 square, so apps lay themselves out
+for it: the whole app fills the display, no letterboxing, text big enough to read. **Reset
+screen** puts the phone back when you're done. (Square screen needs a [one-off permission](#square-screen-recommended-one-off-setup) granted over
+ADB; without it the view still follows the app in front, letterboxed.)
+
+Your phone sits on the table, on a stand or in your bag. The glasses show its screen live, and
+the Neural Band works it like a laptop touchpad:
+
+- **See the phone live.** Its screen streams to the glasses over WebRTC (the phone's hardware
+  H.264 encoder), and the view follows the app in front, pop-up windows and split screen
+  included.
+- **Tap, scroll, drag.** Pinch to tap, two quick pinches to double tap, swipe your thumb to
+  scroll. Pinch, then pinch and hold, to put a finger down: drag, select text, long press.
+- **Get around.** Back, Home, notifications and the app overview, all from the glasses.
+- **Type by voice or handwriting.** The glasses' own composer fills a text box; Glasscast types
+  it into the phone and presses the app's **Send** button (WhatsApp, ChatGPT and Claude all treat
+  Enter as a new line, so it finds the real button).
+- **Control a Windows PC too.** The same app, pointed at your PC: a region of the screen with
+  its sound, the mouse and keyboard, and one-swipe jumps between your apps.
+
 ## Getting started
 
 The quick way uses the relay I host at `glasscast.reliable-solutions.co.uk`: install one app on
@@ -91,33 +118,6 @@ on developer mode for the glasses (see Meta's
 
 From then on: open Glasscast on the glasses, pinch **Phone**, and tap **Start** on the phone.
 The glasses remember which phone is theirs and that they're paired.
-
-## What it does
-
-The glasses have only a handful of apps of their own. Your phone already has every app you use:
-WhatsApp, Gmail, Maps, Spotify, ChatGPT, Claude, the one you wrote yourself. Glasscast puts them on
-the glasses as they are, with nothing for their makers to build.
-
-They look right there, too. The glasses' display is a 600×600 square, and **Square screen** in
-the companion turns the phone's screen into a 1080×1080 square, so apps lay themselves out
-for it: the whole app fills the display, no letterboxing, text big enough to read. **Reset
-screen** puts the phone back when you're done. (Square screen needs a [one-off permission](#square-screen-recommended-one-off-setup) granted over
-ADB; without it the view still follows the app in front, letterboxed.)
-
-Your phone sits on the table, on a stand or in your bag. The glasses show its screen live, and
-the Neural Band works it like a laptop touchpad:
-
-- **See the phone live.** Its screen streams to the glasses over WebRTC (the phone's hardware
-  H.264 encoder), and the view follows the app in front, pop-up windows and split screen
-  included.
-- **Tap, scroll, drag.** Pinch to tap, two quick pinches to double tap, swipe your thumb to
-  scroll. Pinch, then pinch and hold, to put a finger down: drag, select text, long press.
-- **Get around.** Back, Home, notifications and the app overview, all from the glasses.
-- **Type by voice or handwriting.** The glasses' own composer fills a text box; Glasscast types
-  it into the phone and presses the app's **Send** button (WhatsApp, ChatGPT and Claude all treat
-  Enter as a new line, so it finds the real button).
-- **Control a Windows PC too.** The same app, pointed at your PC: a region of the screen with
-  its sound, the mouse and keyboard, and one-swipe jumps between your apps.
 
 ## Controls
 
