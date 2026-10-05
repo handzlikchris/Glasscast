@@ -2,6 +2,8 @@
 
 **Phone remote control for Meta Ray-Ban Display glasses.** Tech preview.
 
+https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
+
 See your Android phone's screen in the glasses and control it from there: Neural Band pinches
 and swipes tap, scroll and drag, and the glasses' voice or handwriting composer types. A small
 companion app on the phone streams its screen over WebRTC and turns the glasses' input into
