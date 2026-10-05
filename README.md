@@ -1,13 +1,13 @@
 # Glasscast
 
+https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
+
 **Phone remote control for Meta Ray-Ban Display glasses.** Every app on your Android phone, on
 the glasses' display, today: pinch the air to tap, swipe your thumb to scroll, say what to type.
 No waiting for glasses versions of your apps.
 
 *Tech preview* · Android 11+ companion app · Meta Ray-Ban Display + Neural Band · also a remote
 desktop for Windows PCs
-
-https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
 
 ## What it does
 
