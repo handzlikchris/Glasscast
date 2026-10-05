@@ -7,13 +7,14 @@ plugins {
 }
 
 // The companion socket the setup screen starts with, e.g. wss://glasses.example.com/ws/companion:
-// glassesServer=... in android-companion/local.properties (git-ignored) or as a Gradle property.
+// glassesServer=... in android-companion/local.properties (git-ignored), or -PglassesServer=...
+// on the command line, which wins (a build for another server, e.g. a hosted relay).
 // Empty means the user types the address in.
 val localProperties = Properties().also { props ->
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
 }
 val glassesServer: String =
-    localProperties.getProperty("glassesServer") ?: providers.gradleProperty("glassesServer").orNull ?: ""
+    providers.gradleProperty("glassesServer").orNull ?: localProperties.getProperty("glassesServer") ?: ""
 
 android {
     namespace = "uk.co.reliablesolutions.glassesremote.companion"
