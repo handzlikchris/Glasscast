@@ -1,11 +1,12 @@
 // The registry: which profile works for the app in front (architecture/app-profiles.md).
 import { CHROME } from './chrome';
+import { CLAUDE } from './claude';
 import { isOn, type ProfileSwitches } from './prefs';
 import type { AppProfile } from './profile';
 import { WALK } from './walk';
 
 /** Every app's own profile. An app is in at most one. */
-export const PROFILES: readonly AppProfile[] = [CHROME];
+export const PROFILES: readonly AppProfile[] = [CHROME, CLAUDE];
 
 /** The app's own profile, if it has one. */
 export function ownProfile(pkg: string, profiles: readonly AppProfile[] = PROFILES): AppProfile | null {
