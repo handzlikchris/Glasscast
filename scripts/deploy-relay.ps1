@@ -3,10 +3,10 @@
 #   .\scripts\deploy-relay.ps1 -Server relay.example.com -User deployer
 #
 # It builds the page and the relay (scripts\publish-relay.ps1), then syncs the folder to the IIS
-# site through Web Deploy (https://<Server>:8172): the site goes offline for the copy
-# (app_offline.htm, so the relay's files aren't locked), only changed files move, and nothing on
-# the server is deleted (relay.Local.json, logs and the data folder stay). Then it checks
-# https://<Server>/health and /features.
+# site through Web Deploy (https://<Server>:8172): it stops the site's app pool for the copy (the
+# running relay holds its files), copies only changed files, deletes nothing on the server
+# (relay.Local.json, logs and the data folder stay) and starts the pool again, whatever happened.
+# Then it checks https://<Server>/health and /features.
 #
 # Needs Web Deploy on this PC (msdeploy.exe) and, on the server, the Web Management Service plus
 # Web Deploy, with TCP 8172 open to this PC only. Setup: architecture\deployment-and-networking.md,
@@ -52,25 +52,49 @@ if (-not $Password) {
 $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password))
 
 $endpoint = "https://${Server}:$Port/msdeploy.axd?site=$Site"
-$arguments = @(
+$remote = "computerName=`"$endpoint`",userName=`"$User`",password=`"$plain`",authType=`"Basic`""
+# The Web Management Service uses a self-signed certificate unless you give it another one.
+$common = @('-allowUntrusted')
+
+# Stops or starts the site's app pool on the server (Web Deploy's recycleApp provider).
+function Set-RemotePool([string]$mode) {
+    & $msdeploy '-verb:sync' '-source:recycleApp' "-dest:recycleApp=`"$Site`",recycleMode=`"$mode`",$remote" @common
+    if ($LASTEXITCODE -ne 0) { throw "Couldn't $mode on the server (exit $LASTEXITCODE)." }
+}
+
+$copy = @(
     '-verb:sync',
     "-source:contentPath=`"$source`"",
-    "-dest:contentPath=`"$Site`",computerName=`"$endpoint`",userName=`"$User`",password=`"$plain`",authType=`"Basic`"",
-    # The Web Management Service uses a self-signed certificate unless you give it another one.
-    '-allowUntrusted',
-    # Take the site offline while copying, so the running relay doesn't hold its files.
-    '-enableRule:AppOffline',
+    "-dest:contentPath=`"$Site`",$remote",
     # Never delete on the server: relay.Local.json, logs and old page assets stay.
     '-enableRule:DoNotDeleteRule',
-    '-retryAttempts:3'
-)
-if ($WhatIf) { $arguments += '-whatif' }
+    # A file the stopping relay still holds is tried again a few times.
+    '-retryAttempts:10',
+    '-retryInterval:2000'
+) + $common
 
-Write-Host "Deploying $source to $Site on $Server..."
-& $msdeploy @arguments
-$plain = $null
-if ($LASTEXITCODE -ne 0) { throw "Web Deploy failed (exit $LASTEXITCODE)." }
-if ($WhatIf) { return }
+if ($WhatIf) {
+    & $msdeploy @copy '-whatif'
+    $plain = $null
+    return
+}
+
+# The relay keeps its program files open while it runs, and its long-lived connections (the
+# phones' companions) can keep it from letting go quickly when only told to go offline, so stop
+# its app pool for the copy, and always start it again.
+Write-Host "Stopping $Site on $Server..."
+Set-RemotePool 'StopAppPool'
+try {
+    Write-Host "Copying $source..."
+    & $msdeploy @copy
+    $copied = $LASTEXITCODE
+}
+finally {
+    Write-Host "Starting $Site..."
+    Set-RemotePool 'StartAppPool'
+    $plain = $null
+}
+if ($copied -ne 0) { throw "Web Deploy failed to copy (exit $copied); the old version is running again." }
 
 # The relay starts on the first request after the copy.
 $health = Invoke-WebRequest "https://$Server/health" -UseBasicParsing -TimeoutSec 60

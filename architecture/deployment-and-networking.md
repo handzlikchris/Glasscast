@@ -149,9 +149,11 @@ reboot and keeps it going; it sits beside the other sites on its own host name (
 
 `.\scripts\deploy-relay.ps1 -Server relay.example.com -User <windows user>` publishes and deploys
 in one go: Web Deploy syncs `publish\relay-win-x64` to the IIS site over
-`https://<server>:8172`, taking the site offline for the copy (`app_offline.htm`), moving only
-changed files and deleting nothing (`relay.Local.json`, logs and `data` stay), then checks
-`/health` and `/features`. `-NoBuild` deploys the last publish, `-WhatIf` only lists changes. The
+`https://<server>:8172`: it stops the site's app pool for the copy and always starts it again
+(Web Deploy's `recycleApp`), moves only changed files and deletes nothing (`relay.Local.json`,
+logs and `data` stay), then checks `/health` and `/features`. (Only taking the site offline with
+`app_offline.htm` wasn't enough: the relay held its DLLs a while longer, with the phones'
+companions connected, and the copy failed with `ERROR_FILE_IN_USE`.) `-NoBuild` deploys the last publish, `-WhatIf` only lists changes. The
 password comes from `-Password`, `GLASSCAST_DEPLOY_PASSWORD` or a prompt.
 
 Once, on the server (admin PowerShell):
