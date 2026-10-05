@@ -1,11 +1,20 @@
-# Glasses Remote Desktop
+# Glasscast
 
-Proof of concept: control a Windows desktop from a Meta Ray-Ban Display web app.
-The glasses view a region of the primary monitor over low-latency WebRTC video
-(H.264), drive the mouse with Neural Band pinches, and type through the glasses'
-voice or handwriting composer. A single-use pairing, approved in a popup on the
-PC, gates every session; for 24 h after an approval the same glasses can reconnect
-with a rotating device token.
+**Phone remote control for Meta Ray-Ban Display glasses.** Tech preview.
+
+See your Android phone's screen in the glasses and control it from there: Neural Band pinches
+and swipes tap, scroll and drag, and the glasses' voice or handwriting composer types. A small
+companion app on the phone streams its screen over WebRTC and turns the glasses' input into
+taps through an accessibility service. The phone is the gate: new glasses pair on the phone
+(the same code on both screens, Approve on the phone), and Android asks for screen-capture
+consent on the phone every session. The phone's screen stays on and unlocked while a session is
+live. Design: [`architecture/phone-mode.md`](architecture/phone-mode.md); the app:
+[`android-companion/`](android-companion/README.md).
+
+**PC mode** does the same for a Windows desktop, remote-desktop style: the glasses view a region
+of the primary monitor over low-latency WebRTC video (H.264) with the PC's sound, and drive the
+mouse and keyboard. A single-use pairing, approved in a popup on the PC, gates every session;
+for 24 h after an approval the same glasses can reconnect with a rotating device token.
 
 Per-feature design notes live in [`architecture/`](architecture/README.md).
 
@@ -18,6 +27,7 @@ This README covers the code.
 | --- | --- |
 | `server/` | ASP.NET Core + WinForms app, runs as the logged-in user: pairing, WebRTC, capture, input, tray, approve popup |
 | `client-web/` | Vite + React + TypeScript glasses client (600×600) |
+| `android-companion/` | Phone companion app (Kotlin): screen capture, WebRTC, accessibility input |
 | `tests/` | Server tests (xUnit): unit, WebSocket integration, real H.264 encoder |
 | `tools/e2e-harness/` | Dev-only harness + headless-Chrome script that drives the whole flow |
 | `deploy/` | Caddyfile and the Windows firewall script |

@@ -1,4 +1,4 @@
-# Glasses Remote companion (Android)
+# Glasscast companion (Android)
 
 The phone side of **phone mode** (design: `architecture/phone-mode.md`). It keeps a connection
 to the PC so the glasses can reach it to start a session. The phone decides who gets in: new
@@ -32,14 +32,14 @@ Or open `android-companion/` in Android Studio.
 
 ## Set up on the phone (once)
 
-1. Open **Glasses Remote** and enter the server's companion address,
+1. Open **Glasscast** and enter the server's companion address,
    `wss://<your host>/ws/companion` (a build can fill it in: `glassesServer=wss://...` in
    `android-companion/local.properties`, git-ignored). Tap **Pair**: the PC shows a
    "Phone pairing request" popup with the same code. Approve it there. (This only lets the
    phone use the PC as a meeting point; the glasses pair with the phone itself, below.)
-2. **Accessibility:** Settings > Accessibility > Installed apps > Glasses Remote > on. A
-   sideloaded app is greyed out at first ("Restricted setting"): Settings > Apps > Glasses
-   Remote > ⋮ > **Allow restricted settings**, then turn it on.
+2. **Accessibility:** Settings > Accessibility > Installed apps > Glasscast > on. A
+   sideloaded app is greyed out at first ("Restricted setting"): Settings > Apps >
+   Glasscast > ⋮ > **Allow restricted settings**, then turn it on.
 3. Tap **Start** (the same button then says **Stop**). A notification stays while the companion is
    connected (Stop is there too).
 4. Optional, **square screen for the glasses:** grant a one-off permission from a PC (it survives

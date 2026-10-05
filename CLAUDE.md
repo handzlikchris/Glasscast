@@ -1,4 +1,4 @@
-# CLAUDE.md — Glasses Remote Desktop
+# CLAUDE.md — Glasscast
 
 Guide for AI agents (and humans) picking up this repo. Read this first, then `README.md`.
 Before changing a feature, read its doc in **`architecture/`** (index: `architecture/README.md`):
