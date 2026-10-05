@@ -1,6 +1,6 @@
 # Phone mode: controlling the Android phone from the glasses
 
-Status (2026-09-29, branch `feat/phone-mode`): P1–P3 built and used from the glasses (video and
+Status (2026-09-29; merged into `main` 2026-10-05): P1–P3 built and used from the glasses (video and
 input, `live (local)`); P4 started (Region, Fit). **Redesigned 2026-09-29:** the glasses pair
 with the **phone**, not the PC (works on the device), and a running session no longer needs the
 PC. It does need the phone online: see "What it can't survive".

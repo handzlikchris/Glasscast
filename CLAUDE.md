@@ -14,7 +14,7 @@ Neural Band gestures, switch between configured apps, and type through the glass
 voice/handwriting composer. Every session needs a **single-use pairing approved in a popup on the PC**,
 or (for 24 h after such an approval) the **device token** of the glasses that were approved.
 
-**Phone mode (branch `feat/phone-mode`, 2026-09-27; redesigned 2026-09-29):** the first screen
+**Phone mode (2026-09-27; redesigned 2026-09-29; on `main` since 2026-10-05):** the first screen
 asks **PC or Phone**. Phone controls the user's Android phone (Samsung S25) through a companion app
 in `android-companion/` (MediaProjection + AccessibilityService). The server (this PC) is only the
 meeting point for the **first connection**: the glasses pair with the **phone** (code on both,
@@ -496,7 +496,7 @@ or a commit message: the repo is going public. Tracked files use `glasses.exampl
 
 ## Status and next steps (as of 2026-09-25)
 
-- **Phone mode (2026-09-27, branch `feat/phone-mode`):** used from the glasses at home
+- **Phone mode (2026-09-27, merged into `main` 2026-10-05):** used from the glasses at home
   (`live (local)`: the video comes through Meta's app on the phone). **Redesigned 2026-09-29:**
   pairing and proof on the phone (works on the device), the server only a relay for the first
   connection, sessions that outlive it (pings both ways over the DataChannel). Tried going
