@@ -6,9 +6,6 @@ using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Sessions;
 using GlassesRemote.Server.Windows;
-using Microsoft.AspNetCore.HostFiltering;
-using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 
 namespace GlassesRemote.Server.Hosting;
@@ -26,29 +23,7 @@ public static class ServerApp
         var services = builder.Services;
 
         services.Configure<PairingOptions>(config.GetSection(PairingOptions.SectionName));
-        services.Configure<WebOptions>(config.GetSection(WebOptions.SectionName));
-        var isDevelopment = builder.Environment.IsDevelopment();
-        services.PostConfigure<WebOptions>(web =>
-        {
-            // Same-origin WebSockets are a LAN-testing convenience; never honour them in production.
-            if (!isDevelopment)
-            {
-                web.AllowSameOrigin = false;
-            }
-
-            if (web.PublicHost is { Length: > 0 } host)
-            {
-                web.AllowedOrigins = [.. web.AllowedOrigins, $"https://{host}"];
-            }
-        });
-        // Runs after the host's own PostConfigure, which fills AllowedHosts from config.
-        services.AddOptions<HostFilteringOptions>().PostConfigure<IOptions<WebOptions>>((filter, web) =>
-        {
-            if (web.Value.PublicHost is { Length: > 0 } host && !filter.AllowedHosts.Contains("*"))
-            {
-                filter.AllowedHosts = [.. filter.AllowedHosts, host];
-            }
-        });
+        builder.AddGlassesWeb();
         services.PostConfigure<PairingOptions>(pairing =>
         {
             // Tests and the e2e harness point this at a temp file.
@@ -88,41 +63,17 @@ public static class ServerApp
         services.AddSingleton<CompanionRegistry>();
         services.AddSingleton<PhoneServices>();
 
-        // Caddy on the same machine is the only proxy we trust for the client's real IP.
-        services.Configure<ForwardedHeadersOptions>(o =>
-        {
-            o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-            o.KnownIPNetworks.Clear();
-            o.KnownProxies.Clear();
-            o.KnownProxies.Add(IPAddress.Loopback);
-            o.KnownProxies.Add(IPAddress.IPv6Loopback);
-            o.ForwardLimit = 1;
-        });
-
-        builder.WebHost.ConfigureKestrel(k =>
-        {
-            k.AddServerHeader = false;
-            k.Limits.MaxRequestBodySize = 16 * 1024;
-        });
-
         configure?.Invoke(builder);
 
         var app = builder.Build();
         SIPSorcery.LogFactory.Set(app.Services.GetRequiredService<ILoggerFactory>());
 
-        if (app.Services.GetRequiredService<IOptions<WebOptions>>().Value.AllowSameOrigin)
-        {
-            app.Logger.LogWarning("Web:AllowSameOrigin is on (LAN testing): any page served by this host may open the sockets");
-        }
-
         WarnIfMultiHomed(app);
 
-        app.UseForwardedHeaders();
-        app.UseSecurityHeaders();
-        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
-        UseClientFiles(app);
+        app.UseGlassesWeb();
         app.MapGlassesEndpoints();
         app.MapCompanionEndpoint();
+        app.MapFeatures(pc: true, phone: true);
 
         return app;
     }
@@ -154,24 +105,5 @@ public static class ServerApp
                 "Several network adapters have a default gateway ({Addresses}). Set Media:BindAddress to the one the " +
                 "router forwards UDP {Port} to, or video may never connect from outside", string.Join(", ", addresses), media.MediaPort);
         }
-    }
-
-    private static void UseClientFiles(WebApplication app)
-    {
-        var web = app.Services.GetRequiredService<IOptions<WebOptions>>().Value;
-        var root = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, web.ClientRoot));
-        if (!Directory.Exists(root))
-        {
-            app.Logger.LogWarning("Client files not found at {Root}; build client-web first", root);
-            return;
-        }
-
-        var files = new PhysicalFileProvider(root);
-        app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
-        app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = files,
-            OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = ClientCaching.For(ctx.Context.Request.Path),
-        });
     }
 }

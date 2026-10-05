@@ -29,12 +29,12 @@ public static class GlassesEndpoints
     private static async Task PairAsync(HttpContext context, PairingCoordinator coordinator,
         IOptions<WebOptions> web, AlertLog alerts)
     {
-        if (!await AcceptGuardAsync(context, web.Value, alerts))
+        if (!await WebHosting.AcceptGuardAsync(context, web.Value, alerts))
         {
             return;
         }
 
-        var remote = RemoteAddress(context);
+        var remote = WebHosting.RemoteAddress(context);
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         var io = new SocketIO(socket, PairSocketMaxMessageBytes);
         var ct = context.RequestAborted;
@@ -81,12 +81,12 @@ public static class GlassesEndpoints
         IOptions<WebOptions> web, IOptions<ControlSessionOptions> session, AlertLog alerts, TimeProvider time,
         SessionServices services, PhoneServices phone)
     {
-        if (!await AcceptGuardAsync(context, web.Value, alerts))
+        if (!await WebHosting.AcceptGuardAsync(context, web.Value, alerts))
         {
             return;
         }
 
-        var remote = RemoteAddress(context);
+        var remote = WebHosting.RemoteAddress(context);
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         var io = new SocketIO(socket, ControlProtocol.MaxMessageBytes);
 
@@ -166,30 +166,6 @@ public static class GlassesEndpoints
         await new ControlSession(io, lease, services).RunAsync(context.RequestAborted);
     }
 
-    /// <summary>WebSocket upgrade and exact Origin match; a bad Origin is refused before accepting.</summary>
-    private static async Task<bool> AcceptGuardAsync(HttpContext context, WebOptions web, AlertLog alerts)
-    {
-        if (!context.WebSockets.IsWebSocketRequest)
-        {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            return false;
-        }
-
-        var origin = context.Request.Headers.Origin.ToString();
-        var allowed = OriginPolicy.IsAllowed(origin, web.AllowedOrigins)
-                      || (web.AllowSameOrigin && OriginPolicy.IsSameOrigin(origin, context.Request));
-        if (!allowed)
-        {
-            alerts.Raise(AlertKind.BadOrigin, RemoteAddress(context),
-                $"WebSocket refused for origin '{Truncate(origin, 100)}'");
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.CompleteAsync();
-            return false;
-        }
-
-        return true;
-    }
-
     private static async Task FailAsync(SocketIO io, string type, CancellationToken ct)
     {
         try
@@ -212,9 +188,4 @@ public static class GlassesEndpoints
         {
         }
     }
-
-    private static IPAddress RemoteAddress(HttpContext context) =>
-        context.Connection.RemoteIpAddress ?? IPAddress.None;
-
-    private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max] + "…";
 }
