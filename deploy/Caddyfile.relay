@@ -31,7 +31,7 @@
 
 	# Allowlist: the glasses page, health and features, the glasses' relay socket and the
 	# phones' companion socket. The CSP header is set by the relay itself.
-	@allowed path / /index.html /favicon.svg /icon-192.png /icon-512.png /apple-touch-icon.png /manifest.webmanifest /assets/* /health /features /ws/session /ws/companion
+	@allowed path / /index.html /favicon.svg /favicon.png /favicon.ico /icon-192.png /icon-512.png /apple-touch-icon.png /manifest.webmanifest /assets/* /health /features /ws/session /ws/companion
 	handle @allowed {
 		reverse_proxy 127.0.0.1:5090
 	}
