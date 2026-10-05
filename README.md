@@ -9,6 +9,9 @@ No waiting for glasses versions of your apps.
 *Tech preview* · Android 11+ companion app · Meta Ray-Ban Display + Neural Band · also a remote
 desktop for Windows PCs
 
+**Try it in a few minutes:** [install the app on your phone, scan a QR code, type a
+code](#getting-started).
+
 ## What it does
 
 The glasses have only a handful of apps of their own. Your phone already has every app you use:
@@ -58,7 +61,7 @@ The same habits on both targets. **?** on the glasses' bar shows them during a s
 
 ```
                  first connection only: pairing, proof, WebRTC setup (opaque to the server)
-glasses web app ───────────────────────────► server (your Windows PC) ◄─────────── companion app
+glasses web app ──────────────────► server (the hosted relay, or your own) ◄────── companion app
        ▲   │                                                                        │     ▲
        │   └── WebRTC DataChannel: taps, swipes, Back/Home, text ─────────────────►│     │
        └────── WebRTC video: the phone's screen (MediaProjection, hardware H.264) ──┘  accessibility
@@ -69,10 +72,10 @@ glasses web app ─────────────────────�
   the screen with Android's MediaProjection and turns the glasses' input into taps and text
   through an accessibility service. No root, no ADB at run time.
 - A web page on the glasses can't reach a phone directly (it needs HTTPS and the phone has no
-  public name or certificate), so the two **meet once through a server** both can reach: your
-  PC, behind Caddy. It relays the setup messages unread and then steps aside. The video and your
-  input go phone ⇄ glasses, never through the server, and a session carries on if the PC goes
-  away.
+  public name or certificate), so the two **meet once through a server** both can reach: the
+  hosted relay, or your own. It relays the setup messages unread and then steps aside. The video
+  and your input go phone ⇄ glasses, never through the server, and a session carries on if the
+  server goes away.
 - **The phone is the gate.** New glasses pair with the phone itself: the same six-digit code on
   both screens (ECDH with a commitment, as Bluetooth does), approved on the phone. Every session
   proves that pairing, signs the WebRTC setup with the session key, and needs Android's
@@ -92,11 +95,96 @@ Design notes for every part live in [`architecture/`](architecture/README.md); p
   that link when the phone goes offline.
 - **Apps that block screenshots** (banking, DRM video) show black.
 - **No iPhone.** iOS doesn't let an app tap or type into other apps.
-- **You host the meeting point:** a Windows PC reachable over HTTPS (a domain name and two port
-  forwards). One phone per server. There's no hosted version and no APK release yet: you build
-  the companion yourself.
+- **The APK is sideloaded** (not on the Play Store), hence Android's "restricted setting" step
+  for accessibility.
 
 ## Getting started
+
+The quick way uses the relay I host at `glasscast.reliable-solutions.co.uk`: install one app on
+the phone, scan one QR code, type one code. Nothing to set up on a computer. (Prefer your own
+server? See [Host it yourself](#host-it-yourself).)
+
+### 1. The phone: install the companion app
+
+1. On the phone, download
+   **[glasscast-companion.apk](https://github.com/handzlikchris/Glasscast/releases/latest/download/glasscast-companion.apk)**
+   (from the [Releases](https://github.com/handzlikchris/Glasscast/releases) page) and open it.
+   Android asks to allow installing apps from your browser (or Files): allow it, then
+   **Install**.
+2. Open **Glasscast** and allow notifications when asked.
+3. **Connect to the server:** the address is already filled in
+   (`wss://glasscast.reliable-solutions.co.uk/ws/companion`). Tap **Pair**: the status card
+   shows **Server: Paired**.
+4. **Allow input:** tap **Open accessibility settings** → Installed apps → **Glasscast** → on.
+   If it's greyed out ("Restricted setting"): Settings → Apps → **Glasscast** → ⋮ (top right) →
+   **Allow restricted settings**, then turn it on. This is how the glasses tap and type on the
+   phone; Glasscast only acts on what the glasses send during a session.
+5. Tap **Start**. A notification stays while the companion is ready for the glasses.
+
+Optional: **Square screen** (fills the glasses' square display, one-off ADB permission, ⓘ in
+the app explains) and a small keyboard (see [Use Gboard, made small](#use-gboard-made-small)).
+
+### 2. The glasses: add Glasscast
+
+Scan this with the **phone's camera** (not the glasses). It opens the Meta AI app, which asks
+to add Glasscast to your glasses:
+
+<img src="docs/images/add-to-glasses-qr.png" alt="QR code: add Glasscast to Meta Ray-Ban Display" width="220">
+
+Or add it by hand: Meta AI app → **Devices** → **Display Glasses settings** → **App
+connections** → **Web apps** → **Add a web app**, name `Glasscast`, URL
+`https://glasscast.reliable-solutions.co.uk/`. If the Meta AI app doesn't offer web apps, turn
+on developer mode for the glasses (see Meta's
+[web app docs](https://wearables.developer.meta.com/docs/develop/webapps)).
+
+### 3. Connect them (once)
+
+1. On the glasses open **Glasscast** and pinch **Phone**. The glasses show a **connect code**
+   (like `ABC 234`).
+2. In the Glasscast app on the phone, under **Connect glasses**, type it and tap **Connect**.
+3. Both screens now show the same **six-digit pairing code**. Check they match and tap
+   **Approve** in the app (or in its notification).
+4. Tap **Start** on Android's screen-sharing prompt. The phone's screen appears on the glasses.
+
+From then on: open Glasscast on the glasses, pinch **Phone**, and tap **Start** on the phone.
+The glasses remember which phone is theirs and that they're paired.
+
+### About the hosted relay
+
+The relay is a convenience: it's the meeting point the glasses and the phone use to find each
+other, because a page on the glasses can't reach a phone directly (see
+[How it works](#how-it-works)). What it does and doesn't see:
+
+- It passes the **first connection's setup** between the glasses and your phone: the pairing
+  exchange (public keys and commitments), each session's proof, and the signed WebRTC setup. It
+  holds no key and can't approve anything: the phone decides, and a relay that tampered would
+  make the two pairing codes differ.
+- **The screen video and your input never go through it.** They go straight between the phone
+  and the glasses over WebRTC, encrypted end to end (DTLS-SRTP), and a session carries on if the
+  relay goes away.
+- It keeps, per phone, a random id, a hash of the companion's token and the phone's model name,
+  and its web server logs connections (IP addresses), as any website does.
+- It also **serves the glasses app**: the page your glasses run comes from this server. You're
+  trusting it to serve the code in this repository, as with any web app. That's the one thing
+  self-hosting removes.
+
+So for the most privacy, run your own: the relay alone is a small server that holds nothing
+of yours and can't control the machine it runs on. See [Host it yourself](#host-it-yourself).
+
+## Host it yourself
+
+Two ways, depending on what you want:
+
+- **Just the phone, on your own relay:** `relay-server/` is a small server with the glasses app
+  and the relay and nothing else (no screen capture or input code, so it can't control the box
+  it runs on). Windows (IIS or Caddy) or Linux. `.\scripts\publish-relay.ps1` builds it;
+  [`architecture/deployment-and-networking.md`](architecture/deployment-and-networking.md#hosted-phone-relay-relay-server-2026-10-05)
+  has the steps. Then build the companion pointed at it
+  (`.\gradlew.bat assembleDebug -PglassesServer=wss://your-host/ws/companion`) or type the
+  address into the app, and make your own add-to-glasses QR code: it encodes
+  `fb-viewapp://web_app_deep_link?appName=Glasscast&appUrl=<your https URL, URL-encoded>`.
+- **Phone and PC, on your Windows PC:** the full server below (PC mode needs it anyway). It
+  also relays for the phone; there the companion registers through an Approve popup on the PC.
 
 ### 1. The server (Windows PC)
 
@@ -124,9 +212,11 @@ router that forwards ports from a public IP (not behind CGNAT).
 
 ### 2. The phone (companion app)
 
-Build it with JDK 17 and the Android SDK, or open `android-companion/` in Android Studio. The
-Gradle wrapper isn't committed yet: create it once as the [companion README](android-companion/README.md#build)
-shows. Then build and install:
+Use the [released APK](https://github.com/handzlikchris/Glasscast/releases/latest/download/glasscast-companion.apk)
+and type your server's address into it, or build it yourself with JDK 17 and the Android SDK
+(or open `android-companion/` in Android Studio). The Gradle wrapper isn't committed yet: create
+it once as the [companion README](android-companion/README.md#build) shows. Then build and
+install:
 
 ```powershell
 cd android-companion
@@ -140,8 +230,9 @@ sideloaded app first needs **Allow restricted settings** in its App info menu), 
 **Start**. Details, including the optional square screen for the glasses: the
 [companion README](android-companion/README.md).
 
-**Use Gboard, made small.** When an app opens the phone's keyboard it covers part of what the
-glasses show, and on the square screen Samsung Keyboard fills most of it (it ignores the square
+#### Use Gboard, made small
+
+When an app opens the phone's keyboard it covers part of what the glasses show, and on the square screen Samsung Keyboard fills most of it (it ignores the square
 size). Install [Gboard](https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin),
 make it the default keyboard, then shrink it: its toolbar → **Resize** and drag the top edge
 down (or **Floating**), and in its settings turn off the number row and the suggestion strip.
@@ -151,10 +242,10 @@ planned.
 
 ### 3. The glasses
 
-Open `https://glasses.example.com` as a web app on the glasses (see Meta's
-[web app docs](https://wearables.developer.meta.com/docs/develop/webapps)) and choose **Phone**.
-The first time, the glasses and the phone show the same code: tap **Approve** on the phone. Then
-tap **Start** on Android's screen-capture prompt, and the phone's screen appears.
+Add `https://glasses.example.com` as a web app on the glasses (by hand in the Meta AI app, or
+with your own QR code as above) and choose **Phone**. With one phone approved on the PC, the
+glasses go straight to it; with more they show a connect code, as on the hosted relay. Then the
+pairing code (Approve on the phone) and **Start** on Android's screen-capture prompt.
 
 For **PC mode**, choose **PC** instead and click **Approve** in the popup on the PC. For 24 hours
 after that, the same glasses reconnect without asking. End a PC session from the tray or with
@@ -183,8 +274,10 @@ protocol is a strict allowlist, typed text never presses Enter by itself, and an
 | `android-companion/` | The phone companion (Kotlin): screen capture, WebRTC, accessibility input |
 | `tests/` | Server tests (xUnit): unit, WebSocket integration, real H.264 encoder |
 | `tools/e2e-harness/` | Dev-only host + headless-Chrome script that drives the whole PC flow |
-| `deploy/` | Caddyfile and the Windows firewall script |
-| `scripts/` | `run.ps1`: build the client and start the server |
+| `relay/` | The phone relay as a library (no Windows, capture or input code), shared by both servers |
+| `relay-server/` | The headless relay: glasses app + relay, Windows or Linux |
+| `deploy/` | Caddyfiles, the Windows firewall script, the relay's start scripts and systemd unit |
+| `scripts/` | `run.ps1`: build the client and start the server; `publish-relay.ps1`: package the relay |
 
 Try the glasses app in a desktop browser (PC mode; 600×600 is the glasses' size):
 
@@ -211,4 +304,5 @@ npm run drive                                                # full PC flow in h
 | --- | --- |
 | Phone mode | Used from the glasses: video, taps, scrolling, drags, app overview, typing with Send, pairing on the phone, sessions that outlive the server |
 | PC mode | Works end to end on the glasses: video with sound, pointer, scrolling, typing, app shortcuts |
-| Not yet | Rotation, the phone's sound, an APK release, a hosted meeting point, TURN for networks that block UDP |
+| Hosted relay | Running at `glasscast.reliable-solutions.co.uk`, with a released companion APK (tech preview) |
+| Not yet | Rotation, the phone's sound, TURN for networks that block UDP, the Play Store |
