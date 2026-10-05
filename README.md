@@ -12,6 +12,86 @@ code](#getting-started).
 
 https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
 
+## Getting started
+
+The quick way uses the relay I host at `glasscast.reliable-solutions.co.uk`: install one app on
+the phone, scan one QR code, type one code. Nothing to set up on a computer. (Prefer your own
+server? See [Host it yourself](#host-it-yourself). What the relay can and can't see:
+[About the hosted relay](#about-the-hosted-relay).)
+
+### 1. The phone: install the companion app
+
+1. On the phone, download
+   **[glasscast-companion.apk](https://github.com/handzlikchris/Glasscast/releases/latest/download/glasscast-companion.apk)**
+   (from the [Releases](https://github.com/handzlikchris/Glasscast/releases) page) and open it.
+   Android asks to allow installing apps from your browser (or Files): allow it, then
+   **Install**.
+2. Open **Glasscast** and allow notifications when asked.
+3. **Connect to the server:** the address is already filled in
+   (`wss://glasscast.reliable-solutions.co.uk/ws/companion`). Tap **Pair**: the status card
+   shows **Server: Paired**.
+4. **Allow input:** tap **Open accessibility settings** → Installed apps → **Glasscast** → on.
+   If it's greyed out ("Restricted setting"): Settings → Apps → **Glasscast** → ⋮ (top right) →
+   **Allow restricted settings**, then turn it on. This is how the glasses tap and type on the
+   phone; Glasscast only acts on what the glasses send during a session.
+5. Tap **Start**. A notification stays while the companion is ready for the glasses.
+
+Then the square screen (recommended) and a small keyboard (see
+[Use Gboard, made small](#use-gboard-made-small)).
+
+#### Square screen (recommended, one-off setup)
+
+The glasses' display is square, the phone's isn't, so by default the glasses show the phone's
+screen with black bars. **Square screen** in the companion makes the phone's screen square
+(1080×1080) while you use the glasses: apps then lay themselves out to fill the display, and
+text comes out much bigger. **Reset screen** puts the phone back. Both are one tap in the app,
+any time.
+
+Changing the screen size needs a permission Android only gives through ADB, so it takes a
+**one-off step with a computer**. You do it once: the phone keeps the permission through
+restarts and app updates (only uninstalling the app drops it).
+
+1. On the phone: Settings → About phone (on Samsung, then Software information) → tap **Build
+   number** seven times (this turns on Developer options), then Settings → Developer options →
+   **USB debugging** on.
+2. On a computer, get Android's
+   [platform-tools](https://developer.android.com/tools/releases/platform-tools) (it contains
+   `adb`), connect the phone by USB and allow the computer when the phone asks.
+3. Run:
+
+   ```
+   adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS
+   ```
+
+That's it: unplug, and use **Square screen** / **Reset screen** in the app whenever you like
+(change it before starting a session). The ⓘ next to them in the app shows the same steps and
+copies the command for you. USB debugging can be turned off again afterwards.
+
+### 2. The glasses: add Glasscast
+
+Scan this with the **phone's camera** (not the glasses). It opens the Meta AI app, which asks
+to add Glasscast to your glasses:
+
+<img src="docs/images/add-to-glasses-qr.png" alt="QR code: add Glasscast to Meta Ray-Ban Display" width="220">
+
+Or add it by hand: Meta AI app → **Devices** → **Display Glasses settings** → **App
+connections** → **Web apps** → **Add a web app**, name `Glasscast`, URL
+`https://glasscast.reliable-solutions.co.uk/`. If the Meta AI app doesn't offer web apps, turn
+on developer mode for the glasses (see Meta's
+[web app docs](https://wearables.developer.meta.com/docs/develop/webapps)).
+
+### 3. Connect them (once)
+
+1. On the glasses open **Glasscast** and pinch **Phone**. The glasses show a **connect code**
+   (like `ABC 234`).
+2. In the Glasscast app on the phone, under **Connect glasses**, type it and tap **Connect**.
+3. Both screens now show the same **six-digit pairing code**. Check they match and tap
+   **Approve** in the app (or in its notification).
+4. Tap **Start** on Android's screen-sharing prompt. The phone's screen appears on the glasses.
+
+From then on: open Glasscast on the glasses, pinch **Phone**, and tap **Start** on the phone.
+The glasses remember which phone is theirs and that they're paired.
+
 ## What it does
 
 The glasses have only a handful of apps of their own. Your phone already has every app you use:
@@ -105,99 +185,7 @@ glasses web app ──────────────────► server
 Design notes for every part live in [`architecture/`](architecture/README.md); phone mode in
 [`architecture/phone-mode.md`](architecture/phone-mode.md).
 
-## Good to know (tech preview)
-
-- **Tested on one set:** a Samsung Galaxy S25 (Android 16) with Meta Ray-Ban Display. Other
-  Android 11+ phones should work, untested.
-- **The phone stays awake and unlocked** during a session: Android stops screen capture when
-  the phone locks. The companion keeps the screen on while you're connected.
-- **The phone needs internet.** The glasses reach the phone through Meta's app, which drops
-  that link when the phone goes offline.
-- **Apps that block screenshots** (banking, DRM video) show black.
-- **No iPhone.** iOS doesn't let an app tap or type into other apps.
-- **The APK is sideloaded** (not on the Play Store), hence Android's "restricted setting" step
-  for accessibility.
-
-## Getting started
-
-The quick way uses the relay I host at `glasscast.reliable-solutions.co.uk`: install one app on
-the phone, scan one QR code, type one code. Nothing to set up on a computer. (Prefer your own
-server? See [Host it yourself](#host-it-yourself).)
-
-### 1. The phone: install the companion app
-
-1. On the phone, download
-   **[glasscast-companion.apk](https://github.com/handzlikchris/Glasscast/releases/latest/download/glasscast-companion.apk)**
-   (from the [Releases](https://github.com/handzlikchris/Glasscast/releases) page) and open it.
-   Android asks to allow installing apps from your browser (or Files): allow it, then
-   **Install**.
-2. Open **Glasscast** and allow notifications when asked.
-3. **Connect to the server:** the address is already filled in
-   (`wss://glasscast.reliable-solutions.co.uk/ws/companion`). Tap **Pair**: the status card
-   shows **Server: Paired**.
-4. **Allow input:** tap **Open accessibility settings** → Installed apps → **Glasscast** → on.
-   If it's greyed out ("Restricted setting"): Settings → Apps → **Glasscast** → ⋮ (top right) →
-   **Allow restricted settings**, then turn it on. This is how the glasses tap and type on the
-   phone; Glasscast only acts on what the glasses send during a session.
-5. Tap **Start**. A notification stays while the companion is ready for the glasses.
-
-Then the square screen (recommended) and a small keyboard (see
-[Use Gboard, made small](#use-gboard-made-small)).
-
-#### Square screen (recommended, one-off setup)
-
-The glasses' display is square, the phone's isn't, so by default the glasses show the phone's
-screen with black bars. **Square screen** in the companion makes the phone's screen square
-(1080×1080) while you use the glasses: apps then lay themselves out to fill the display, and
-text comes out much bigger. **Reset screen** puts the phone back. Both are one tap in the app,
-any time.
-
-Changing the screen size needs a permission Android only gives through ADB, so it takes a
-**one-off step with a computer**. You do it once: the phone keeps the permission through
-restarts and app updates (only uninstalling the app drops it).
-
-1. On the phone: Settings → About phone (on Samsung, then Software information) → tap **Build
-   number** seven times (this turns on Developer options), then Settings → Developer options →
-   **USB debugging** on.
-2. On a computer, get Android's
-   [platform-tools](https://developer.android.com/tools/releases/platform-tools) (it contains
-   `adb`), connect the phone by USB and allow the computer when the phone asks.
-3. Run:
-
-   ```
-   adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS
-   ```
-
-That's it: unplug, and use **Square screen** / **Reset screen** in the app whenever you like
-(change it before starting a session). The ⓘ next to them in the app shows the same steps and
-copies the command for you. USB debugging can be turned off again afterwards.
-
-### 2. The glasses: add Glasscast
-
-Scan this with the **phone's camera** (not the glasses). It opens the Meta AI app, which asks
-to add Glasscast to your glasses:
-
-<img src="docs/images/add-to-glasses-qr.png" alt="QR code: add Glasscast to Meta Ray-Ban Display" width="220">
-
-Or add it by hand: Meta AI app → **Devices** → **Display Glasses settings** → **App
-connections** → **Web apps** → **Add a web app**, name `Glasscast`, URL
-`https://glasscast.reliable-solutions.co.uk/`. If the Meta AI app doesn't offer web apps, turn
-on developer mode for the glasses (see Meta's
-[web app docs](https://wearables.developer.meta.com/docs/develop/webapps)).
-
-### 3. Connect them (once)
-
-1. On the glasses open **Glasscast** and pinch **Phone**. The glasses show a **connect code**
-   (like `ABC 234`).
-2. In the Glasscast app on the phone, under **Connect glasses**, type it and tap **Connect**.
-3. Both screens now show the same **six-digit pairing code**. Check they match and tap
-   **Approve** in the app (or in its notification).
-4. Tap **Start** on Android's screen-sharing prompt. The phone's screen appears on the glasses.
-
-From then on: open Glasscast on the glasses, pinch **Phone**, and tap **Start** on the phone.
-The glasses remember which phone is theirs and that they're paired.
-
-### About the hosted relay
+## About the hosted relay
 
 The relay is a convenience: it's the meeting point the glasses and the phone use to find each
 other, because a page on the glasses can't reach a phone directly (see
@@ -218,6 +206,19 @@ other, because a page on the glasses can't reach a phone directly (see
 
 So for the most privacy, run your own: the relay alone is a small server that holds nothing
 of yours and can't control the machine it runs on. See [Host it yourself](#host-it-yourself).
+
+## Good to know (tech preview)
+
+- **Tested on one set:** a Samsung Galaxy S25 (Android 16) with Meta Ray-Ban Display. Other
+  Android 11+ phones should work, untested.
+- **The phone stays awake and unlocked** during a session: Android stops screen capture when
+  the phone locks. The companion keeps the screen on while you're connected.
+- **The phone needs internet.** The glasses reach the phone through Meta's app, which drops
+  that link when the phone goes offline.
+- **Apps that block screenshots** (banking, DRM video) show black.
+- **No iPhone.** iOS doesn't let an app tap or type into other apps.
+- **The APK is sideloaded** (not on the Play Store), hence Android's "restricted setting" step
+  for accessibility.
 
 ## Host it yourself
 
