@@ -311,22 +311,80 @@ with your own QR code as above) and choose **Phone**. With one phone approved on
 glasses go straight to it; with more they show a connect code, as on the hosted relay. Then the
 pairing code (Approve on the phone) and **Start** on Android's screen-capture prompt.
 
-For **PC mode**, choose **PC** instead and click **Approve** in the popup on the PC. For 24 hours
-after that, the same glasses reconnect without asking. End a PC session from the tray or with
-**Ctrl+Alt+Shift+X**.
+For **PC mode**, choose **PC** instead: see [PC mode](#pc-mode).
 
 ## PC mode
 
-Everything above, for a Windows desktop: the glasses view a region of the primary monitor
-(an orange frame shows it on the PC) over low-latency WebRTC video, with the PC's sound, and drive
-the mouse and keyboard. App shortcuts (`Apps:Shortcuts` in `appsettings.Local.json`) bring an open
-app to the front and fit it to the region, so **swipe left twice** cycles through them. A
-single-use pairing approved on the PC gates every session; the approval also remembers the
-glasses for 24 hours with a device token that changes on every use.
+The same glasses app can also drive a **Windows PC**: the glasses show a region of the primary
+monitor (an orange frame marks it on the PC) over low-latency WebRTC video, with the PC's sound,
+and the Neural Band moves the mouse, clicks, scrolls and types. Handy for keeping an eye on a
+long job, answering a chat, or working with an AI assistant from across the room.
 
-Only TCP 443 (to Caddy) and UDP 50000 are public; the server itself listens on loopback. The
-protocol is a strict allowlist, typed text never presses Enter by itself, and anything odd
-(rejected pairings, bad tokens, wrong origins) raises a notification on the PC. More in
+It needs the full server on that PC (the hosted relay can't do PC mode: it holds no screen or
+input code by design).
+
+### Set it up
+
+1. **The server:** follow [Host it yourself → 1. The server](#1-the-server-windows-pc): .NET 10
+   SDK, Node, Caddy, a domain name, two router forwards (TCP 443 → 8443, UDP 50000 → 50000),
+   `deploy\firewall.ps1`, and `server\appsettings.Local.json` with your host name and public IP.
+2. **App shortcuts** (optional): buttons **1**, **2**, ... on the glasses bring an open app to
+   the front and fit it to the region. Add them to `server\appsettings.Local.json`:
+
+   ```json
+   "Apps": {
+     "Shortcuts": [
+       { "Name": "Browser", "Process": "chrome" },
+       { "Name": "Claude", "Process": "WindowsTerminal", "Title": "MY-PC:" }
+     ]
+   }
+   ```
+
+   Match by process name (without `.exe`), text in the window title, or both. Only windows that
+   are already open are used; nothing is ever launched. Restart the server after editing.
+3. **Add the glasses app:** `https://<your host>/` as a web app on the glasses (Meta AI app →
+   Devices → Display Glasses settings → App connections → Web apps → Add a web app, or your own
+   QR code, see [Host it yourself](#host-it-yourself)).
+
+### Run it
+
+```powershell
+.\scripts\run.ps1                                                   # the server, in the tray
+$env:GLASSES_HOST = 'glasses.example.com'; caddy run --config deploy\Caddyfile
+```
+
+`run.ps1` builds the glasses app the first time. The server runs as you (it needs your desktop
+to capture and click), lives in the tray and listens on `127.0.0.1` only; Caddy is the public
+side and gets its certificate by itself. Both need to be running while you use the glasses.
+
+To try it without the glasses or the internet: `.\scripts\run.ps1 -Dev`, open
+`http://127.0.0.1:5080` in a desktop browser (600×600 is the glasses' size) and approve the
+popup.
+
+### Connect and use it
+
+1. On the glasses open Glasscast and pinch **PC**. A popup on the PC shows a code; check the
+   glasses show the same and click **Approve**. For 24 hours after that, the same glasses
+   reconnect without asking.
+2. The bar on the glasses: **Region** (move or resize the part of the screen you see),
+   **Pointer** (move the cursor, pinch to click), **Type** (the glasses' composer types into the
+   PC; Enter is a separate button), **1 2 …** (your app shortcuts), **Pan** (swipes move the view
+   instead of scrolling), **↕** scroll strength, **☀** brightness, **♪** the PC's sound,
+   **Look** (how the picture is tuned for the glasses: natural, lifted, contrast), **Stats** (latency figures), **?** (gestures), **End**. The gestures are
+   in [Controls](#controls).
+3. **Ending it:** End on the glasses, **End session** in the tray menu, or **Ctrl+Alt+Shift+X**
+   on the PC.
+
+The tray menu also shows the cast area on the PC, lists recent alerts, and forgets remembered
+glasses or approved phones.
+
+### How it's kept safe
+
+Only TCP 443 (to Caddy) and UDP 50000 are public; the server itself listens on loopback. Every
+session needs a single-use pairing approved on the PC (or the glasses' 24-hour device token,
+which changes on every use). The protocol is a strict allowlist, typed text never presses Enter
+by itself, the server never launches anything, and anything odd (rejected pairings, bad tokens,
+wrong origins) raises a notification on the PC. More in
 [`architecture/pairing-and-auth.md`](architecture/pairing-and-auth.md).
 
 ## Development
@@ -369,4 +427,3 @@ npm run drive                                                # full PC flow in h
 | Phone mode | Used from the glasses: video, taps, scrolling, drags, app overview, typing with Send, pairing on the phone, sessions that outlive the server |
 | PC mode | Works end to end on the glasses: video with sound, pointer, scrolling, typing, app shortcuts |
 | Hosted relay | Running at `glasscast.reliable-solutions.co.uk`, with a released companion APK (tech preview) |
-| Not yet | Rotation, the phone's sound, TURN for networks that block UDP, the Play Store |
