@@ -14,7 +14,11 @@
 // A swipe that waits for a double does its plain action that much later. An up or down swipe
 // while a left/right waits drops the waiting one: the band reads some down-swipes as left, and
 // that stray left must not act.
+//
+// In a phone session the app in front may have a profile (apps/, architecture/app-profiles.md):
+// its gestures come first, and whatever it leaves out stays as above.
 
+import { describeAction, type AppProfile, type ProfileAction } from './apps/profile';
 import type { ViewMode } from './protocol';
 
 export type Swipe = 'up' | 'down' | 'left' | 'right';
@@ -61,7 +65,7 @@ const browserTimers: SwipeTimers = {
  */
 export class SwipeReader {
   private pending: { swipe: Swipe; handle: unknown } | null = null;
-  private readonly waitFor: ReadonlySet<Swipe>;
+  private waitFor: ReadonlySet<Swipe>;
 
   /**
    * `waitFor`: the swipes that wait for a second one (a PC session: left and right; a phone
@@ -98,6 +102,11 @@ export class SwipeReader {
     }, DOUBLE_SWIPE_MS);
     this.pending = { swipe, handle };
     this.onWaiting(swipe);
+  }
+
+  /** Which swipes wait for a second one from now on (a phone app's profile may add some). */
+  setWaitFor(waitFor: readonly Swipe[]): void {
+    this.waitFor = new Set(waitFor);
   }
 
   /** Drops a swipe that is still waiting (the view lost the swipes, or the session ended). */
@@ -146,10 +155,29 @@ export type PhoneSwipeAction =
   /** The phone's Back. */
   | { kind: 'back' }
   /** The phone's app overview (Recents), to pick an app from with left/right and a pinch. */
-  | { kind: 'apps' };
+  | { kind: 'apps' }
+  /** The app's profile has this gesture. */
+  | { kind: 'profile'; action: ProfileAction };
 
 /** The swipes that wait for a double in a phone session; up has none and scrolls at once. */
 export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
+
+const SINGLE_OF: Partial<Record<SwipeGesture, Swipe>> = {
+  doubleUp: 'up',
+  doubleDown: 'down',
+  doubleLeft: 'left',
+  doubleRight: 'right',
+};
+
+/** The swipes that wait for a double with this profile: the generic ones and any its doubles add (Chrome: up). */
+export function phoneDoubles(profile?: AppProfile | null): Swipe[] {
+  const waits = new Set<Swipe>(PHONE_DOUBLES);
+  for (const gesture of Object.keys(profile?.gestures ?? {}) as SwipeGesture[]) {
+    const single = SINGLE_OF[gesture];
+    if (single) waits.add(single);
+  }
+  return [...waits];
+}
 
 /**
  * A phone session: single swipes become the same finger swipe on the phone around the cursor
@@ -157,7 +185,9 @@ export const PHONE_DOUBLES: readonly Swipe[] = ['down', 'left', 'right'];
  * twice presses Back (user's choices, 2026-09-29: few shortcuts; Back is needed to close the
  * keyboard). Nothing on up twice, so up never waits.
  */
-export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
+export function phoneSwipeAction(gesture: SwipeGesture, profile?: AppProfile | null): PhoneSwipeAction {
+  const own = profile?.gestures[gesture];
+  if (own) return { kind: 'profile', action: own };
   switch (gesture) {
     case 'doubleRight':
       return { kind: 'type' };
@@ -174,7 +204,9 @@ export function phoneSwipeAction(gesture: SwipeGesture): PhoneSwipeAction {
 }
 
 /** What the status bar says while a left or right waits for its second swipe. */
-export function waitingHint(swipe: Swipe, target: 'pc' | 'phone'): string {
+export function waitingHint(swipe: Swipe, target: 'pc' | 'phone', profile?: AppProfile | null): string {
+  const own = profile?.gestures[DOUBLES[swipe]];
+  if (own) return `swipe ${swipe} again for the ${describeAction(profile!, own)}`;
   switch (swipe) {
     case 'right':
       return 'swipe right again for Type';

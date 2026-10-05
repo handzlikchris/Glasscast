@@ -410,7 +410,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       send({ type: 'nav', action: 'back' }, 'swipe down twice → back');
     } else if (action.kind === 'apps') {
       openApps();
-    } else {
+    } else if (action.kind === 'swipe') {
       const strength = phoneLevelFor(scrollLevelsRef.current, appNameRef.current) / 100;
       send(scrollSwipe(action.direction, atCursor(), strength), `swipe ${action.direction}`);
     }

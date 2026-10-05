@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { AppProfile } from './apps/profile';
+import { WALK } from './apps/walk';
 import {
   DOUBLE_SWIPE_MS,
   PHONE_DOUBLES,
   SwipeReader,
   pcSwipeAction,
+  phoneDoubles,
   phoneSwipeAction,
   swipeOf,
+  waitingHint,
   type SwipeGesture,
   type SwipeTimers,
 } from './swipes';
@@ -170,5 +174,50 @@ describe('SwipeReader in a phone session (down, left and right wait for a double
     r.swipe('down');
     run(DOUBLE_SWIPE_MS);
     expect(gestures).toEqual(['down']);
+  });
+});
+
+describe('a phone app profile', () => {
+  const headings: AppProfile = {
+    ...WALK,
+    name: 'Browser',
+    gestures: { ...WALK.gestures, doubleRight: { walk: 'next', unit: 'heading' } },
+  };
+
+  it('comes first for the gestures it takes, the rest stay generic', () => {
+    expect(phoneSwipeAction('doubleDown', WALK)).toEqual({ kind: 'profile', action: { walk: 'next', unit: 'item' } });
+    expect(phoneSwipeAction('doubleUp', WALK)).toEqual({ kind: 'profile', action: { walk: 'previous', unit: 'item' } });
+    expect(phoneSwipeAction('doubleRight', WALK)).toEqual({ kind: 'type' });
+    expect(phoneSwipeAction('doubleLeft', WALK)).toEqual({ kind: 'apps' });
+    expect(phoneSwipeAction('down', WALK)).toEqual({ kind: 'swipe', direction: 'down' });
+    expect(phoneSwipeAction('doubleRight', headings)).toEqual({ kind: 'profile', action: { walk: 'next', unit: 'heading' } });
+    expect(phoneSwipeAction('doubleDown', null)).toEqual({ kind: 'back' });
+  });
+
+  it('makes a swipe wait for a double only where it maps one (up, with Walk)', () => {
+    expect(phoneDoubles(null).sort()).toEqual([...PHONE_DOUBLES].sort());
+    expect(phoneDoubles(WALK).sort()).toEqual(['down', 'left', 'right', 'up']);
+  });
+
+  it("the reader takes the profile's waits when the app changes", () => {
+    const { timers, run } = fakeTimers();
+    const gestures: SwipeGesture[] = [];
+    const r = new SwipeReader((g) => gestures.push(g), () => {}, timers, PHONE_DOUBLES);
+    r.swipe('up');
+    expect(gestures).toEqual(['up']);
+    r.setWaitFor(phoneDoubles(WALK));
+    r.swipe('up');
+    expect(gestures).toEqual(['up']);
+    r.swipe('up');
+    expect(gestures).toEqual(['up', 'doubleUp']);
+    r.swipe('up');
+    run(DOUBLE_SWIPE_MS);
+    expect(gestures).toEqual(['up', 'doubleUp', 'up']);
+  });
+
+  it('says what the second swipe will do', () => {
+    expect(waitingHint('down', 'phone', WALK)).toBe('swipe down again for the next item');
+    expect(waitingHint('right', 'phone', headings)).toBe('swipe right again for the next heading');
+    expect(waitingHint('right', 'phone', WALK)).toBe('swipe right again for Type');
   });
 });

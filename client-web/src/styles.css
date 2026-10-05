@@ -399,3 +399,13 @@ textarea:focus-visible {
 .shortcuts-panel .shortcut span:first-child {
   color: var(--muted);
 }
+
+/* "In Chrome" / "Everywhere": an app profile's rows, then the generic ones. */
+.shortcuts-panel .shortcut.heading {
+  grid-template-columns: 1fr;
+}
+
+.shortcuts-panel .shortcut.heading span:first-child {
+  color: var(--accent);
+  font-weight: 600;
+}
