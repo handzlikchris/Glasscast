@@ -10,6 +10,7 @@ TestResults/
 # Node / Vite
 node_modules/
 dist/
+dist-e2e/
 *.local
 .vite/
 

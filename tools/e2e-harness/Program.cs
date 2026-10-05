@@ -25,7 +25,11 @@ var app = ServerApp.Create(args, builder =>
     {
         ["Urls"] = "http://127.0.0.1:5081",
         ["Web:AllowedOrigins:0"] = "http://127.0.0.1:5081",
-        ["Web:ClientRoot"] = Path.Combine(repoRoot, "client-web", "dist"),
+        // E2E_CLIENT_ROOT: test a client build elsewhere (e.g. dist-e2e), leaving dist, which the
+        // real server serves to the glasses, alone.
+        ["Web:ClientRoot"] = Environment.GetEnvironmentVariable("E2E_CLIENT_ROOT") is { Length: > 0 } clientRoot
+            ? clientRoot
+            : Path.Combine(repoRoot, "client-web", "dist"),
         ["Media:IncludeLanCandidates"] = "true",
         // Keyframes mostly on request, so the lost-stream-start check sees them answered.
         ["Media:KeyframeIntervalSeconds"] = "30",
