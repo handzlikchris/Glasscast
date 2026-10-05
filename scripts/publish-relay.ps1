@@ -9,8 +9,8 @@
 #
 # Self-contained: the server needs no .NET installed. On the server, next to the program, put
 # your host name in relay.Local.json:   { "Web": { "PublicHost": "relay.example.com" } }
-# then run start-relay.ps1 (Windows) or start-relay.sh (Linux), and Caddy with
-# deploy\Caddyfile.relay. See architecture\deployment-and-networking.md, "Hosted phone relay".
+# then run start-relay.ps1 and start-caddy.ps1 (Windows: caddy.exe and Caddyfile.relay are
+# copied in), or start-relay.sh and Caddy with Caddyfile.relay (Linux). See architecture\deployment-and-networking.md, "Hosted phone relay".
 
 param(
     [string]$Runtime = 'win-x64',
@@ -43,6 +43,11 @@ if (Test-Path $wwwroot) { Remove-Item -Recurse -Force $wwwroot }
 Copy-Item -Recurse (Join-Path $client 'dist-relay') $wwwroot
 Copy-Item (Join-Path $root 'deploy\relay\start-relay.ps1') $Output
 Copy-Item (Join-Path $root 'deploy\relay\start-relay.sh') $Output
+Copy-Item (Join-Path $root 'deploy\relay\start-caddy.ps1') $Output
+Copy-Item (Join-Path $root 'deploy\Caddyfile.relay') $Output
+# Caddy too, when this machine has it (tools\bin is git-ignored); Linux hosts install their own.
+$caddy = Join-Path $root 'tools\bin\caddy.exe'
+if ($Runtime -like 'win-*' -and (Test-Path $caddy)) { Copy-Item $caddy $Output }
 
 if (-not (Test-Path (Join-Path $Output 'relay.Local.json'))) {
     Write-Warning "No relay.Local.json in $Output yet: add one with Web:PublicHost before starting it on the server."

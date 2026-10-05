@@ -55,8 +55,9 @@ phone ⇄ glasses WebRTC (video, input): straight between them, never through th
   publishes self-contained (no .NET needed on the box, ~106 MB) and copies the page to
   `wwwroot` and the start scripts next to the program.
 - **Run on Windows:** copy the folder over, add `relay.Local.json`
-  (`{ "Web": { "PublicHost": "relay.example.com" } }`), run `start-relay.ps1`, and Caddy:
-  `$env:RELAY_HOST='relay.example.com'; caddy run --config Caddyfile.relay`. Public TCP 443 must
+  (`{ "Web": { "PublicHost": "relay.example.com" } }`), run `start-relay.ps1`, and
+  `start-caddy.ps1` (the publish copies `caddy.exe` from `tools\bin` and `Caddyfile.relay` in; it
+  takes the host from `relay.Local.json`, `-HttpsPort` to move off 443). Public TCP 443 must
   reach Caddy (TLS-ALPN). If IIS holds 443 on the box, forward 443 to another port and set
   `HTTPS_PORT`, as the PC does with 8443, or let IIS proxy instead (ARR + URL Rewrite with
   WebSockets on, to `127.0.0.1:5090`, keeping the same path allowlist).
