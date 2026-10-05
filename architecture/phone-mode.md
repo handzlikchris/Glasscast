@@ -5,7 +5,9 @@ input, `live (local)`); P4 started (Region, Fit). **Redesigned 2026-09-29:** the
 with the **phone**, not the PC (works on the device), and a running session no longer needs the
 PC. It does need the phone online: see "What it can't survive".
 
-The first screen of the glasses app asks **PC or Phone**. PC is everything else in this repo.
+The first screen of the glasses app asks **PC or Phone** (a hosted relay offers Phone only:
+`relay-server/`, see [deployment-and-networking.md](deployment-and-networking.md)). PC is
+everything else in this repo.
 Phone connects to an **Android companion app** on the user's Samsung S25 (unrooted, no ADB at
 run time), which streams its screen to the glasses and injects the glasses' taps, swipes, Back /
 Home / Recents and typed text.
@@ -257,6 +259,8 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   needs the same code on both screens and Approve on the phone, and the glasses check the
   phone's proof every session. Codes are single use and die with the relay; a phone may try 5 a
   minute.
+- The glasses also keep the phone's id on the server (`phoneRoute.ts`): not a secret, it only
+  says which phone to ask.
 - Keys: the glasses keep `{id, key}` in localStorage (like the PC's device token: never in React
   state, a URL or a log); the phone keeps it in app-private storage (no backups). Never logged.
 - The companion accepts input only on the DataChannel of the peer whose answer carried the
@@ -309,9 +313,10 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 | `relay/Phone/CompanionLink.cs` | One authenticated companion connection (one phone id); its one relay (`RelayHandle`) |
 | `relay/Phone/CompanionProtocol.cs` | Strict parser for the companion's messages; `PhoneState` |
 | `server/Ui/ApprovePopup.cs`, `TrayApp.cs` | The popup registers a phone; tray **Forget phones** |
-| `client-web/src/App.tsx`, `target.ts` | The PC/Phone first screen; the last choice in localStorage |
+| `client-web/src/App.tsx`, `target.ts`, `features.ts` | The PC/Phone first screen (Phone only on a relay); the last choice in localStorage |
+| `client-web/src/phoneRoute.ts` | The phone's id on this server, from `phoneFound` (localStorage; Pair again forgets it) |
 | `client-web/src/PhoneScreen.tsx` | The phone session: video, local cursor, gestures, bar, Type, the pairing code panel, pings |
-| `client-web/src/phoneConnect.ts` | Relay → pairing or proof → checked offer, signed answer; closes the relay once connected |
+| `client-web/src/phoneConnect.ts` | Relay (with the phone's id, or a connect code shown until it's typed into the companion) → pairing or proof → checked offer, signed answer; closes the relay once connected |
 | `client-web/src/phoneTrust.ts` | The crypto and the stored pairing |
 | `client-web/src/phoneSignal.ts` | The relay socket and its parser |
 | `client-web/src/phoneRtc.ts` | Answerer with trickled candidates and the phone's DataChannel |

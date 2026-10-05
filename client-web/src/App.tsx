@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isDeviceRemembered } from './connection';
+import { loadFeatures, type Features } from './features';
 import { forgetPairing, loadPairing } from './phoneTrust';
 import { PairingScreen } from './PairingScreen';
 import { PhoneScreen } from './PhoneScreen';
@@ -21,6 +22,11 @@ export function App() {
   // First the choice: this PC, or the phone through its companion app. The last one is focused,
   // so it's a single pinch after a restart.
   const [phase, setPhase] = useState<Phase>({ kind: 'choose' });
+  // A hosted relay offers the phone only; until the server says, no choice is shown.
+  const [features, setFeatures] = useState<Features | null>(null);
+  useEffect(() => {
+    void loadFeatures().then(setFeatures);
+  }, []);
   // The pinch that pressed End also sends a click a moment later; it must not choose for you.
   const leftAt = useRef(-Infinity);
   usePinchPressesFocused(phase.kind !== 'session');
@@ -39,19 +45,36 @@ export function App() {
 
   switch (phase.kind) {
     case 'choose': {
-      const last = loadTarget();
+      if (!features) {
+        return (
+          <main className="choose">
+            <h1>Glasscast</h1>
+            <p className="build">Build {__BUILD__}</p>
+          </main>
+        );
+      }
+      // Still one pinch after a restart: the only target, or the last one, is focused.
+      const last = features.pc && features.phone ? loadTarget() : features.pc ? 'pc' : 'phone';
       return (
         <main className="choose">
           <h1>Glasscast</h1>
           <div className="targets">
-            <button type="button" autoFocus={last === 'pc'} onClick={() => start('pc')}>
-              PC
-            </button>
-            <button type="button" autoFocus={last === 'phone'} onClick={() => start('phone')}>
-              Phone
-            </button>
+            {features.pc && (
+              <button type="button" autoFocus={last === 'pc'} onClick={() => start('pc')}>
+                PC
+              </button>
+            )}
+            {features.phone && (
+              <button type="button" autoFocus={last === 'phone'} onClick={() => start('phone')}>
+                Phone
+              </button>
+            )}
           </div>
-          <p>Phone needs its companion app running; it pairs on the phone.</p>
+          <p>
+            {features.pc
+              ? 'Phone needs its companion app running; it pairs on the phone.'
+              : 'Needs the companion app running on your phone; it pairs on the phone. To control a PC, run Glasscast on it.'}
+          </p>
           <p className="build">Build {__BUILD__}</p>
         </main>
       );
@@ -105,7 +128,7 @@ export function App() {
             Pair again
           </button>
           <button type="button" onClick={() => setPhase({ kind: 'choose' })}>
-            {phase.target === 'phone' ? 'PC or phone…' : 'Phone or PC…'}
+            {features?.pc === false ? 'Start screen' : phase.target === 'phone' ? 'PC or phone…' : 'Phone or PC…'}
           </button>
           <p className="build">Build {__BUILD__}</p>
         </main>

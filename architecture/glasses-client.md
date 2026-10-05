@@ -10,7 +10,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | File | Role |
 | --- | --- |
 | `src/main.tsx` | Mounts `<App/>` without `<StrictMode>` (double effects would open two sessions). |
-| `src/App.tsx` | Phases: `choose` (PC or Phone, last choice focused) → `pairing` (PC only; skipped with a stored device token) → `session` → `ended` (Reconnect / Pair again / PC or phone). Phone goes straight to its session, which pairs with the phone itself when needed; its Pair again forgets that pairing. End on a bar goes straight back to `choose`. |
+| `src/App.tsx` | Phases: `choose` (PC or Phone, last choice focused; Phone only when the server's `/features` says it has no PC, as a hosted relay does: `features.ts`) → `pairing` (PC only; skipped with a stored device token) → `session` → `ended` (Reconnect / Pair again / PC or phone). Phone goes straight to its session, which pairs with the phone itself when needed; its Pair again forgets that pairing. End on a bar goes straight back to `choose`. |
 | `src/PairingScreen.tsx` | Shows the pairing code and countdown; Try again. |
 | `src/pinchPress.ts` | Outside a session and on a phone session's bar and Type panel, a pinch anywhere presses the focused button, or focuses and clicks the focused text box (which opens the composer). |
 | `src/connection.ts` | Pair and session sockets; the only place tokens live (see [pairing-and-auth.md](pairing-and-auth.md)). |
@@ -21,7 +21,7 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
 | `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
 | `src/shortcuts.ts`, `src/ShortcutsPanel.tsx` | The **?** button's panel on both bars: the session's gestures and shortcuts. Swipe doubles come from `swipes.ts`; pinch and Back rows are text here, updated with any gesture change (CLAUDE.md). |
-| `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)): `phoneConnect.ts` (relay, pairing, handshake), `phoneTrust.ts` (the crypto), `phoneSignal.ts` (relay socket), `phoneRtc.ts`, `phoneProtocol.ts`. |
+| `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)): `phoneConnect.ts` (relay, connect code, pairing, handshake), `phoneRoute.ts` (the phone's id on this server), `phoneTrust.ts` (the crypto), `phoneSignal.ts` (relay socket), `phoneRtc.ts`, `phoneProtocol.ts`. |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms; an *armed* press, the second of a pair, drags with the button held, and `hold()` after `HOLD_DRAG_MS` 400 holds it still), `TapThenHold` (spots that second press), `DOUBLE_TAP_MS` 350. See "Pinches" below. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
 | `src/overlay.ts` | Canvas: cursor (white or high-contrast yellow), region box, pan-edge glow. |

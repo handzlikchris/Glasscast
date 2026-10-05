@@ -84,11 +84,13 @@ client-web/             glasses client (600×600)
   src/rtc.ts            receive-only RTCPeerConnection (video + audio elements) + stats
   src/audio.ts          ♪ setting (localStorage), stereo=1 answer fix-up, V/A bandwidth label
   src/audioOutput.ts    plays the PC's sound through Web Audio (a muted <audio> keeps it flowing)
-  src/App.tsx           first screen (PC or Phone; last choice in target.ts), pairing, sessions, ended
+  src/App.tsx           first screen (PC or Phone; last choice in target.ts; only Phone when the
+                        server's /features says so, features.ts), pairing, sessions, ended
   src/SessionScreen.tsx modes, gestures, focus handling, Back/history, overlay, edge panning
   src/PhoneScreen.tsx   phone session: phone's frame, local cursor, taps/swipes/nav/text over the
                         DataChannel (phoneRtc.ts, phoneProtocol.ts); phoneConnect.ts (relay, pairing,
-                        proof), phoneTrust.ts (the crypto), phoneSignal.ts (relay socket)
+                        proof, connect code), phoneTrust.ts (the crypto), phoneSignal.ts (relay
+                        socket), phoneRoute.ts (the phone's id on this server)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: Back targets, tap routing (pure, tested)
   src/swipes.ts         THE swipe rules for PC and phone: double left/right, what each does (pure, tested)
@@ -333,7 +335,7 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name (PC and phone apart), the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`) and the phone pairing `{id, key}` (`phoneTrust.ts`) (localStorage;
+- The client stores only the brightness level, scroll strengths per app name (PC and phone apart), the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`), the phone pairing `{id, key}` (`phoneTrust.ts`) and the phone's id on the server (`phoneRoute.ts`, not a secret) (localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); after a
   page (re)load one pinch on the first screen (last target focused) resumes.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off
