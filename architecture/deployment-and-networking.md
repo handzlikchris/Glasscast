@@ -58,16 +58,92 @@ phone ⇄ glasses WebRTC (video, input): straight between them, never through th
   (`{ "Web": { "PublicHost": "relay.example.com" } }`), run `start-relay.ps1`, and
   `start-caddy.ps1` (the publish copies `caddy.exe` from `tools\bin` and `Caddyfile.relay` in; it
   takes the host from `relay.Local.json`, `-HttpsPort` to move off 443). Public TCP 443 must
-  reach Caddy (TLS-ALPN). If IIS holds 443 on the box, forward 443 to another port and set
-  `HTTPS_PORT`, as the PC does with 8443, or let IIS proxy instead (ARR + URL Rewrite with
-  WebSockets on, to `127.0.0.1:5090`, keeping the same path allowlist).
+  reach Caddy (TLS-ALPN). On a box whose IIS already serves sites on 443, host the relay in
+  IIS instead (below): no Caddy.
 - **Run on Linux:** `start-relay.sh`, or the systemd unit `deploy/relay/glasscast-relay.service`
   (state in `/var/lib/glasscast-relay`, sandboxed), and Caddy with the same Caddyfile.
 - **Companion:** its server address is `wss://<relay host>/ws/companion` (or build it in:
   `glassesServer` in `android-companion/local.properties`).
 - **Unverified (2026-10-05):** the relay has only run on this PC (tests, a published build
-  driven by a script); not yet on the user's box, behind Caddy with a real certificate, or with
-  the glasses and the phone.
+  driven by a script); not yet on the user's box, behind Caddy or IIS with a real certificate,
+  or with the glasses and the phone.
+
+### On a Windows server with IIS (step by step)
+
+For a box where IIS already serves websites on 443. IIS runs the relay itself (the publish
+includes a `web.config` for the ASP.NET Core Module, in-process), starts it on demand after a
+reboot and keeps it going; it sits beside the other sites on its own host name (SNI). Caddy,
+`caddy.exe`, `Caddyfile.relay` and the start scripts aren't used. Names below are examples:
+`relay.example.com`, pool and site `GlasscastRelay`, folders under `C:\GlasscastRelay`.
+
+**Once, on the server (admin):**
+
+1. **Hosting Bundle:** install the *ASP.NET Core Runtime 10 Hosting Bundle* from
+   https://dotnet.microsoft.com/download/dotnet/10.0 (Windows, "Hosting Bundle"), then
+   `iisreset` (or `net stop was /y; net start w3svc`).
+2. **WebSockets in IIS:** `Install-WindowsFeature Web-WebSockets` (Server Manager: Web Server
+   (IIS) > Web Server > Application Development > WebSocket Protocol). Without it the glasses
+   and phones can't connect.
+3. **DNS:** an A record for `relay.example.com` → the server's public IP. TCP 443 (and 80 if
+   your certificates use the HTTP check) already reach IIS for the other sites.
+
+**Copy and configure:**
+
+4. Copy the contents of `publish\relay-win-x64` (from `.\scripts\publish-relay.ps1`) to
+   `C:\GlasscastRelay\site`, and make `C:\GlasscastRelay\data` (outside the site, so updates
+   never touch the phones).
+5. In `C:\GlasscastRelay\site` create `relay.Local.json`:
+   ```json
+   {
+     "Web": { "PublicHost": "relay.example.com" },
+     "Relay": { "DataDirectory": "C:\\GlasscastRelay\\data" }
+   }
+   ```
+
+**IIS Manager:**
+
+6. **Application Pools > Add Application Pool:** name `GlasscastRelay`, .NET CLR version **No
+   Managed Code**, Integrated. Then its Advanced Settings: *Idle Time-out* `0` and *Regular Time
+   Interval* (recycling) `0`, so phones aren't dropped every 20 minutes or 29 hours (they
+   reconnect by themselves, but sessions starting at that moment would fail). Keep *Enable
+   32-Bit Applications* False and the identity *ApplicationPoolIdentity* (a low-privilege
+   virtual account).
+7. Give that account access (admin PowerShell):
+   ```powershell
+   icacls C:\GlasscastRelay\site /grant "IIS AppPool\GlasscastRelay:(OI)(CI)RX"
+   icacls C:\GlasscastRelay\data /grant "IIS AppPool\GlasscastRelay:(OI)(CI)M"
+   ```
+8. **Sites > Add Website:** name `GlasscastRelay`, pool `GlasscastRelay`, physical path
+   `C:\GlasscastRelay\site`, binding **https**, IP *All Unassigned*, port **443**, host name
+   `relay.example.com`, **Require Server Name Indication** ticked, and its certificate.
+   Certificate: however you get them for the other sites. With win-acme: add a temporary **http**
+   binding (port 80, same host name) first, run `wacs.exe`, create a certificate for this site
+   and let it add the https binding. The relay answers every path itself, so if the HTTP check
+   fails, pick win-acme's self-hosting validation (it serves the check through http.sys beside
+   IIS). Remove the http binding afterwards if you like; the relay needs only https.
+
+**Check:**
+
+9. `https://relay.example.com/health` says `ok`, `https://relay.example.com/features` says
+   `{"pc":false,"phone":true}`, and `https://relay.example.com/` shows Glasscast with only
+   **Phone**. If not: Event Viewer > Windows Logs > Application has the relay's warnings and
+   errors (and the ASP.NET Core Module's startup errors). For full logs set
+   `stdoutLogEnabled="true"` in `web.config`, make `C:\GlasscastRelay\site\logs` with Modify for
+   the pool, recycle, and read `logs\stdout_*.log`. At startup the relay logs where it keeps the
+   phones, and an error naming the folder if it can't write there.
+10. Phone: companion server `wss://relay.example.com/ws/companion`, **Pair** (registers at
+    once), **Start**. Glasses: add the web app `https://relay.example.com/`, choose **Phone**,
+    type the connect code into the companion's **Connect glasses**, Approve the pairing on the
+    phone.
+
+**Updating:**
+
+- *The glasses page only* (most changes): re-run the publish and copy `wwwroot` over
+  `C:\GlasscastRelay\site\wwwroot`. No restart; the glasses pick it up on their next Restart.
+- *The program* (relay protocol changes): IIS holds the program's files while it runs. Drop a
+  file named `app_offline.htm` into `C:\GlasscastRelay\site` (the module stops the relay and
+  serves that page), copy the new publish over (it has no `relay.Local.json`, so yours stays),
+  then delete `app_offline.htm`. Registered phones are kept (they're in `data`).
 
 ## Configuration
 
