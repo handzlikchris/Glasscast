@@ -32,8 +32,9 @@ Or open `android-companion/` in Android Studio.
 
 ## Set up on the phone (once)
 
-1. Open **Glasses Remote**. The address defaults to
-   `wss://glasses.example.com/ws/companion`. Tap **Pair**: the PC shows a
+1. Open **Glasses Remote** and enter the server's companion address,
+   `wss://<your host>/ws/companion` (a build can fill it in: `glassesServer=wss://...` in
+   `android-companion/local.properties`, git-ignored). Tap **Pair**: the PC shows a
    "Phone pairing request" popup with the same code. Approve it there. (This only lets the
    phone use the PC as a meeting point; the glasses pair with the phone itself, below.)
 2. **Accessibility:** Settings > Accessibility > Installed apps > Glasses Remote > on. A

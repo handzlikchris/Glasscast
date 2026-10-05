@@ -1,8 +1,19 @@
 // The phone companion for phone mode (architecture/phone-mode.md). No AndroidX: the platform APIs
 // and two libraries (prebuilt libwebrtc, OkHttp for the WebSocket) are all it needs.
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
+
+// The companion socket the setup screen starts with, e.g. wss://glasses.example.com/ws/companion:
+// glassesServer=... in android-companion/local.properties (git-ignored) or as a Gradle property.
+// Empty means the user types the address in.
+val localProperties = Properties().also { props ->
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
+}
+val glassesServer: String =
+    localProperties.getProperty("glassesServer") ?: providers.gradleProperty("glassesServer").orNull ?: ""
 
 android {
     namespace = "uk.co.reliablesolutions.glassesremote.companion"
@@ -15,6 +26,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1"
+        buildConfigField("String", "DEFAULT_SERVER", "\"$glassesServer\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {

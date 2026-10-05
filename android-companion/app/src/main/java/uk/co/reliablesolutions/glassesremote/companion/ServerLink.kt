@@ -18,7 +18,8 @@ import java.util.concurrent.TimeUnit
  */
 class Prefs(context: Context) {
     companion object {
-        const val DEFAULT_SERVER = "wss://glasses.example.com/ws/companion"
+        /** From the build (glassesServer in local.properties); empty if none was given. */
+        const val DEFAULT_SERVER = BuildConfig.DEFAULT_SERVER
     }
 
     private val sp: SharedPreferences = context.getSharedPreferences("companion", Context.MODE_PRIVATE)

@@ -94,6 +94,7 @@ class MainActivity : Activity() {
         server = EditText(this).apply {
             setText(prefs.server)
             inputType = InputType.TYPE_TEXT_VARIATION_URI
+            hint = "wss://your-server/ws/companion"
             isSingleLine = true
             textSize = 14f
         }
