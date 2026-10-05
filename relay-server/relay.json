@@ -30,7 +30,9 @@
   },
 
   "Relay": {
-    // Where the registered phones are kept (token hashes only). Empty = LocalAppData/GlassesRemote/relay.
+    // Where the registered phones are kept (token hashes only). Relative = next to the program;
+    // empty = LocalAppData/GlassesRemote/relay. Under IIS use a folder outside the site, e.g.
+    // C:\\GlasscastRelay\\data, with Modify for the app pool (IIS AppPool\\GlasscastRelay).
     "DataDirectory": ""
   }
 }

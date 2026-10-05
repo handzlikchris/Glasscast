@@ -19,7 +19,7 @@ public sealed class RelayServerHost : IAsyncDisposable
 {
     private readonly WebApplication _app;
 
-    public RelayServerHost(Dictionary<string, string?>? settings = null)
+    public RelayServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
         var config = new Dictionary<string, string?>
         {
@@ -33,7 +33,7 @@ public sealed class RelayServerHost : IAsyncDisposable
             config[key] = value;
         }
 
-        _app = RelayServerApp.Create([], builder =>
+        _app = RelayServerApp.Create(args ?? [], builder =>
         {
             builder.WebHost.UseTestServer();
             builder.Configuration.AddInMemoryCollection(config);
@@ -46,6 +46,8 @@ public sealed class RelayServerHost : IAsyncDisposable
     public string DataDirectory { get; } = Path.Combine(Path.GetTempPath(), $"relay-{Guid.NewGuid():N}");
 
     public ConcurrentQueue<string> Logs { get; } = new();
+
+    public string ContentRoot => _app.Environment.ContentRootPath;
 
     public AlertLog Alerts => _app.Services.GetRequiredService<AlertLog>();
 
@@ -111,6 +113,29 @@ public sealed class RelayServerTests : IAsyncLifetime
         Assert.Equal("authFailed", (await socket.ReceiveAsync()).GetProperty("type").GetString());
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, await socket.WaitForCloseAsync());
         Assert.Contains(_host.Alerts.Recent(), a => a.Kind == AlertKind.ProtocolViolation);
+    }
+
+    [Fact]
+    public async Task A_relative_data_folder_is_next_to_the_program_not_the_working_directory()
+    {
+        // Under IIS the working directory is system32, while the content root is the site's folder.
+        var program = Directory.CreateTempSubdirectory("relay-site-").FullName;
+        try
+        {
+            await using var host = new RelayServerHost(
+                new Dictionary<string, string?> { ["Relay:DataDirectory"] = "data" }, ["--contentRoot", program]);
+            using var socket = await host.ConnectAsync("/ws/companion", origin: null);
+            await socket.SendAsync(new { type = "pair", name = "Phone" });
+            await socket.ReceiveAsync("paired");
+
+            Assert.True(File.Exists(Path.Combine(program, "data", "phones.json")));
+            Assert.NotEqual(Path.GetFullPath(program), Path.GetFullPath(Directory.GetCurrentDirectory()));
+            Assert.Contains(host.Logs, line => line.Contains(Path.Combine(program, "data"), StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(program, recursive: true);
+        }
     }
 
     [Fact]
