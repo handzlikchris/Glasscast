@@ -33,6 +33,9 @@ var app = ServerApp.Create(args, builder =>
         ["Desktop:RegionFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-region.json"),
         ["Diagnostics:StatsDirectory"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-stats"),
         ["Pairing:DeviceGrantFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-device-grant.json"),
+        // Never the real phones: the harness must not read or change what the PC trusts.
+        ["Companion:PhonesFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-phones.json"),
+        ["Companion:GrantFile"] = Path.Combine(Path.GetTempPath(), "glasses-e2e-companion-grant.json"),
         ["Apps:Shortcuts:0:Name"] = "Claude",
         ["Apps:Shortcuts:0:Title"] = "herdr",
         ["Apps:Shortcuts:1:Name"] = "Browser",
