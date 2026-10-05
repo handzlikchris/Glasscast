@@ -148,6 +148,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [code, setCode] = useState<string | null>(null);
   /** The connect code, while the server waits for it to be typed into the phone's companion. */
   const [connectCode, setConnectCode] = useState<string | null>(null);
+  /** A connect code was typed into the phone and it answered: what follows is a new step. */
+  const [phoneFound, setPhoneFound] = useState(false);
+  const connectCodeShown = useRef(false);
   const [media, setMedia] = useState<RTCPeerConnectionState>('new');
   const [channelOpen, setChannelOpen] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
@@ -231,7 +234,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     connector = new PhoneConnector(
       openRelay,
       {
-        onConnectCode: setConnectCode,
+        onConnectCode: (shown) => {
+          if (shown) connectCodeShown.current = true;
+          else if (connectCodeShown.current) setPhoneFound(true);
+          setConnectCode(shown);
+        },
         onPhone: (state) => setPhone(PHONE_STATUS[state]),
         onCode: setCode,
         onOffer: (sdp) => link.handleOffer(sdp),
@@ -680,15 +687,20 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         <div className="phone-pair" role="status">
           <p>Connect your phone</p>
           <p className="code">{connectCode.replace('-', ' ')}</p>
-          <p>In the companion app on your phone, tap Connect glasses and type this code.</p>
+          <p>Open the Glasscast app on your phone, and under Connect glasses type this code.</p>
         </div>
       )}
 
       {code && (
         <div className="phone-pair" role="status">
-          <p>Pair with the phone</p>
+          {/* Right after a connect code, say it's a new step: it looked like the code had reset. */}
+          <p>{phoneFound ? 'Phone found ✓ Now approve the pairing' : 'Pair with the phone'}</p>
           <p className="code">{`${code.slice(0, 3)} ${code.slice(3)}`}</p>
-          <p>Check the phone shows the same code, then tap Approve there.</p>
+          <p>
+            {phoneFound
+              ? 'A new code: the phone shows it too. Tap Approve in the Glasscast app or its notification.'
+              : 'Check the phone shows the same code, then tap Approve in the Glasscast app or its notification.'}
+          </p>
         </div>
       )}
 
