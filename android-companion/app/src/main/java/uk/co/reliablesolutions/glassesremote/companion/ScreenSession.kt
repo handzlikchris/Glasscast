@@ -396,7 +396,11 @@ class ScreenSession(
                 JSONObject().put("x", r.x).put("y", r.y).put("width", r.width).put("height", r.height),
             ).apply {
                 val pkg = followPackage
-                if (pkg != null) InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
+                if (pkg != null) {
+                    InputService.instance?.appLabel(pkg)?.let { put("app", it.take(24)) }
+                    // The package picks the glasses' app profile (architecture/app-profiles.md).
+                    put("pkg", pkg.take(100))
+                }
             },
         )
     }
