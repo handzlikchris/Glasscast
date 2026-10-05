@@ -427,3 +427,8 @@ npm run drive                                                # full PC flow in h
 | Phone mode | Used from the glasses: video, taps, scrolling, drags, app overview, typing with Send, pairing on the phone, sessions that outlive the server |
 | PC mode | Works end to end on the glasses: video with sound, pointer, scrolling, typing, app shortcuts |
 | Hosted relay | Running at `glasscast.reliable-solutions.co.uk`, with a released companion APK (tech preview) |
+
+## License
+
+[MIT](LICENSE). Not affiliated with or endorsed by Meta; Meta Ray-Ban Display and Neural Band
+are trademarks of their owners.
