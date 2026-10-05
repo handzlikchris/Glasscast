@@ -11,7 +11,8 @@ TCP 443 (internet) → router → 192.168.1.114:8443 Caddy (TLS, Let's Encrypt v
 UDP 50000 (internet) → router → 192.168.1.114:50000 SIPSorcery (bound to Media:BindAddress)
 ```
 
-- **Caddy** (`deploy/Caddyfile`): `https_port 8443` because IIS owns 443/80 locally; HTTP
+- **Caddy** (`deploy/Caddyfile`): the site address comes from `GLASSES_HOST` (the same name as
+  `Web:PublicHost`); `https_port 8443` because IIS owns 443/80 locally; HTTP
   challenge and redirects off; path allowlist (`/`, `/index.html`, `/favicon.svg`,
   `/assets/*`, `/health`, `/ws/pair`, `/ws/session`), everything else 404; HSTS, nosniff,
   no-referrer; JSON access log `caddy-access.log` (rolled 10 MiB × 5). Tokens never go in
@@ -31,7 +32,7 @@ variables (`Section__Key`) → command line.
 
 | Section | Class | Main keys |
 | --- | --- | --- |
-| `Web` | `WebOptions` | `AllowedOrigins`, `AllowSameOrigin` (forced off outside Development), `ClientRoot` |
+| `Web` | `WebOptions` | `PublicHost` (adds `https://host` to the origins and the host to `AllowedHosts`; set in `appsettings.Local.json`), `AllowedOrigins`, `AllowSameOrigin` (forced off outside Development), `ClientRoot` |
 | `Pairing` | `PairingOptions` | `RequestTimeout`, `TokenUseWindow`, `MaxRequestsPerIp`, `MaxRequestsGlobal`, `RateWindow`, `DeviceGrantLifetime`, `DeviceGrantFile`, `TakeoverTimeout` |
 | `Session` | `ControlSessionOptions` | `AuthTimeout`, `IdleTimeout`, `HeartbeatTimeout`, `MaxDuration`, `MaxMessagesPerSecond` |
 | `Media` | `MediaOptions` | see [media-pipeline.md](media-pipeline.md) |

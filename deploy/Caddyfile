@@ -1,5 +1,6 @@
 # Public reverse proxy for the glasses app.
-# Run from the repo root:  caddy run --config deploy/Caddyfile
+# Run from the repo root with your host name (the server's Web:PublicHost):
+#   $env:GLASSES_HOST = 'glasses.example.com'; caddy run --config deploy/Caddyfile
 #
 # The router forwards external TCP 443 to this PC's port 8443 (IIS keeps 443 locally).
 # Caddy listens on 8443 and gets its certificate through the TLS-ALPN challenge, which
@@ -12,7 +13,7 @@
 	auto_https disable_redirects
 }
 
-glasses.example.com {
+{$GLASSES_HOST} {
 	# Certificate over TLS-ALPN on the HTTPS port only; the HTTP challenge would need port 80.
 	tls {
 		issuer acme {

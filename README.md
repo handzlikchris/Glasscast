@@ -75,12 +75,12 @@ Plain HTTP on the LAN is for testing only; the router doesn't forward 5080.
 ## Run for real
 
 1. Router, DNS and firewall: follow the plan's **Setup** section (external TCP 443 → this PC's 8443, UDP 50000
-   forwarded to this PC, an A record for `glasses.example.com`).
-2. Copy `server/appsettings.Local.example.json` to `server/appsettings.Local.json` and put
-   your static public IP in `Media:PublicIp`.
+   forwarded to this PC, an A record for your host name, e.g. `glasses.example.com`).
+2. Copy `server/appsettings.Local.example.json` to `server/appsettings.Local.json`, put your
+   host name in `Web:PublicHost` and your static public IP in `Media:PublicIp`.
 3. `.\scripts\run.ps1` (server with tray) and, in another terminal,
-   `caddy run --config deploy/Caddyfile`.
-4. Open `https://glasses.example.com` on the laptop tethered to the phone
+   `$env:GLASSES_HOST = 'glasses.example.com'; caddy run --config deploy/Caddyfile`.
+4. Open `https://glasses.example.com` (your host) on the laptop tethered to the phone
    (later: on the glasses) and approve the popup.
 
 End a session at any time: the tray menu, or **Ctrl+Alt+Shift+X**.
