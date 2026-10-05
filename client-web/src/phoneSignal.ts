@@ -1,5 +1,7 @@
-// The way to the phone before a WebRTC connection exists: /ws/session opened with {type:"phone"},
-// which the PC relays to the phone's companion app (server PhoneRelay.cs). The glasses' page
+// The way to the phone before a WebRTC connection exists: /ws/session opened with
+// {type:"phone", phone?}, which the server relays to that phone's companion app
+// (relay/Phone/PhoneRelay.cs). Without a known phone id the server sends a connect code to type
+// into the companion, then the phone's id (phoneRoute.ts keeps it). The glasses' page
 // can only open secure connections to a public name, and the phone has neither a name nor a
 // certificate, so this first meeting has to happen on a server both can reach. The PC decides
 // nothing here: the phone pairs and checks the glasses (phoneTrust.ts). Once the video is up the
@@ -17,6 +19,8 @@ export interface IceCandidate {
 }
 
 export type FromRelay =
+  | { type: 'connectCode'; code: string }
+  | { type: 'phoneFound'; phone: string }
   | { type: 'phoneStatus'; state: PhoneState }
   | { type: 'pairKey'; key: string }
   | { type: 'paired' }
@@ -28,7 +32,7 @@ export type FromRelay =
   | { type: 'pong'; t: number };
 
 export type ToRelay =
-  | { type: 'phone' }
+  | { type: 'phone'; phone?: string }
   | { type: 'pairStart'; commit: string }
   | { type: 'pairReveal'; key: string }
   | { type: 'hello'; id: string; nonce: string }
@@ -42,6 +46,8 @@ const isString = (v: unknown): v is string => typeof v === 'string';
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const B64U = /^[A-Za-z0-9_-]+$/;
 const isB64u = (v: unknown, length: number): v is string => isString(v) && v.length === length && B64U.test(v);
+/** The server's code alphabet: no 0/O, 1/I/L. */
+const CONNECT_CODE = /^[A-HJKMNP-Z2-9]{3}-[A-HJKMNP-Z2-9]{3}$/;
 
 /** Validates a relayed message; anything unexpected is dropped. */
 export function parseRelayMessage(raw: string): FromRelay | null {
@@ -53,6 +59,10 @@ export function parseRelayMessage(raw: string): FromRelay | null {
   }
   if (!isObject(data)) return null;
   switch (data.type) {
+    case 'connectCode':
+      return isString(data.code) && CONNECT_CODE.test(data.code) ? { type: 'connectCode', code: data.code } : null;
+    case 'phoneFound':
+      return isB64u(data.phone, 22) ? { type: 'phoneFound', phone: data.phone } : null;
     case 'phoneStatus':
       return data.state === 'offline' || data.state === 'ready' || data.state === 'asking' || data.state === 'live'
         ? { type: 'phoneStatus', state: data.state }
@@ -101,7 +111,7 @@ export function describeRelayClose(reason: string): string {
     case 'rate limit':
       return 'Too many attempts just now. Wait a minute, then Reconnect.';
     case 'invalid message':
-      return 'The PC closed the connection (unexpected messages).';
+      return 'The server closed the connection (unexpected messages).';
     default:
       return "Couldn't reach the phone through the server. Check the internet, then Reconnect.";
   }
@@ -120,11 +130,11 @@ export interface RelaySocket {
 
 const socketUrl = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/session`;
 
-/** Opens the relay to the phone on the server that served this page. */
-export function openRelay(handlers: RelayHandlers): RelaySocket {
+/** Opens the relay to the phone on the server that served this page: the phone with that id, or a connect code. */
+export function openRelay(handlers: RelayHandlers, phone: string | null): RelaySocket {
   const ws = new WebSocket(socketUrl());
   let closedByUs = false;
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'phone' } satisfies ToRelay));
+  ws.onopen = () => ws.send(JSON.stringify((phone ? { type: 'phone', phone } : { type: 'phone' }) satisfies ToRelay));
   ws.onmessage = (event) => {
     const message = parseRelayMessage(String(event.data));
     if (message) handlers.onMessage(message);

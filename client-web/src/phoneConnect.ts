@@ -5,9 +5,15 @@
 // the server. (It still needs the phone online: Meta's app takes the glasses' link down when the
 // phone loses internet; architecture/phone-mode.md, "What it can't survive".)
 import { describeRelayClose, type FromRelay, type IceCandidate, type PhoneState, type RelayHandlers, type RelaySocket } from './phoneSignal';
+import { forgetPhoneId, loadPhoneId, savePhoneId } from './phoneRoute';
 import { forgetPairing, Handshake, loadPairing, PairingExchange, type PairingResult } from './phoneTrust';
 
+/** The relay timed out while the glasses showed a connect code nobody typed. */
+const NO_CLAIM = 'No phone took the code in time. Open the companion app on your phone, tap Connect glasses and type the code shown here.';
+
 export interface ConnectEvents {
+  /** The code to type into the companion while the server waits for a phone to claim it; null once found. */
+  onConnectCode(code: string | null): void;
   /** The phone's state as the relay reports it. */
   onPhone(state: PhoneState): void;
   /** The pairing code to show while the phone asks for approval; null once it's done. */
@@ -31,17 +37,23 @@ export class PhoneConnector {
   private answerSent = false;
   private readonly pendingCandidates: IceCandidate[] = [];
   private done = false;
+  /** A connect code is showing: the server waits for someone to type it into a companion. */
+  private waitingForClaim = false;
 
   constructor(
-    open: (handlers: RelayHandlers) => RelaySocket,
+    open: (handlers: RelayHandlers, phone: string | null) => RelaySocket,
     private readonly events: ConnectEvents,
-    /** Pair even if a pairing is remembered (Pair again on the ended screen). */
+    /** Pair even if a pairing is remembered (Pair again on the ended screen), and find the phone again. */
     private readonly pairAgain = false,
   ) {
-    this.relay = open({
-      onMessage: (message) => void this.onMessage(message).catch(() => this.fail("Couldn't check the phone's reply.")),
-      onClose: (reason) => this.fail(describeRelayClose(reason)),
-    });
+    if (pairAgain) forgetPhoneId();
+    this.relay = open(
+      {
+        onMessage: (message) => void this.onMessage(message).catch(() => this.fail("Couldn't check the phone's reply.")),
+        onClose: (reason) => this.fail(this.waitingForClaim && reason === 'timeout' ? NO_CLAIM : describeRelayClose(reason)),
+      },
+      loadPhoneId(),
+    );
   }
 
   /** The DataChannel is open: the relay has done its job. */
@@ -69,6 +81,7 @@ export class PhoneConnector {
     if (this.done) return;
     this.done = true;
     this.relay.close();
+    this.events.onConnectCode(null);
     this.events.onCode(null);
     this.events.onFailed(reason);
   }
@@ -76,6 +89,19 @@ export class PhoneConnector {
   private async onMessage(message: FromRelay): Promise<void> {
     if (this.done) return;
     switch (message.type) {
+      case 'connectCode':
+        this.waitingForClaim = true;
+        this.events.onConnectCode(message.code);
+        break;
+
+      case 'phoneFound':
+        // This server's id for the phone the code was typed into (or its only phone): next time
+        // the glasses ask for it by name.
+        this.waitingForClaim = false;
+        savePhoneId(message.phone);
+        this.events.onConnectCode(null);
+        break;
+
       case 'phoneStatus':
         this.events.onPhone(message.state);
         if (message.state === 'ready') await this.begin();

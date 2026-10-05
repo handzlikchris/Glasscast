@@ -146,6 +146,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const [phone, setPhone] = useState('reaching the phone…');
   /** The pairing code, while the phone asks for approval. */
   const [code, setCode] = useState<string | null>(null);
+  /** The connect code, while the server waits for it to be typed into the phone's companion. */
+  const [connectCode, setConnectCode] = useState<string | null>(null);
   const [media, setMedia] = useState<RTCPeerConnectionState>('new');
   const [channelOpen, setChannelOpen] = useState(false);
   const [screen, setScreen] = useState<string | null>(null);
@@ -229,6 +231,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     connector = new PhoneConnector(
       openRelay,
       {
+        onConnectCode: setConnectCode,
         onPhone: (state) => setPhone(PHONE_STATUS[state]),
         onCode: setCode,
         onOffer: (sdp) => link.handleOffer(sdp),
@@ -673,6 +676,14 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
       {showHelp && focus === 'bar' && <ShortcutsPanel target="phone" />}
 
+      {connectCode && (
+        <div className="phone-pair" role="status">
+          <p>Connect your phone</p>
+          <p className="code">{connectCode.replace('-', ' ')}</p>
+          <p>In the companion app on your phone, tap Connect glasses and type this code.</p>
+        </div>
+      )}
+
       {code && (
         <div className="phone-pair" role="status">
           <p>Pair with the phone</p>
@@ -683,7 +694,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
       <div className="status">
         <span className={connected ? 'dot' : 'dot warn'}>●</span>
-        <span>{connected ? `live (${path ?? '…'})` : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
+        <span>{connected ? `live (${path ?? '…'})` : connectCode ? 'waiting for the code on the phone' : code ? 'pairing: approve on the phone' : media === 'new' ? phone : media}</span>
         {screen && <span>{screen}</span>}
         {rttMs !== null && <span>{rttMs} ms</span>}
         <span className="input-trace">{lastInput}</span>

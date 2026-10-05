@@ -24,6 +24,11 @@ describe('relay messages', () => {
     expect(parseRelayMessage('{"type":"pong","t":4}')).toEqual({ type: 'pong', t: 4 });
   });
 
+  it('parses how the server finds the phone', () => {
+    expect(parseRelayMessage('{"type":"connectCode","code":"XYZ-789"}')).toEqual({ type: 'connectCode', code: 'XYZ-789' });
+    expect(parseRelayMessage(`{"type":"phoneFound","phone":"${NONCE}"}`)).toEqual({ type: 'phoneFound', phone: NONCE });
+  });
+
   it.each([
     '{"type":"phoneStatus","state":"hacked"}',
     '{"type":"pairKey","key":"short"}',
@@ -32,6 +37,9 @@ describe('relay messages', () => {
     '{"type":"iceCandidate","candidate":5}',
     '{"type":"iceCandidate","candidate":"c","sdpMid":7}',
     '{"type":"hello"}',
+    '{"type":"connectCode","code":"ABO-234"}',
+    '{"type":"connectCode","code":"<b>hi</b>"}',
+    '{"type":"phoneFound","phone":"../etc"}',
     'not json',
   ])('drops %s', (raw) => {
     expect(parseRelayMessage(raw)).toBeNull();
