@@ -1,8 +1,8 @@
 # Glasscast
 
-**Phone remote control for Meta Ray-Ban Display glasses.** See your Android phone's screen in
-the glasses and use it without picking it up: pinch the air to tap, swipe your thumb to scroll,
-say what to type.
+**Phone remote control for Meta Ray-Ban Display glasses.** Every app on your Android phone, on
+the glasses' display, today: pinch the air to tap, swipe your thumb to scroll, say what to type.
+No waiting for glasses versions of your apps.
 
 *Tech preview* · Android 11+ companion app · Meta Ray-Ban Display + Neural Band · also a remote
 desktop for Windows PCs
@@ -10,6 +10,16 @@ desktop for Windows PCs
 https://github.com/user-attachments/assets/8f886138-fdfd-4640-8a2e-975cf590e1ee
 
 ## What it does
+
+The glasses have only a handful of apps of their own. Your phone already has every app you use:
+WhatsApp, Gmail, Maps, Spotify, ChatGPT, Claude, the one you wrote yourself. Glasscast puts them on
+the glasses as they are, with nothing for their makers to build.
+
+They look right there, too. The glasses' display is a 600×600 square, and **Square screen** in
+the companion turns the phone's screen into a 1080×1080 square, so apps lay themselves out
+for it: the whole app fills the display, no letterboxing, text big enough to read. **Reset
+screen** puts the phone back when you're done. (Square screen needs a one-off permission granted over
+ADB; without it the view still follows the app in front, letterboxed.)
 
 Your phone sits on the table, on a stand or in your bag. The glasses show its screen live, and
 the Neural Band works it like a laptop touchpad:
