@@ -72,7 +72,7 @@ copies the command for you. USB debugging can be turned off again afterwards.
 Scan this with the **phone's camera** (not the glasses). It opens the Meta AI app, which asks
 to add Glasscast to your glasses:
 
-<img src="docs/images/add-to-glasses-qr.png" alt="QR code: add Glasscast to Meta Ray-Ban Display" width="220">
+<img src="docs/images/add-to-glasses-qr.png" alt="QR code: add Glasscast to Meta Ray-Ban Display" width="100%">
 
 Or add it by hand: Meta AI app → **Devices** → **Display Glasses settings** → **App
 connections** → **Web apps** → **Add a web app**, name `Glasscast`, URL
