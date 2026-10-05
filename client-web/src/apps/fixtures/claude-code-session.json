@@ -1,0 +1,96 @@
+{
+  "type": "controls",
+  "pkg": "com.anthropic.claude",
+  "items": [
+    {
+      "x": 0.1222,
+      "y": 0.6902,
+      "w": 0.288,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "8 running tasks",
+      "id": ""
+    },
+    {
+      "x": 0.0019,
+      "y": 0.6179,
+      "w": 0.0898,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Copy message",
+      "id": ""
+    },
+    {
+      "x": 0.0917,
+      "y": 0.6282,
+      "w": 0.1333,
+      "h": 0.0513,
+      "kind": "button",
+      "label": "Read aloud",
+      "id": ""
+    },
+    {
+      "x": 0.0,
+      "y": 0.0491,
+      "w": 0.1333,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Open menu, new feature available",
+      "id": ""
+    },
+    {
+      "x": 0.8722,
+      "y": 0.0491,
+      "w": 0.1278,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Session menu",
+      "id": ""
+    },
+    {
+      "x": 0.0806,
+      "y": 0.7966,
+      "w": 0.8389,
+      "h": 0.0615,
+      "kind": "field",
+      "label": "",
+      "id": ""
+    },
+    {
+      "x": 0.05,
+      "y": 0.8538,
+      "w": 0.1333,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Add context",
+      "id": ""
+    },
+    {
+      "x": 0.1889,
+      "y": 0.8538,
+      "w": 0.3046,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Opus 5.5 High",
+      "id": ""
+    },
+    {
+      "x": 0.6944,
+      "y": 0.8538,
+      "w": 0.1222,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Start speech input",
+      "id": ""
+    },
+    {
+      "x": 0.8167,
+      "y": 0.8538,
+      "w": 0.1333,
+      "h": 0.0615,
+      "kind": "button",
+      "label": "Send",
+      "id": ""
+    }
+  ]
+}
