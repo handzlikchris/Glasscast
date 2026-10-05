@@ -48,6 +48,11 @@ Or open `android-companion/` in Android Studio.
    Then **Square screen** makes the phone 1080×1080 (its short side) at density 320, and **Reset
    screen** puts it back, any time. Change it before starting a session: the companion reads the
    screen size when a session starts.
+5. **Keyboard:** use Gboard, made small. Samsung Keyboard ignores the square screen and covers most
+   of it. In Gboard: toolbar → **Resize** (drag the top edge down) or **Floating**, and in its
+   settings the number row and suggestion strip off. Typing comes from the glasses, so the keyboard
+   only needs to stay out of the way. (Switching keyboards with the square screen, or an invisible
+   keyboard in the companion: `.claude/tasks/square-screen-keyboard.md`.)
 
 ## A session
 

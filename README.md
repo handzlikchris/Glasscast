@@ -140,6 +140,15 @@ sideloaded app first needs **Allow restricted settings** in its App info menu), 
 **Start**. Details, including the optional square screen for the glasses: the
 [companion README](android-companion/README.md).
 
+**Use Gboard, made small.** When an app opens the phone's keyboard it covers part of what the
+glasses show, and on the square screen Samsung Keyboard fills most of it (it ignores the square
+size). Install [Gboard](https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin),
+make it the default keyboard, then shrink it: its toolbar → **Resize** and drag the top edge
+down (or **Floating**), and in its settings turn off the number row and the suggestion strip.
+You type from the glasses anyway, so the keyboard only has to stay out of the way; swipe down
+twice to put it away. A keyboard that switches to a small one by itself on the square screen is
+planned.
+
 ### 3. The glasses
 
 Open `https://glasses.example.com` as a web app on the glasses (see Meta's
