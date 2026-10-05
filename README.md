@@ -63,8 +63,9 @@ server? See [Host it yourself](#host-it-yourself). What the relay can and can't 
    phone; Glasscast only acts on what the glasses send during a session.
 5. Tap **Start**. A notification stays while the companion is ready for the glasses.
 
-Then the square screen (recommended) and a small keyboard (see
-[Use Gboard, made small](#use-gboard-made-small)).
+Then two optional steps that make the phone much easier to use from the glasses: the
+[square screen](#square-screen-recommended-one-off-setup) and
+[a small keyboard](#a-small-keyboard-optional-recommended).
 
 #### Square screen (recommended, one-off setup)
 
@@ -93,6 +94,22 @@ restarts and app updates (only uninstalling the app drops it).
 That's it: unplug, and use **Square screen** / **Reset screen** in the app whenever you like
 (change it before starting a session). The ⓘ next to them in the app shows the same steps and
 copies the command for you. USB debugging can be turned off again afterwards.
+
+#### A small keyboard (optional, recommended)
+
+When an app on the phone opens a text field, its keyboard pops up on the phone's screen, and
+that's the screen the glasses show. The stock **Samsung Keyboard** takes about half of it, so
+once you're in a text field you hardly see the app any more; on the square screen it covers
+nearly everything (it ignores the square size). You type from the glasses anyway (voice or
+handwriting), so the phone's keyboard only has to stay out of the way:
+
+1. Install [Gboard](https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin)
+   and make it the default keyboard (Settings → General management → Keyboard list and default).
+2. Shrink it: in Gboard's toolbar, **Resize** and drag its top edge down (or **Floating**).
+3. In Gboard's settings, turn off the number row and the suggestion strip.
+
+Swipe down twice on the glasses to put the keyboard away. A keyboard that switches to a small
+one by itself on the square screen is planned.
 
 ### 2. The glasses: add Glasscast
 
@@ -285,16 +302,6 @@ On the phone, open **Glasscast**, enter `wss://glasses.example.com/ws/companion`
 sideloaded app first needs **Allow restricted settings** in its App info menu), then tap
 **Start**. Details, including the optional square screen for the glasses: the
 [companion README](android-companion/README.md).
-
-#### Use Gboard, made small
-
-When an app opens the phone's keyboard it covers part of what the glasses show, and on the square screen Samsung Keyboard fills most of it (it ignores the square
-size). Install [Gboard](https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin),
-make it the default keyboard, then shrink it: its toolbar → **Resize** and drag the top edge
-down (or **Floating**), and in its settings turn off the number row and the suggestion strip.
-You type from the glasses anyway, so the keyboard only has to stay out of the way; swipe down
-twice to put it away. A keyboard that switches to a small one by itself on the square screen is
-planned.
 
 ### 3. The glasses
 
