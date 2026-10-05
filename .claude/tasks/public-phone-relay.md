@@ -1,8 +1,40 @@
 # Phone mode for other people: a hosted relay and publishing the repo
 
-Status: **idea, parked 2026-10-05.** The user isn't sharing it for now ("for now this is just for
-me"); anyone who wants it can deploy the server and run the relay themselves. Pick this up only
-when asked.
+Status: **in progress on branch `feat/public-phone-relay` (started 2026-10-05).** First step: a
+hosted relay the user runs on their own server box (Windows, behind Caddy, started by a script),
+that others could run too (Linux, no IIS). Publishing the repo comes later.
+
+## Plan (decided 2026-10-05)
+
+User's requirements: the box runs **only** the relay and the glasses page: no capture, input,
+window or media code may even be in that binary ("this is my server, there's plenty of stuff
+there"). Limit changes. Many phones from the start. The hosted page is phone only.
+
+- **Projects.** `relay/` (library `GlassesRemote.Relay`, `net10.0`): the phone relay
+  (`server/Phone/*`) and the small helpers it needs (alerts, secrets, rate limiters, `SocketIO`,
+  JSON rule helpers), moved with their namespaces kept. `relay-server/`
+  (`GlassesRemote.RelayServer`, `net10.0` web app): `/health`, `/ws/session` (phone only),
+  `/ws/companion`, the glasses page. It references only `relay/`; a test checks it loads no PC
+  assembly (`GlassesRemote.Server`, SIPSorcery, NAudio, Vortice). The PC server references
+  `relay/` and keeps phone mode.
+- **Many phones.** Phones are kept by id (random 128-bit) with their token hash, name, first and
+  last seen (`phones.json`; the PC's old `companion-grant.json` imported once). Registration is a
+  setting, `Companion:Registration`: `Approve` (the PC: the popup, as today) or `Open` (the relay
+  server: `paired{token}` at once, rate-limited per IP and overall, capped by `MaxPhones`, phones
+  unseen for `ForgetAfter` dropped). The companion's protocol for it is unchanged.
+- **Routing.** The glasses open `{type:"phone", phone?}`. A known id waits for that phone, as
+  today. No id or an unknown one: the server sends `connectCode` (short, single use, minutes),
+  the user types it into the companion, which sends `claim{code}`; the server joins that relay
+  to that phone and tells the glasses the phone's id (`phoneFound`), which they keep next to the
+  pairing (localStorage). Then the existing pairing (code on both, Approve on the phone) runs:
+  the server stays untrusted. Claims rate-limited per phone.
+- **Page.** `GET /features` says which targets the server offers; the relay server says phone
+  only and the first screen goes straight to Phone.
+- **Deploy.** `scripts/run-relay.ps1`, a Caddyfile for the relay host, a linux-x64 publish
+  (systemd unit) for others. Docs: `architecture/phone-mode.md`, `deployment.md`, CLAUDE.md.
+
+Commits in that order: plan, move to `relay/` (no behaviour change), many phones + connect
+codes (server, tests), relay server (+ tests), client, companion, deploy + docs.
 
 ## Already done (2026-10-05)
 
