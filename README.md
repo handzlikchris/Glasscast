@@ -119,6 +119,10 @@ on developer mode for the glasses (see Meta's
 From then on: open Glasscast on the glasses, pinch **Phone**, and tap **Start** on the phone.
 The glasses remember which phone is theirs and that they're paired.
 
+**Keep the phone's Wi-Fi switched on**, even when it isn't connected to any network. The glasses
+then talk to the phone over a direct Wi-Fi link, which is fast; with the phone's Wi-Fi off they
+fall back to Bluetooth, and the video gets laggy.
+
 ## Controls
 
 The same habits on both targets. **?** on the glasses' bar shows them during a session.
@@ -215,6 +219,9 @@ of yours and can't control the machine it runs on. See [Host it yourself](#host-
   the phone locks. The companion keeps the screen on while you're connected.
 - **The phone needs internet.** The glasses reach the phone through Meta's app, which drops
   that link when the phone goes offline.
+- **The phone's Wi-Fi must be on** (connected to a network or not): Meta's app links the glasses
+  to the phone over Wi-Fi Direct when it can. With Wi-Fi off it uses Bluetooth, which is too slow
+  for smooth video.
 - **Apps that block screenshots** (banking, DRM video) show black.
 - **No iPhone.** iOS doesn't let an app tap or type into other apps.
 - **The APK is sideloaded** (not on the Play Store), hence Android's "restricted setting" step
