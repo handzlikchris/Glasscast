@@ -159,7 +159,8 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | First connection | Through a server both reach (the one serving the web app) | The page can't reach the phone before WebRTC (above) |
 | Who decides | The phone: pairing approved on the phone, proof on every session, capture consent | The glasses control the phone, so the phone is the gate; the server stays dumb |
 | Session life | Independent of the relay once the DataChannel is open; pings both ways | The PC or its internet going away mustn't end it (user's request, 2026-09-29). The phone losing internet still does (Meta, above) |
-| Companion ⇄ server | Registers once through the PC's Approve popup (companion token, hash on the PC) | So a random device can't sit on the relay pretending to be the phone |
+| Companion ⇄ server | Registers once and keeps a companion token (hash on the server) and an id. On the PC through the Approve popup (`Companion:Registration` `Approve`); on a hosted relay at once (`Open`, rate-limited, capped by `MaxPhones`) | On the PC nobody else gets a slot. A hosted relay has no one to click, and needn't: the phone is the gate (2026-10-05) |
+| Which phone | Glasses send the phone's id once they know it. Without one they show a **connect code**, typed into the companion (`claim`); the server joins that relay to that phone and tells the glasses its id (`phoneFound`). On the PC with exactly one approved phone, id-less glasses go straight to it | Many phones on one server; typing is easy on the phone, hard on the glasses. The pairing that follows still runs on the phone, so a wrong claim only shows the glasses someone else's pairing prompt |
 | Capture | `MediaProjection`, **entire screen** (`createConfigForDefaultDisplay`), cropped to a region on the phone | Input mapping needs screen coordinates; single-app capture gives no window position |
 | Frame size | Crop to the region, scale so the long side is ≤ 600; the glasses letterbox | No padding on the phone; `cropAndScale` on the GPU texture is cheap |
 | Overview swipes | While the app overview is open (`picking`), the companion's swipes stop and hold still 150 ms before lifting (`settle`), so they carry no fling speed and the overview snaps one app on | Swipes that lifted while moving flung two apps on, whatever their length and speed (2026-09-30) |
@@ -175,14 +176,22 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 
 ## Protocol
 
-### Glasses ⇄ server (`/ws/session`, first message `{type:"phone"}`)
+### Glasses ⇄ server (`/ws/session`, first message `{type:"phone", phone?}`)
 
 No login on the server; relays are rate-limited per IP (10 a minute) and overall (30), and last
-at most 3 minutes (`Companion:RelayTimeout`). Server → glasses: `phoneStatus{state}` (`offline`:
-no companion connected, waiting up to `Companion:StartTimeout`; `ready`: the phone is reached;
-`asking`: consent dialog; `live`: capturing), `pong`, and everything the phone sends. Close
-reasons: `phone offline`, `phone declined`, `phone ended`, `replaced` (newer glasses), `timeout`,
-`rate limit`, `invalid message`.
+at most 3 minutes (`Companion:RelayTimeout`). `phone` is the phone's id on this server (22
+base64url characters), once the glasses know it. Server → glasses:
+
+- Finding the phone: a known id goes to that phone. Otherwise (no id, or one the server doesn't
+  know) `connectCode{code}` ("ABC-234": the pairing-code alphabet, single use, lives as long as
+  the relay), then `phoneFound{phone}` once someone types it into a companion. On the PC with
+  exactly one approved phone, id-less glasses get `phoneFound` for it at once instead.
+- Then `phoneStatus{state}` (`offline`: that phone's companion isn't connected, waiting up to
+  `Companion:StartTimeout`; `ready`: the phone is reached; `asking`: consent dialog; `live`:
+  capturing), `pong`, and everything the phone sends.
+- Nothing is read from the glasses until the phone is found (one reader per socket).
+- Close reasons: `phone offline`, `phone declined`, `phone ended`, `replaced` (newer glasses),
+  `timeout` (also: no one typed the connect code), `rate limit`, `invalid message`.
 
 Glasses → phone (`RelayProtocol.cs`): `pairStart{commit}`, `pairReveal{key}`, `hello{id,nonce}`,
 `proof{mac}`, `rtcAnswer{sdp,mac}`, `iceCandidate{candidate,sdpMid,sdpMLineIndex}`; `ping{t}` is
@@ -196,13 +205,17 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 ### Companion ⇄ server (`/ws/companion`)
 
 - First message, within 3 s: `pair{name}` (≤ 32 chars) or `auth{token}`.
-- Registration: server → `pairCode{code, expiresInSeconds}`, then `paired{token}` or
-  `pairFailed`, close.
-- Authenticated: server → `authenticated`, `relayOpen` (glasses arrived), `relayClosed` (they
-  left: drop whatever wasn't connected yet), the glasses' relayed messages, `pong{t}`.
-  Phone → server: the phone's relayed messages above, `ping{t}`.
-- Strict allowlist, 16 KB cap, rate-limited; anything else closes the socket. One companion
-  connection at a time (a new one replaces the old), one relay at a time (newest wins).
+- Registration: on the PC server → `pairCode{code, expiresInSeconds}`, then `paired{token}` or
+  `pairFailed`, close. With open registration `paired{token}` (or `pairFailed`: limits, no
+  room) comes at once.
+- Authenticated: server → `authenticated` (always first: attaching wakes waiting glasses),
+  `relayOpen` (glasses arrived), `relayClosed` (they left: drop whatever wasn't connected yet),
+  the glasses' relayed messages, `pong{t}`, and `claimed`/`claimFailed` (answering a connect
+  code; `claimed` comes before that relay's `relayOpen`). Phone → server: the phone's relayed
+  messages above, `ping{t}`, `claim{code}` (the connect code, upper-case "ABC-234"; 5 a minute
+  per phone, a wrong one counts).
+- Strict allowlist, 16 KB cap, rate-limited; anything else closes the socket. Per phone: one
+  companion connection (a new one replaces the old), one relay (newest wins).
 
 ### Glasses ⇄ phone (DataChannel `input`, JSON)
 
@@ -235,9 +248,15 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   most every 10 s and once per relay.
 - The server never carries the phone's video or the glasses' input; any input on a relay is a
   violation.
-- The companion registers with the server once through the PC's Approve popup (companion token,
-  hash on the PC, **Forget phone** in the tray); `/ws/companion` refuses any request with an
-  `Origin` header (web pages).
+- The companion registers with the server once: through the PC's Approve popup (companion
+  token, hash on the PC, **Forget phones** in the tray), or on a hosted relay without approval
+  (`Companion:Registration=Open`: rate-limited per IP and overall, at most `MaxPhones`, phones
+  unseen for `ForgetAfter` make room). Either way only token hashes are kept (`phones.json`).
+  `/ws/companion` refuses any request with an `Origin` header (web pages).
+- A connect code only lets a companion **answer** those glasses' relay: the pairing that follows
+  needs the same code on both screens and Approve on the phone, and the glasses check the
+  phone's proof every session. Codes are single use and die with the relay; a phone may try 5 a
+  minute.
 - Keys: the glasses keep `{id, key}` in localStorage (like the PC's device token: never in React
   state, a URL or a log); the phone keeps it in app-private storage (no backups). Never logged.
 - The companion accepts input only on the DataChannel of the peer whose answer carried the
@@ -286,10 +305,10 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 | `relay/Phone/PhoneRelay.cs` | A relay: waits for the companion, passes messages both ways, closes on decline, phone loss, replacement or timeout; tells the phone `relayClosed` |
 | `relay/Phone/RelayProtocol.cs` | Strict parser for the glasses' relay messages (base64url sizes, no input) |
 | `relay/Phone/CompanionEndpoint.cs` | `/ws/companion`: no-Origin check, 3 s first message, register or auth, receive loop (ping, rate limit, 45 s heartbeat) |
-| `relay/Phone/CompanionRegistry.cs` | Companion registration, its token hash (`companion-grant.json`), the live connection, relay rate limits |
-| `relay/Phone/CompanionLink.cs` | One authenticated companion connection; its one relay (`RelayHandle`) |
+| `relay/Phone/CompanionRegistry.cs` | The registered phones (`phones.json`: id, name, token hash; the old `companion-grant.json` imported once), approval or open registration, live connections, connect codes, rate limits |
+| `relay/Phone/CompanionLink.cs` | One authenticated companion connection (one phone id); its one relay (`RelayHandle`) |
 | `relay/Phone/CompanionProtocol.cs` | Strict parser for the companion's messages; `PhoneState` |
-| `server/Ui/ApprovePopup.cs`, `TrayApp.cs` | The popup registers a phone; tray **Forget phone** |
+| `server/Ui/ApprovePopup.cs`, `TrayApp.cs` | The popup registers a phone; tray **Forget phones** |
 | `client-web/src/App.tsx`, `target.ts` | The PC/Phone first screen; the last choice in localStorage |
 | `client-web/src/PhoneScreen.tsx` | The phone session: video, local cursor, gestures, bar, Type, the pairing code panel, pings |
 | `client-web/src/phoneConnect.ts` | Relay → pairing or proof → checked offer, signed answer; closes the relay once connected |

@@ -61,7 +61,7 @@ internal sealed class TrayApp : ApplicationContext
         _showFrame.CheckedChanged += (_, _) => UpdateFrame(_castArea.Current);
         _forget = new ToolStripMenuItem("Forget remembered glasses", null, (_, _) => _coordinator.ForgetDevice("forgotten from the tray"));
         UpdateForget(_coordinator.RememberedDeviceExpiresAt);
-        _forgetPhone = new ToolStripMenuItem("Forget phone", null, (_, _) => _companion.Forget("forgotten from the tray"));
+        _forgetPhone = new ToolStripMenuItem("Forget phones", null, (_, _) => _companion.ForgetAll("forgotten from the tray"));
         UpdatePhone();
         var menu = new ContextMenuStrip();
         menu.Items.AddRange(
@@ -152,7 +152,7 @@ internal sealed class TrayApp : ApplicationContext
         _phonePopup = new ApprovePopup(pending.Request, "Phone pairing request",
             $"Approve only if this code matches the one on your phone ({pending.Name}):",
             "Approving lets the glasses control this phone through its companion app. The phone still asks "
-            + "before every session. Forget phone in the tray menu undoes it.",
+            + "before every session. Forget phones in the tray menu undoes it.",
             _companion.Approve, _companion.Reject);
         _phonePopup.FormClosed += (_, _) => _phonePopup = null;
         _phonePopup.Show();
@@ -170,11 +170,14 @@ internal sealed class TrayApp : ApplicationContext
 
     private void UpdatePhone()
     {
-        var name = _companion.PairedName;
-        _forgetPhone.Enabled = name is not null;
-        _forgetPhone.Text = name is null
-            ? "No phone paired"
-            : $"Forget phone ({name}, {(_companion.Current is null ? "offline" : "connected")})";
+        var phones = _companion.Phones;
+        _forgetPhone.Enabled = phones.Count > 0;
+        _forgetPhone.Text = phones.Count switch
+        {
+            0 => "No phone paired",
+            1 => $"Forget phone ({phones[0].Name}, {(phones[0].Connected ? "connected" : "offline")})",
+            _ => $"Forget {phones.Count} phones ({phones.Count(p => p.Connected)} connected)",
+        };
     }
 
     /// <summary>Remembered glasses reconnect without the popup until then; this undoes that.</summary>

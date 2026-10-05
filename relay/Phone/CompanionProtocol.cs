@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Protocol;
 
 namespace GlassesRemote.Server.Phone;
@@ -22,7 +23,10 @@ public enum PhoneState
 /// <summary>A validated message from the companion app. Anything else is rejected before it gets here.</summary>
 public abstract record CompanionMessage;
 
-/// <summary>First message of an unpaired companion: ask for the Approve popup on the PC.</summary>
+/// <summary>
+/// First message of an unregistered companion: register with this server. On the PC that asks for
+/// the Approve popup; a relay server with open registration answers at once.
+/// </summary>
 public sealed record CompanionPairMessage(string Name) : CompanionMessage;
 
 /// <summary>First message of a paired companion.</summary>
@@ -33,6 +37,12 @@ public sealed record CompanionAuthMessage(string Token) : CompanionMessage
 }
 
 public sealed record CompanionPingMessage(double T) : CompanionMessage;
+
+/// <summary>
+/// The connect code the glasses show, typed into the companion: join those glasses' relay to this
+/// phone. It only lets them ask; the phone still pairs and checks them itself.
+/// </summary>
+public sealed record CompanionClaimMessage(string Code) : CompanionMessage;
 
 public sealed record CompanionStateMessage(PhoneState State) : CompanionMessage;
 
@@ -111,6 +121,9 @@ public static class CompanionProtocol
                     ? new CompanionAuthMessage(token)
                     : null,
                 "ping" => JsonRules.Only(e, "t") && JsonRules.Num(e, "t", out var t) ? new CompanionPingMessage(t) : null,
+                "claim" => JsonRules.Only(e, "code") && JsonRules.Str(e, "code", 7, out var code) && Secrets.IsCode(code)
+                    ? new CompanionClaimMessage(code)
+                    : null,
                 "sessionState" => JsonRules.Only(e, "state") && JsonRules.Str(e, "state", 16, out var state)
                                   && States.TryGetValue(state, out var parsed)
                     ? new CompanionStateMessage(parsed)

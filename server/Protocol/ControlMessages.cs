@@ -45,8 +45,9 @@ public sealed record ResumeMessage(string Token) : ControlMessage
 /// <summary>
 /// First message of a phone session: the PC only relays signalling between the glasses and the
 /// phone's companion app, which pairs and checks the glasses itself (architecture/phone-mode.md).
+/// <paramref name="Phone"/> is the phone's id on this server, once the glasses know it.
 /// </summary>
-public sealed record ConnectPhoneMessage : ControlMessage;
+public sealed record ConnectPhoneMessage(string? Phone) : ControlMessage;
 
 public sealed record RtcAnswerMessage(string Sdp) : ControlMessage;
 

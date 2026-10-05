@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using GlassesRemote.Server.Phone;
 using static GlassesRemote.Server.Protocol.JsonRules;
 
 namespace GlassesRemote.Server.Protocol;
@@ -91,7 +92,7 @@ public static class ControlProtocol
             {
                 "authenticate" => ParseAuthenticate(root),
                 "resume" => ParseResume(root),
-                "phone" => Only(root) ? new ConnectPhoneMessage() : null,
+                "phone" => RelayProtocol.ParseConnect(root) is { } connect ? new ConnectPhoneMessage(connect.Phone) : null,
                 "rtcAnswer" => ParseRtcAnswer(root),
                 "iceCandidate" => ParseIceCandidate(root),
                 "setMode" => ParseSetMode(root),

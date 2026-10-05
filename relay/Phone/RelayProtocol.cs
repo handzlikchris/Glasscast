@@ -26,6 +26,12 @@ public sealed record AnswerSignal(string Sdp, string Mac) : GlassesSignal;
 
 public sealed record GlassesIceSignal(IceCandidateMessage Candidate) : GlassesSignal;
 
+/// <summary>
+/// First message of a phone relay: which phone (its id from an earlier connection), or none yet.
+/// Without a known id the glasses get a connect code to type into the companion.
+/// </summary>
+public sealed record ConnectSignal(string? Phone) : GlassesSignal;
+
 /// <summary>Answered by the PC itself (the relay's round trip); never passed on.</summary>
 public sealed record RelayPingSignal(double T) : GlassesSignal;
 
@@ -41,6 +47,9 @@ public static class RelayProtocol
     public const int PublicKeyLength = 87;
     public const int NonceLength = 22;
     public const int IdLength = 16;
+
+    /// <summary>A phone's id on the server: 128 bits, base64url.</summary>
+    public const int PhoneIdLength = 22;
 
     private static readonly JsonDocumentOptions DocumentOptions = new() { MaxDepth = 4 };
 
@@ -108,6 +117,25 @@ public static class RelayProtocol
 
     public static bool TryParse(string json, out GlassesSignal? message, out string? error) =>
         TryParse(System.Text.Encoding.UTF8.GetBytes(json), out message, out error);
+
+    /// <summary>
+    /// The first message of a phone relay, <c>{type:"phone", phone?}</c>, from an already parsed
+    /// object (the PC's session socket parses its first message with <c>ControlProtocol</c>).
+    /// </summary>
+    public static ConnectSignal? ParseConnect(JsonElement e)
+    {
+        if (!JsonRules.Only(e, "phone"))
+        {
+            return null;
+        }
+
+        if (!e.TryGetProperty("phone", out _))
+        {
+            return new ConnectSignal(null);
+        }
+
+        return B64u(e, "phone", PhoneIdLength, out var phone) ? new ConnectSignal(phone) : null;
+    }
 
     /// <summary>A base64url string (no padding) of exactly <paramref name="length"/> characters.</summary>
     internal static bool B64u(JsonElement e, string name, int length, out string value)

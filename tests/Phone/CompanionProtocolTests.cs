@@ -62,11 +62,31 @@ public sealed class CompanionProtocolTests
     }
 
     [Fact]
-    public void Glasses_ask_for_the_phone_with_a_bare_message()
+    public void Glasses_ask_for_the_phone_with_its_id_or_none()
     {
-        Assert.True(ControlProtocol.TryParse("""{"type":"phone"}""", out var message, out _));
-        Assert.IsType<ConnectPhoneMessage>(message);
+        Assert.True(ControlProtocol.TryParse("""{"type":"phone"}""", out var bare, out _));
+        Assert.Equal(new ConnectPhoneMessage(null), bare);
+        var id = new string('a', 21) + "_";
+        Assert.True(ControlProtocol.TryParse($$"""{"type":"phone","phone":"{{id}}"}""", out var named, out _));
+        Assert.Equal(new ConnectPhoneMessage(id), named);
+
         Assert.False(ControlProtocol.TryParse("""{"type":"phone","token":"t"}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse("""{"type":"phone","phone":"short"}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse($$"""{"type":"phone","phone":"{{new string('a', 21)}}!"}""", out _, out _));
+        Assert.False(ControlProtocol.TryParse("""{"type":"phone","phone":null}""", out _, out _));
+    }
+
+    [Theory]
+    [InlineData("ABC-234", true)]
+    [InlineData("XYZ-789", true)]
+    [InlineData("abc-234", false)]  // the companion sends it upper-case
+    [InlineData("ABC234", false)]
+    [InlineData("ABO-234", false)]  // no O, 0, I, 1, L in codes
+    [InlineData("ABC-2345", false)]
+    public void Connect_codes_have_a_fixed_shape(string code, bool valid)
+    {
+        Assert.Equal(valid, CompanionProtocol.TryParse($$"""{"type":"claim","code":"{{code}}"}""", out var parsed, out _));
+        Assert.Equal(valid ? new CompanionClaimMessage(code) : null, parsed);
     }
 
     [Theory]

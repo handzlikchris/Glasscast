@@ -17,7 +17,8 @@ public sealed record PhoneServices(
     ILogger<PhoneRelay> Logger);
 
 /// <summary>
-/// Glasses that want the phone (first message <c>phone</c>). The PC is only the meeting point:
+/// Glasses that want their phone (first message <c>phone</c>, with the phone's id once they know
+/// it; without, they get a connect code to type into the companion). The server is only the meeting point:
 /// the glasses' page can't reach the phone until a WebRTC connection exists, so the first
 /// messages go through here. It passes pairing, authentication and signalling between the glasses
 /// and the companion, and decides nothing: the phone pairs the glasses (approval on the phone),
@@ -34,13 +35,15 @@ public sealed class PhoneRelay
 {
     private readonly SocketIO _io;
     private readonly IPAddress _remote;
+    private readonly string? _phoneId;
     private readonly PhoneServices _s;
     private readonly CompanionOptions _companion;
 
-    public PhoneRelay(SocketIO io, IPAddress remote, PhoneServices services)
+    public PhoneRelay(SocketIO io, IPAddress remote, string? phoneId, PhoneServices services)
     {
         _io = io;
         _remote = remote;
+        _phoneId = phoneId;
         _s = services;
         _companion = services.Companion.Value;
     }
@@ -128,10 +131,25 @@ public sealed class PhoneRelay
         }
     }
 
-    /// <summary>The connected companion, now or once it connects; null if none within the start timeout.</summary>
+    /// <summary>
+    /// The glasses' phone, connected: the one they named, now or once it connects (null if it
+    /// doesn't within the start timeout); else the PC's only phone; else whichever companion
+    /// someone types the connect code into, within the relay's life.
+    /// </summary>
     private async Task<CompanionLink?> WaitForPhoneAsync(CancellationToken ct)
     {
-        if (_s.Registry.Current is { } now)
+        var phoneId = _phoneId is { } named && _s.Registry.IsRegistered(named) ? named : _s.Registry.SolePhone;
+        if (phoneId is null)
+        {
+            return await WaitForClaimAsync(ct);
+        }
+
+        if (phoneId != _phoneId)
+        {
+            await _io.SendAsync(new { type = "phoneFound", phone = phoneId }, ct);
+        }
+
+        if (_s.Registry.Connected(phoneId) is { } now)
         {
             return now;
         }
@@ -141,11 +159,32 @@ public sealed class PhoneRelay
         deadline.CancelAfter(_companion.StartTimeout);
         try
         {
-            return await _s.Registry.WaitForLinkAsync(deadline.Token);
+            return await _s.Registry.WaitForLinkAsync(phoneId, deadline.Token);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return null;
+        }
+    }
+
+    /// <summary>Shows a connect code on the glasses and waits for a companion to claim it.</summary>
+    private async Task<CompanionLink> WaitForClaimAsync(CancellationToken ct)
+    {
+        var connect = _s.Registry.OpenConnectCode();
+        try
+        {
+            await _io.SendAsync(new { type = "connectCode", code = connect.Code }, ct);
+
+            // Like the wait for an offline phone, nothing is read from the glasses meanwhile (one
+            // reader per socket); their pings are answered once the phone is found.
+            var link = await connect.Claimed.WaitAsync(ct);
+            await _io.SendAsync(new { type = "phoneFound", phone = link.PhoneId }, ct);
+            _s.Logger.LogInformation("Glasses from {Remote} found their phone {Name} by connect code", _remote, link.Name);
+            return link;
+        }
+        finally
+        {
+            _s.Registry.CloseConnectCode(connect);
         }
     }
 

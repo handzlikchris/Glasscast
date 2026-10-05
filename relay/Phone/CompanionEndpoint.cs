@@ -8,9 +8,10 @@ using Microsoft.Extensions.Options;
 namespace GlassesRemote.Server.Phone;
 
 /// <summary>
-/// <c>/ws/companion</c>: the phone companion app's socket. It pairs once through the Approve popup
-/// (<c>pair</c>) and afterwards authenticates with its token (<c>auth</c>), then stays connected so
-/// the glasses can start phone sessions. It carries signalling only.
+/// <c>/ws/companion</c>: the phone companion app's socket. It registers once (<c>pair</c>: through
+/// the Approve popup on the PC, at once on a hosted relay) and afterwards authenticates with its
+/// token (<c>auth</c>), then stays connected so glasses can start phone sessions. It carries
+/// signalling only, and the connect codes typed into the companion (<c>claim</c>).
 ///
 /// The app is not a browser, so it sends no Origin. A request that has one came from a web page
 /// and is refused: no site can open this socket from someone's browser.
@@ -70,11 +71,14 @@ public static class CompanionEndpoint
 
         switch (first)
         {
+            case CompanionPairMessage pair when registry.Registration == CompanionRegistration.Open:
+                await RegisterAsync(io, registry, pair, remote, ct);
+                return;
             case CompanionPairMessage pair:
                 await PairAsync(io, registry, pair, remote, ct);
                 return;
-            case CompanionAuthMessage auth when registry.Authenticate(auth.Token):
-                await RunAsync(io, registry, settings, alerts, time, remote, logger, ct);
+            case CompanionAuthMessage auth when registry.Authenticate(auth.Token) is { } phone:
+                await RunAsync(io, registry, phone, settings, alerts, time, remote, logger, ct);
                 return;
             case CompanionAuthMessage:
                 alerts.Raise(AlertKind.AuthenticationFailed, remote, "Companion presented an unknown token");
@@ -84,6 +88,26 @@ public static class CompanionEndpoint
                 alerts.Raise(AlertKind.ProtocolViolation, remote, "First companion message was not pair or auth");
                 await FailAsync(io, "authFailed", ct);
                 return;
+        }
+    }
+
+    /// <summary>Open registration: the token at once, or a generic failure when the limits are hit.</summary>
+    private static async Task RegisterAsync(SocketIO io, CompanionRegistry registry, CompanionPairMessage pair,
+        IPAddress remote, CancellationToken ct)
+    {
+        if (registry.TryRegister(remote, pair.Name) is not { } token)
+        {
+            await FailAsync(io, "pairFailed", ct);
+            return;
+        }
+
+        try
+        {
+            await io.SendAsync(new { type = "paired", token }, ct);
+            await io.CloseQuietlyAsync(WebSocketCloseStatus.NormalClosure, "paired");
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
+        {
         }
     }
 
@@ -130,10 +154,22 @@ public static class CompanionEndpoint
     }
 
     /// <summary>An authenticated companion: stays until it leaves, goes quiet, breaks the rules or is replaced.</summary>
-    private static async Task RunAsync(SocketIO io, CompanionRegistry registry, CompanionOptions settings,
-        AlertLog alerts, TimeProvider time, IPAddress remote, ILogger logger, CancellationToken requestAborted)
+    private static async Task RunAsync(SocketIO io, CompanionRegistry registry, RegisteredPhone phone,
+        CompanionOptions settings, AlertLog alerts, TimeProvider time, IPAddress remote, ILogger logger,
+        CancellationToken requestAborted)
     {
-        var link = new CompanionLink(io, registry.PairedName ?? "phone", remote);
+        // "authenticated" goes first: the companion ignores anything before it, and attaching wakes
+        // any glasses already waiting for this phone, whose relayOpen would otherwise race it.
+        try
+        {
+            await io.SendAsync(new { type = "authenticated" }, requestAborted);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
+        {
+            return;
+        }
+
+        var link = new CompanionLink(io, phone.Id, phone.Name, remote);
         registry.Attach(link);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, link.Closed);
         var ct = cts.Token;
@@ -142,7 +178,6 @@ public static class CompanionEndpoint
 
         try
         {
-            await io.SendAsync(new { type = "authenticated" }, ct);
             var rate = Math.Max(1, settings.MaxMessagesPerSecond);
             var bucket = new TokenBucket(time, rate, rate * 2);
 
@@ -186,6 +221,16 @@ public static class CompanionEndpoint
                 if (message is CompanionPingMessage ping)
                 {
                     await io.SendAsync(new { type = "pong", t = ping.T }, ct);
+                }
+                else if (message is CompanionClaimMessage claim)
+                {
+                    // Answer first, then wake the glasses: their relayOpen follows "claimed".
+                    var connect = registry.TakeConnectCode(link, claim.Code);
+                    await io.SendAsync(new { type = connect is null ? "claimFailed" : "claimed" }, ct);
+                    if (connect is not null)
+                    {
+                        CompanionRegistry.Complete(connect, link);
+                    }
                 }
                 else
                 {

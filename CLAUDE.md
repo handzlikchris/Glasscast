@@ -359,7 +359,9 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   rate-limited; the phone prompts to pair at most every 10 s. Never let the server approve,
   store or see a phone pairing key. The companion registers with the PC once through the Approve
   popup (it may then use the PC as a meeting point); its 256-bit token is hashed on the PC
-  (`companion-grant.json`), forgettable in the tray. `/ws/companion` refuses any
+  (`phones.json`), forgettable in the tray. Only a hosted relay registers phones without
+  approval (`Companion:Registration=Open`), never the PC by default. Glasses find their phone by
+  its id, or by a single-use connect code typed into the companion (5 tries a minute per phone). `/ws/companion` refuses any
   request with an `Origin` header (web pages). The companion parses DataChannel input as
   strictly as `ControlProtocol`, and typed text never presses Enter. It only brings back apps
   you've used on the phone (its own recent list, from accessibility; the glasses send

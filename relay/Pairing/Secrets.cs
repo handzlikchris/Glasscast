@@ -21,6 +21,30 @@ public static class Secrets
         return $"{chars[..3]}-{chars[3..]}";
     }
 
+    /// <summary>
+    /// A connect code: the glasses show it, you type it into the phone's companion app, and the
+    /// relay joins them. Same look as a pairing code; single use, and only while the glasses wait.
+    /// </summary>
+    public static string NewConnectCode() => NewPairingCode();
+
+    /// <summary>Whether <paramref name="code"/> has the shape of a code ("ABC-123", from the alphabet).</summary>
+    public static bool IsCode(string code)
+    {
+        if (code.Length != 7 || code[3] != '-')
+        {
+            return false;
+        }
+
+        for (var i = 0; i < code.Length; i++)
+        {
+            if (i != 3 && CodeAlphabet.IndexOf(code[i]) < 0)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /// <summary>128-bit opaque id for internal bookkeeping.</summary>
     public static string NewId() => Base64Url(RandomNumberGenerator.GetBytes(16));
 

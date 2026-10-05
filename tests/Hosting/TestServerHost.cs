@@ -32,8 +32,11 @@ public sealed class TestServerHost : IAsyncDisposable
     /// <summary>Where this host remembers approved glasses (a fresh temp file).</summary>
     public string DeviceGrantFile { get; } = Path.Combine(Path.GetTempPath(), $"grant-{Guid.NewGuid():N}.json");
 
-    /// <summary>Where this host remembers the paired phone (a fresh temp file).</summary>
+    /// <summary>Where earlier versions remembered the one paired phone (a fresh temp file, imported once).</summary>
     public string CompanionGrantFile { get; } = Path.Combine(Path.GetTempPath(), $"companion-{Guid.NewGuid():N}.json");
+
+    /// <summary>Where this host keeps the registered phones (a fresh temp file).</summary>
+    public string PhonesFile { get; } = Path.Combine(Path.GetTempPath(), $"phones-{Guid.NewGuid():N}.json");
 
     public TestServerHost(Dictionary<string, string?>? settings = null, string[]? args = null)
     {
@@ -46,6 +49,7 @@ public sealed class TestServerHost : IAsyncDisposable
             ["Diagnostics:StatsDirectory"] = StatsDirectory,
             ["Pairing:DeviceGrantFile"] = DeviceGrantFile,
             ["Companion:GrantFile"] = CompanionGrantFile,
+            ["Companion:PhonesFile"] = PhonesFile,
             ["Companion:AuthTimeout"] = "00:00:00.500",
             ["Media:FramesPerSecond"] = "30",
         };
@@ -151,6 +155,7 @@ public sealed class TestServerHost : IAsyncDisposable
         File.Delete(_regionFile);
         File.Delete(DeviceGrantFile);
         File.Delete(CompanionGrantFile);
+        File.Delete(PhonesFile);
         try
         {
             if (Directory.Exists(StatsDirectory))

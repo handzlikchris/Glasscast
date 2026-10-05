@@ -129,7 +129,7 @@ public static class GlassesEndpoints
             return;
         }
 
-        if (auth is ConnectPhoneMessage)
+        if (auth is ConnectPhoneMessage connect)
         {
             // Not a PC session: no lease, no approval on the PC. The phone decides who gets in.
             if (!phone.Registry.TryOpenRelay(remote))
@@ -137,7 +137,7 @@ public static class GlassesEndpoints
                 await io.CloseQuietlyAsync(WebSocketCloseStatus.PolicyViolation, "rate limit");
                 return;
             }
-            await new PhoneRelay(io, remote, phone).RunAsync(context.RequestAborted);
+            await new PhoneRelay(io, remote, connect.Phone, phone).RunAsync(context.RequestAborted);
             return;
         }
 

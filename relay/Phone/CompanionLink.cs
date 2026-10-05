@@ -35,9 +35,9 @@ public sealed class RelayHandle
 }
 
 /// <summary>
-/// One authenticated companion connection. At most one glasses relay (a <see cref="PhoneRelay"/>)
-/// uses it at a time, and the newest wins: the phone itself decides whether those glasses may
-/// in. The companion's signalling messages go to that relay's inbox.
+/// One authenticated companion connection (one registered phone). At most one glasses relay (a
+/// <see cref="PhoneRelay"/>) uses it at a time, and the newest wins: the phone itself decides
+/// whether those glasses may in. The companion's signalling messages go to that relay's inbox.
 /// </summary>
 public sealed class CompanionLink
 {
@@ -46,12 +46,16 @@ public sealed class CompanionLink
     private readonly object _gate = new();
     private RelayHandle? _relay;
 
-    public CompanionLink(SocketIO io, string name, IPAddress remoteAddress)
+    public CompanionLink(SocketIO io, string phoneId, string name, IPAddress remoteAddress)
     {
         _io = io;
+        PhoneId = phoneId;
         Name = name;
         RemoteAddress = remoteAddress;
     }
+
+    /// <summary>The phone's id on this server (not a secret: the glasses keep it to find the phone).</summary>
+    public string PhoneId { get; }
 
     public string Name { get; }
 
