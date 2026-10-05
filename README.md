@@ -57,6 +57,26 @@ The same habits on both targets. **?** on the glasses' bar shows them during a s
 | Swipe down twice | Back | |
 | Middle-finger pinch | The control bar | The control bar |
 
+### Getting around
+
+**The glasses' Back gesture (middle-finger pinch) doesn't go back on the phone.** It opens
+Glasscast's **menu bar** at the top of the view; Back again closes it and you're back on the
+phone's screen. On the bar, swipe left / right to move between buttons and pinch to press one:
+
+| Button | Does |
+| --- | --- |
+| **Back** | The phone's Back (the same as **swiping down twice**, which needs no bar) |
+| **Home** | The phone's home screen |
+| **Apps** | The app overview: swipe left / right through your apps, pinch to pick, Back to leave (or **swipe left twice** from anywhere) |
+| **Notif** | The notification shade |
+| **Type** | A text box for the glasses' voice or handwriting composer: **Send text**, then **Send** (or **swipe right twice**) |
+| **↕** | How far one scroll swipe goes, remembered per app |
+| **?** | The gestures and shortcuts, on the glasses |
+| **End** | Ends the session and goes back to Glasscast's start screen |
+
+While the bar is closed, every pinch and swipe goes to the phone. Two quick
+middle-finger pinches belong to the glasses (they turn the display off and on).
+
 ## How it works
 
 ```
