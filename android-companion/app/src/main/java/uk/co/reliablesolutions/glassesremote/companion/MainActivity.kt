@@ -52,6 +52,9 @@ class MainActivity : Activity() {
     private lateinit var pairCard: View
     private lateinit var unpairButton: Button
     private lateinit var connectCard: View
+    private lateinit var pairCardGlasses: View
+    private lateinit var pairCodeText: TextView
+    private var shownPrompt: PairingPrompt? = null
     private lateinit var connectCode: EditText
     private lateinit var connectStatus: TextView
     private val statusRows = mutableMapOf<String, Pair<TextView, TextView>>()
@@ -94,6 +97,19 @@ class MainActivity : Activity() {
             ),
             margins(top = 16),
         )
+
+        // Glasses asking to pair: the same prompt as the notification, here where you're looking.
+        pairCodeText = text("", 30f, bold = true).apply { letterSpacing = 0.1f }
+        pairCardGlasses = card(
+            title("Pair glasses?"),
+            pairCodeText,
+            body("Approve only if your glasses show this same code."),
+            buttonRow(
+                tonalButton("Reject") { shownPrompt?.let { CompanionService.decidePairing(this, it, approve = false) } },
+                filledButton("Approve") { shownPrompt?.let { CompanionService.decidePairing(this, it, approve = true) } },
+            ),
+        ).apply { visibility = View.GONE }
+        column.addView(pairCardGlasses, margins(top = 16))
 
         // Connect to the server (the PC, or a hosted relay).
         server = EditText(this).apply {
@@ -253,6 +269,10 @@ class MainActivity : Activity() {
         pairCard.visibility = if (paired) View.GONE else View.VISIBLE
         unpairButton.visibility = if (paired) View.VISIBLE else View.GONE
         connectCard.visibility = if (paired) View.VISIBLE else View.GONE
+        val prompt = CompanionService.pairingPrompt
+        shownPrompt = prompt
+        pairCardGlasses.visibility = if (prompt != null) View.VISIBLE else View.GONE
+        if (prompt != null) pairCodeText.text = "${prompt.code.take(3)} ${prompt.code.drop(3)}"
         CompanionService.claimStatus?.let {
             connectStatus.visibility = View.VISIBLE
             connectStatus.text = it

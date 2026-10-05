@@ -36,6 +36,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * Pairing approval and the consent dialog are the gates on the phone: every session needs someone
  * to tap Start here. All state lives on one thread ([handler]).
  */
+/** Glasses asking to pair: the code both screens show, and which prompt an answer is for. */
+data class PairingPrompt(val code: String, val attempt: Int)
+
 class CompanionService : Service() {
     companion object {
         private const val TAG = "CompanionService"
@@ -60,6 +63,11 @@ class CompanionService : Service() {
 
         @Volatile
         var status: String = "Stopped"
+            private set
+
+        /** Glasses asking to pair, while the prompt is open: the setup screen shows it too. */
+        @Volatile
+        var pairingPrompt: PairingPrompt? = null
             private set
 
         /** What became of the last connect code typed on the setup screen; null before one. */
@@ -87,6 +95,14 @@ class CompanionService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, CompanionService::class.java).setAction(ACTION_STOP))
+        }
+
+        /** Approve or Reject on the setup screen: the same as the notification's buttons. */
+        fun decidePairing(context: Context, prompt: PairingPrompt, approve: Boolean) {
+            context.startService(
+                Intent(context, CompanionService::class.java).setAction(ACTION_PAIR)
+                    .putExtra(EXTRA_APPROVE, approve).putExtra(EXTRA_ATTEMPT, prompt.attempt),
+            )
         }
 
         /** Sends a connect code (already normalized) to the server: the glasses showing it are after this phone. */
@@ -130,7 +146,11 @@ class CompanionService : Service() {
             listener = object : GlassesRelay.Listener {
                 override fun onPairingRequest(code: String, attempt: Int) = askPairing(code, attempt)
 
-                override fun onPairingClosed() = getSystemService(NotificationManager::class.java).cancel(PAIR_ID)
+                override fun onPairingClosed() {
+                    getSystemService(NotificationManager::class.java).cancel(PAIR_ID)
+                    pairingPrompt = null
+                    watchers.forEach { it() }
+                }
 
                 override fun onAuthorized(sessionKey: ByteArray) = onGlassesAuthorized(sessionKey)
             },
@@ -293,6 +313,7 @@ class CompanionService : Service() {
             .addAction(Notification.Action.Builder(null, "Approve", action(true, 11)).build())
             .build()
         getSystemService(NotificationManager::class.java).notify(PAIR_ID, notification)
+        pairingPrompt = PairingPrompt(code, attempt)
         setStatus("Glasses want to pair: code $shown")
         handler.postDelayed({ relay.decide(false, attempt) }, PAIR_TIMEOUT_MS)
     }
