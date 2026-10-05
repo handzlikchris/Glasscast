@@ -96,6 +96,8 @@ client-web/             glasses client (600×600)
   src/TypePanel.tsx     text box for the composer, Send text, shortcut keys, focus chain
   src/focusnav.ts       navigation model: Back targets, tap routing (pure, tested)
   src/swipes.ts         THE swipe rules for PC and phone: double left/right, what each does (pure, tested)
+  src/apps/             phone app profiles (Chrome, Claude, Walk for any app): gestures for one app,
+                        the highlight, ✦ per app (architecture/app-profiles.md)
   src/shortcuts.ts      the ? panel's rows (swipe doubles taken from swipes.ts; ShortcutsPanel.tsx)
   src/pinchPress.ts     outside a session (pairing/ended screens), a pinch presses the focused button
   src/mediaStats.ts     Stats panel: capture-to-display latency (RTP timestamp matching, clock offset
@@ -207,7 +209,12 @@ goes back to the PC/Phone first screen (so does End in a phone session), never t
 **?** (on the phone's bar too) shows the session's gestures and shortcuts under the bar; a second
 press closes it. **Keep it current:** any change to a gesture, swipe or Back updates the ? panel in
 the same piece of work. Swipe doubles come from `swipes.ts` by themselves; the other rows are text
-in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
+in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). **Phone app profiles**
+(`client-web/src/apps/`, `architecture/app-profiles.md`; branch `app-controls`, 2026-10-05): the
+app in front may have its own gestures (Chrome: up/down twice hop by link or button, right/left
+twice by heading; Claude: down twice → the message box, then swipes step along its row); Back is
+never a profile's and brings the phone bar with **Apps** focused; **✦** on that bar turns the
+app's profile off (or Walk on, for any app), remembered per app. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the
 **controls** (swipes move focus, a pinch presses the focused control).
 
@@ -343,7 +350,7 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
   session on the PC (tray or Ctrl+Alt+Shift+X) does **not** (user's choice, 2026-09-27): the
   glasses' Reconnect resumes without a new approval. Still one session at a time: a resume only takes over a session of the **same**
   device (closed as `replaced`), never anyone else's, and never while a pairing is pending.
-- The client stores only the brightness level, scroll strengths per app name (PC and phone apart), the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`), the phone pairing `{id, key}` (`phoneTrust.ts`) and the phone's id on the server (`phoneRoute.ts`, not a secret) (localStorage;
+- The client stores only the brightness level, scroll strengths per app name (PC and phone apart), the phone app profiles switched from their default with ✦ (`glasses.appProfiles`, by package), the ♪ setting, the last target (PC/Phone), the device token (`connection.ts`), the phone pairing `{id, key}` (`phoneTrust.ts`) and the phone's id on the server (`phoneRoute.ts`, not a secret) (localStorage;
   never in React state, URLs or logs). Reconnecting is a user choice (Reconnect button); after a
   page (re)load one pinch on the first screen (last target focused) resumes.
 - Exact Origin allowlist on both sockets; `AllowedHosts`; `Web:AllowSameOrigin` is forced off

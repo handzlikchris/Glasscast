@@ -1,9 +1,10 @@
 # App profiles: gestures made for one phone app
 
-Status (2026-10-05): **proposed, not built.** First apps: **Claude** (`com.anthropic.claude`) and
-**Chrome** (`com.android.chrome`). Both maps come from the user's description. Claude's buttons
-were checked against its UI tree on the S25 the same day (below), and so was Chrome's web tree;
-whether Chrome's element walk answers our service is still to check (step 2).
+Status (2026-10-05): **built, not yet tried on the glasses** (branch `app-controls`). Apps:
+**Chrome** (`com.android.chrome`) and **Claude** (`com.anthropic.claude`), and Walk for any app.
+Both maps come from the user's description. Claude's buttons were checked against its UI tree on
+the S25 the same day (below), and so was Chrome's web tree. Unit-tested on both sides; the walk
+over a live page, the scrolling and the highlight are still to see on the device.
 
 A phone session uses the same gestures in every app ([glasses-client.md](glasses-client.md),
 "Swipes" and "Pinches"). That's fine for scrolling and tapping, but slow for an app you use all
@@ -168,7 +169,9 @@ Today the view has two states: the free cursor and the app overview. App profile
   'Comments': pinch opens · down twice: next"). With a `map`, swipes step through it at once and
   one the map doesn't list leaves the highlight. With `view`, a scroll leaves it and a double
   hops again. Pinch-drag always leaves it. The screen keeps moving underneath (a reply streams
-  in, a page loads), so after each step and each tap the glasses ask the phone again.
+  in, a page loads), so each step asks the phone again: a map step for its controls, a walk
+  for the next thing. A pinch presses at once (no wait for a double tap) and ends the
+  highlight: what it pressed usually changes the screen.
 - **App overview:** unchanged and separate from profiles (see "The app overview stays
   separate").
 
@@ -231,9 +234,9 @@ never stored.
 
 ```
 client-web/src/apps/
-  types.ts         AppProfile, ControlMatcher, ProfileAction; nothing app-specific
+  profile.ts       AppProfile, ControlMatcher, ProfileAction, extend(); nothing app-specific
   match.ts         finds a profile's named buttons in a `controls` list (pure, tested)
-  highlight.ts     the highlight state: what a swipe or pinch does in it, given the profile (pure)
+  highlight.ts     the highlight's rules: a map's moves, a field opens Type, the status words (pure)
   walk.ts          Walk (built in, for any app, off by default)
   claude.ts        the Claude profile
   chrome.ts        the Chrome profile (extends Walk)
@@ -423,27 +426,29 @@ accessibility focus within that app.
   (`glasses.appProfiles`). It holds no secret, but CLAUDE.md's list of what the client stores
   gets this added.
 
-## Tests (planned)
+## Tests
 
 - `apps/match.test.ts`: matchers, the order they're tried in, a button that's missing, an answer
   for another package.
-- `apps/highlight.test.ts`: `map` and `view` behaviour, leaving the highlight, a field's pinch
-  opening Type, an answer for another package dropped.
+- `apps/highlight.test.ts`: a map's moves and letting go, a field's pinch opening Type, the
+  status bar's words.
 - `apps/claude.test.ts`: every named button found in each fixture, every move lands on a mapped
   button, the gestures merge with the generic ones (what Claude doesn't take stays generic).
 - `apps/chrome.test.ts`: all four doubles walk, single up/down still scroll, the generic doubles
   it takes are gone from the ? panel.
-- Every profile: Back can't be mapped (rule 1).
+- Back can't be mapped: it isn't a swipe, so `AppProfile.gestures` has no key for it (rule 1).
 - `swipes.test.ts`: the merged map and `waitFor` with and without a profile.
 - `shortcuts.test.ts`: the heading and the app's rows, with the overridden generic doubles left
   out.
-- `apps/prefs.test.ts`: own profiles on by default and Walk off, a switch remembered per app,
-  bad stored data read as the defaults. With a profile off, the gestures and ? rows are generic.
-- `apps/walk.test.ts`: Walk's gestures; Chrome extends it (headings) and keeps the rest.
+- `apps/index.test.ts`: own profiles on by default and Walk off, a switch remembered per app
+  (only what differs from the default), bad stored data read as the defaults, the ✦/✧ mark.
+- `swipes.test.ts`, `shortcuts.test.ts`: Walk's gestures with and without a profile.
 - `phoneProtocol.test.ts`: the `controls` and `walked` parsers (limits, clamping, bad items),
   `walk`, and `pkg`.
-- `InputProtocolTest.kt`: `controls{}`, `walk{}` (units allowlisted). A small Robolectric-free
-  test of the filtering, with fake nodes, if it can be pulled out from `AccessibilityNodeInfo`.
+- `InputProtocolTest.kt`: `controls{}`, `walk{}` (units allowlisted).
+- `ScreenControlsTest.kt` (a fake tree; Claude's row from the S25 dump): labels from inside a
+  button, a field's hint only, password fields left out, flat and hidden nodes, a wrapper counted
+  once, the units, where a walk lands.
 - On the device: the Claude map and the composer after the message box; in Chrome the hops on a
   few sites (Reddit, a news article, a search results page), scroll then hop, the end of a page;
   the app overview as before (cards, the row of apps, picking); Walk in a native app (Settings);
@@ -451,22 +456,21 @@ accessibility focus within that app.
 
 ## Plan
 
-1. **Check both apps on the S25** (read-only; the phone must be on adb). Claude: done
-   2026-10-05 (above); still to see what Send becomes while Claude answers, and a chat screen
-   besides a Code session. Chrome: our service gets the whole web tree (done 2026-10-05); its
-   element walk gets tried with the companion's `walk` (step 2), else the fallback. Fixtures come from the companion's own
-   `controls` answers once step 2 is built, with personal text removed.
-2. **Companion:** `pkg` in `screen`, `controls{}`, `walk{}` and their answers, parser tests,
-   install.
-3. **Glasses, shared parts:** `apps/` types, matcher, highlight state, registry and prefs;
-   `swipes.ts` and `shortcuts.ts` take a profile; the highlight and its box in
-   `PhoneScreen.tsx`; the bar with Apps first and focused, ✦, and the ✦/✧ mark in the status bar.
-4. **Glasses, the profiles:** Walk and Chrome (extending Walk) first, then Claude, each with
-   its tests and committed on its own.
-5. **Docs:** this file to "built"; [phone-mode.md](phone-mode.md) (protocol, bar);
-   [glasses-client.md](glasses-client.md) (Swipes: "an app's profile may take a double");
-   CLAUDE.md (Glasses controls, repo map, what the client stores); the ? panel.
-6. **On the device**, then ask the user before deploying the relay (the glasses page changed).
+Steps 1-5 done on 2026-10-05, each committed on its own on `app-controls`:
+
+1. Both apps checked on the S25 with UI dumps (Claude's buttons; Chrome's whole web tree).
+2. Companion: `pkg` in `screen`, `controls{}`, `walk{}` and their answers.
+3. Glasses, shared parts: `apps/` (profile, matcher, registry, prefs, Walk, highlight rules);
+   `swipes.ts` and `shortcuts.ts` take a profile; `PhoneScreen.tsx` (the highlight and its box,
+   the bar with Apps first and focused, ✦, the ✦/✧ mark).
+4. Glasses, the profiles: Chrome, then Claude.
+5. Docs: this file, [phone-mode.md](phone-mode.md), [glasses-client.md](glasses-client.md),
+   CLAUDE.md.
+6. **Next: on the device** (the list under "Tests"). Still to see: what Send becomes while
+   Claude answers, a Claude chat screen besides a Code session, how long a walk over a big page
+   takes, Chrome scrolling a walked node into view, which unit the right/left hops should use,
+   and whether the bar still fits on one line. The page is 303 KB (95 KB gzipped), a little
+   over Meta's 300 KB guidance. Then ask the user before deploying the relay.
 
 ## Later
 

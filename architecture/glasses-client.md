@@ -20,7 +20,8 @@ pointer drags (pinch-drag) and `history.back()` (middle-finger pinch).
 | `src/TypePanel.tsx` | Text box for the composer, Send text / Clear, key buttons, the focus chain. **Shared by PC and phone sessions** (same steps; the keys are a prop: `PC_KEYS`, `PHONE_KEYS` Enter and ⌫). |
 | `src/focusnav.ts` | Pure navigation model: `NavTarget` (`view`/`controls`), `routeTap`, `backTarget`, `menuFocusFor`, `nextAppSlot`. |
 | `src/swipes.ts` | **The one place swipes on the view are decided**, for PC and phone sessions: `SwipeReader` (single vs double left/right, `DOUBLE_SWIPE_MS` 300), `pcSwipeAction`, `phoneSwipeAction`, `waitingHint`. See "Swipes" below. |
-| `src/shortcuts.ts`, `src/ShortcutsPanel.tsx` | The **?** button's panel on both bars: the session's gestures and shortcuts. Swipe doubles come from `swipes.ts`; pinch and Back rows are text here, updated with any gesture change (CLAUDE.md). |
+| `src/shortcuts.ts`, `src/ShortcutsPanel.tsx` | The **?** button's panel on both bars: the session's gestures and shortcuts. Swipe doubles come from `swipes.ts`; pinch and Back rows are text here, updated with any gesture change (CLAUDE.md). In a phone app with a profile, its rows come first under "In <app>". |
+| `src/apps/` | Phone app profiles (Chrome, Claude, Walk): gestures made for one app, the highlight, ✦ per app. See [app-profiles.md](app-profiles.md). |
 | `src/PhoneScreen.tsx` | A phone session (see [phone-mode.md](phone-mode.md)): `phoneConnect.ts` (relay, connect code, pairing, handshake), `phoneRoute.ts` (the phone's id on this server), `phoneTrust.ts` (the crypto), `phoneSignal.ts` (relay socket), `phoneRtc.ts`, `phoneProtocol.ts`. |
 | `src/gestures.ts` | `GestureTracker` (tap vs drag, 10 px / 500 ms; an *armed* press, the second of a pair, drags with the button held, and `hold()` after `HOLD_DRAG_MS` 400 holds it still), `TapThenHold` (spots that second press), `DOUBLE_TAP_MS` 350. See "Pinches" below. |
 | `src/controls.ts`, `src/geometry.ts` | Cursor/pan/scroll maths and letterbox geometry (see [input-and-desktop.md](input-and-desktop.md)). |
@@ -113,6 +114,10 @@ a `SwipeReader` and act on what `pcSwipeAction` / `phoneSwipeAction` return.
   down-swipes as left, and that stray left must not act.
 - A waiting swipe that lands after the swipes left the view (Back, a panel opened) is ignored.
 - Swipes on the controls, in Type and in Region (PC) don't go through this: they move focus.
+- **Phone app profiles** ([app-profiles.md](app-profiles.md)): the app in front may take some of
+  these gestures (Chrome takes all four doubles, Claude down twice). `phoneSwipeAction` checks
+  the profile first and leaves the rest as in this table; a profile's double makes that swipe
+  wait in that app only (`phoneDoubles`).
 
 ## Type flow
 

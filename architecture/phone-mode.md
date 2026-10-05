@@ -172,7 +172,7 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 | Still screen | The capture makes frames only when the screen changes, so the companion sends the last one again (`SurfaceTextureHelper.forceFrame`) after 400 ms without one, and at once when the crop changes; `CropProcessor` keeps the timestamps rising (libwebrtc drops a frame that isn't newer) | Without it a frame the encoder dropped or the network lost stayed on the glasses until something moved: seconds of a stale page until a scroll (2026-09-30). The repeats of an unchanged screen are tiny |
 | Codec | H.264 preferred (hardware on the S25, proven decode on the glasses), VP8 fallback | Same as the PC path |
 | Type | The PC session's `TypePanel`, same steps: text box and composer → **Send text** → **Send** (keys: Send, ⏎, ⌫). Send presses the app's own send button: a clickable view labelled "Send" or "Send …", the one nearest the text field (Claude, ChatGPT and WhatsApp take Enter as a new line); else the field's editor action (send/go/done); else Enter. ⏎ is a plain Enter. For 0.8 s after the panel moves focus to Send text or Send, that button ignores presses (`guardMs`) | Same habit on both targets; the composer's Insert pinch reached the page late on the S25 |
-| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Back · Home · Apps · Notif · Type · ↕ · ? · End (↕ sets how far a scroll swipe goes for the app shown: 150/100/75/50/25 % of the first swipe, 75 % to start, kept in localStorage by app name apart from the PC's levels; ? shows the shortcuts; End returns to the PC/Phone choice) | Same habits on both targets |
+| Glasses controls | Pinch-drag moves the cursor, a pinch taps. Swipes from `swipes.ts`, shared with PC sessions. Bar: Apps · Back · Home · Notif · Type · ↕ · ✦ · ? · End, opened with Apps focused (so Back then a pinch is the app overview from anywhere; 2026-10-05). ↕ sets how far a scroll swipe goes for the app shown: 150/100/75/50/25 % of the first swipe, 75 % to start, kept in localStorage by app name apart from the PC's levels; ✦ turns the app's profile on or off ([app-profiles.md](app-profiles.md)); ? shows the shortcuts; End returns to the PC/Phone choice | Same habits on both targets |
 | What the glasses see | Always the app in front: the phone crops to its window (a pop-up view, a split-screen half, or the whole screen) and follows it. When that app leaves the screen (it opened another, or Home and another app), the app in front is followed instead (`appToFit`: the top floating window's app, else the active one); with none, the whole screen. No Region or Fit (removed 2026-09-30, user's choice: never used) | Nothing to set up; a hand-placed crop went stale as soon as the app changed |
 | Typing | As a keyboard first (the accessibility service is also an input method), else `ACTION_SET_TEXT` | Apps that draw their own text take keyboard input once their keyboard is open |
 | Input | `AccessibilityService`: `dispatchGesture`, `performGlobalAction`, text | Public API, no ADB, no root |
@@ -236,9 +236,14 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   `switchApp{dir}` (`previous`/`next`; still parsed, no longer sent: left twice
   now opens the app overview with `nav{recents}`, and the phone shows the whole screen until an
   app comes to the front, which the view then follows), `overviewApps{}` (swipe down in the
-  overview: where its row of apps is), `ping{t}` (every 2 s: the phone's only
+  overview: where its row of apps is), `controls{}` and `walk{dir, unit}` (app profiles: what you
+  can press in the followed app, and the next or previous thing of a kind; see
+  [app-profiles.md](app-profiles.md)), `ping{t}` (every 2 s: the phone's only
   sign the glasses are there), `end{}` (End on the glasses).
-- Phone → glasses: `screen{width, height, region, app?}` (the crop and the followed app's name),
+- Phone → glasses: `screen{width, height, region, app?, pkg?}` (the crop, the followed app's name
+  and its package, which picks its profile), `controls{pkg, items}` and `walked{pkg, item?}`
+  (items `{x, y, w, h, kind, label, id}`, boxes 0..1 in the frame; a field's label is its hint,
+  never its text; no password fields),
   `overviewApps{apps: [{x, y, label}]}` (≤ 12: the overview's row of apps, centres 0..1 in the frame,
   in order; read at that moment from the overview's window, the clickable text items; empty if
   there's none or the overview has closed; the glasses move their cursor there and a pinch taps), `result{of, ok}`, `pong{t}`,
