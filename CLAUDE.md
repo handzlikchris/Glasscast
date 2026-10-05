@@ -542,9 +542,10 @@ or a commit message: the repo is going public. Tracked files use `glasses.exampl
   **looked at and not pursued** (no live video in DAT Display; the companion already is the
   native app); lists extras for later (mic dictation, cards, buttons, camera). `companion-sensor-bridge.md` (phone companion app relaying the glasses' camera and
   mic via Meta's DAT) is planned but **on hold** at the user's request.
-  `public-phone-relay.md` (2026-10-05, **parked**): letting other people use phone mode (a hosted
-  multi-phone relay, no PC approval) and publishing the repo (history already scrubbed, not
-  pushed). For now it's just for the user; others can run their own server.
+- **Hosted phone relay (2026-10-05, branch `feat/public-phone-relay`):** built and tested on this
+  PC (`relay-server/`, many phones, connect codes); not yet deployed to the user's box or tried
+  from the glasses. How to publish and run it: `architecture/deployment-and-networking.md`,
+  "Hosted phone relay".
 - **Latency over mobile data (2026-09-27):** the session showed ~26% packet loss, all in the
   seconds keyframes went out, and only 1 in 5 frames shown. Pacing (`RtpPacer`) and heard PLIs
   (`rtcp-rsize`) cut the loss to ~4% on the glasses, with 1-2 s stalls left when a keyframe lost
