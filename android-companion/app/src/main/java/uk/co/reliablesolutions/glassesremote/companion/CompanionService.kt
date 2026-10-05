@@ -376,7 +376,7 @@ class CompanionService : Service() {
         val open = PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_view)
-            .setContentTitle("Glasses Remote")
+            .setContentTitle("Glasscast")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)

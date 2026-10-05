@@ -45,7 +45,7 @@ export function PairingScreen({ onPaired }: Props) {
 
   return (
     <main className="pairing">
-      <h1>Glasses Remote</h1>
+      <h1>Glasscast</h1>
       {state.kind === 'connecting' && <p>Contacting your PC…</p>}
       {state.kind === 'code' && (
         <>

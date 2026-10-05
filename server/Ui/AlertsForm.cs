@@ -12,7 +12,7 @@ internal sealed class AlertsForm : Form
     {
         _alerts = alerts;
 
-        Text = "Glasses remote – recent alerts";
+        Text = "Glasscast – recent alerts";
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(760, 420);

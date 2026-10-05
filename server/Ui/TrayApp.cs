@@ -80,7 +80,7 @@ internal sealed class TrayApp : ApplicationContext
         _tray = new NotifyIcon
         {
             Icon = _idleIcon,
-            Text = "Glasses remote – idle",
+            Text = "Glasscast – idle",
             ContextMenuStrip = menu,
             Visible = true,
         };
@@ -89,7 +89,7 @@ internal sealed class TrayApp : ApplicationContext
         _hotkey = new TerminateHotkey(() => _coordinator.TerminateActiveSession());
         if (!_hotkey.Registered)
         {
-            _tray.ShowBalloonTip(5000, "Glasses remote", $"{HotkeyText} is taken by another app; use the tray menu to end sessions.", ToolTipIcon.Warning);
+            _tray.ShowBalloonTip(5000, "Glasscast", $"{HotkeyText} is taken by another app; use the tray menu to end sessions.", ToolTipIcon.Warning);
         }
 
         _flushTimer.Tick += (_, _) => ShowNotice(_throttle.Flush());
@@ -127,7 +127,7 @@ internal sealed class TrayApp : ApplicationContext
         _popup.FormClosed += (_, _) => _popup = null;
         _popup.Show();
         _tray.Icon = _pendingIcon;
-        _tray.Text = $"Glasses remote – pairing request {request.Code}";
+        _tray.Text = $"Glasscast – pairing request {request.Code}";
         _status.Text = $"Pairing request {request.Code} from {request.RemoteAddress}";
     });
 
@@ -196,7 +196,7 @@ internal sealed class TrayApp : ApplicationContext
         }
 
         _tray.Icon = _activeIcon;
-        _tray.Text = Truncate($"Glasses remote – session from {session.RemoteAddress}");
+        _tray.Text = Truncate($"Glasscast – session from {session.RemoteAddress}");
         _status.Text = $"Session active from {session.RemoteAddress} since {session.StartedAt.ToLocalTime():HH:mm}";
         _terminate.Enabled = true;
         _banner.ShowFor(session.RemoteAddress);
@@ -235,7 +235,7 @@ internal sealed class TrayApp : ApplicationContext
     private void SetIdle()
     {
         _tray.Icon = _idleIcon;
-        _tray.Text = "Glasses remote – idle";
+        _tray.Text = "Glasscast – idle";
         _status.Text = "Idle – waiting for glasses";
         _terminate.Enabled = false;
     }

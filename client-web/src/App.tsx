@@ -42,7 +42,7 @@ export function App() {
       const last = loadTarget();
       return (
         <main className="choose">
-          <h1>Glasses Remote</h1>
+          <h1>Glasscast</h1>
           <div className="targets">
             <button type="button" autoFocus={last === 'pc'} onClick={() => start('pc')}>
               PC

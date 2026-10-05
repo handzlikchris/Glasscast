@@ -75,7 +75,7 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(20), dp(16), dp(24))
         }
 
-        column.addView(text("Glasses Remote", 26f, bold = true))
+        column.addView(text("Glasscast", 26f, bold = true))
         column.addView(text("Lets your Meta glasses see and control this phone.", 15f, secondary = true), margins(top = 2))
 
         // Status: one row per thing that has to be right, with a coloured dot.
@@ -135,8 +135,8 @@ class MainActivity : Activity() {
             card(
                 title("Allow input"),
                 body(
-                    "Settings > Accessibility > Installed apps > Glasses Remote: on. If it's greyed out: " +
-                        "Settings > Apps > Glasses Remote > menu (top right) > Allow restricted settings, then try again.",
+                    "Settings > Accessibility > Installed apps > Glasscast: on. If it's greyed out: " +
+                        "Settings > Apps > Glasscast > menu (top right) > Allow restricted settings, then try again.",
                 ),
                 buttonRow(tonalButton("Open accessibility settings") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }),
             ),

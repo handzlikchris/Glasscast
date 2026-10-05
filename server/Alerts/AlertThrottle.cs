@@ -61,7 +61,7 @@ public sealed class AlertThrottle
         var from = alert.RemoteAddress is null ? "" : $" from {alert.RemoteAddress}";
         var more = others > 0 ? $" (+{others} more)" : "";
         return new AlertNotice(
-            $"Glasses remote: {Describe(alert.Kind)}{more}",
+            $"Glasscast: {Describe(alert.Kind)}{more}",
             $"{alert.Detail}{from}. Open Recent alerts in the tray menu for details.");
     }
 
