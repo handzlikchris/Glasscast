@@ -9,7 +9,8 @@ import { forgetPhoneId, loadPhoneId, savePhoneId } from './phoneRoute';
 import { forgetPairing, Handshake, loadPairing, PairingExchange, type PairingResult } from './phoneTrust';
 
 /** The relay timed out while the glasses showed a connect code nobody typed. */
-const NO_CLAIM = 'No phone took the code in time. Open the companion app on your phone, tap Connect glasses and type the code shown here.';
+const NO_CLAIM =
+  "The phone didn't connect and no code was typed. Start the Glasscast app on the phone (or, if you unpaired or reinstalled it, type the code under Connect glasses), then Reconnect.";
 
 export interface ConnectEvents {
   /** The code to type into the companion while the server waits for a phone to claim it; null once found. */
@@ -50,7 +51,8 @@ export class PhoneConnector {
     this.relay = open(
       {
         onMessage: (message) => void this.onMessage(message).catch(() => this.fail("Couldn't check the phone's reply.")),
-        onClose: (reason) => this.fail(this.waitingForClaim && reason === 'timeout' ? NO_CLAIM : describeRelayClose(reason)),
+        onClose: (reason) =>
+          this.fail(this.waitingForClaim && (reason === 'timeout' || reason === 'phone offline') ? NO_CLAIM : describeRelayClose(reason)),
       },
       loadPhoneId(),
     );
@@ -103,6 +105,11 @@ export class PhoneConnector {
         break;
 
       case 'phoneStatus':
+        // The remembered phone came back by itself while a connect code was showing: no code needed.
+        if (message.state !== 'offline' && this.waitingForClaim) {
+          this.waitingForClaim = false;
+          this.events.onConnectCode(null);
+        }
         this.events.onPhone(message.state);
         if (message.state === 'ready') await this.begin();
         break;

@@ -144,6 +144,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const focusRef = useRef(focus);
   focusRef.current = focus;
   const [phone, setPhone] = useState('reaching the phone…');
+  /** The remembered phone isn't connected (a connect code shows too, in case it was reset). */
+  const [phoneOffline, setPhoneOffline] = useState(false);
   /** The pairing code, while the phone asks for approval. */
   const [code, setCode] = useState<string | null>(null);
   /** The connect code, while the server waits for it to be typed into the phone's companion. */
@@ -239,7 +241,10 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
           else if (connectCodeShown.current) setPhoneFound(true);
           setConnectCode(shown);
         },
-        onPhone: (state) => setPhone(PHONE_STATUS[state]),
+        onPhone: (state) => {
+          setPhone(PHONE_STATUS[state]);
+          setPhoneOffline(state === 'offline');
+        },
         onCode: setCode,
         onOffer: (sdp) => link.handleOffer(sdp),
         onCandidate: (candidate) => void link.addCandidate(candidate),
@@ -685,9 +690,13 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
 
       {connectCode && (
         <div className="phone-pair" role="status">
-          <p>Connect your phone</p>
+          <p>{phoneOffline ? "Your phone isn't connected" : 'Connect your phone'}</p>
           <p className="code">{connectCode.replace('-', ' ')}</p>
-          <p>Open the Glasscast app on your phone, and under Connect glasses type this code.</p>
+          <p>
+            {phoneOffline
+              ? 'Start the Glasscast app on the phone. If you unpaired or reinstalled it, type this code under Connect glasses.'
+              : 'Open the Glasscast app on your phone, and under Connect glasses type this code.'}
+          </p>
         </div>
       )}
 

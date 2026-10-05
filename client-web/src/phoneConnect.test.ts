@@ -18,6 +18,8 @@ class FakePhone {
   forge = false;
   /** The server doesn't know which phone: glasses without its id get a connect code. */
   needsCode = false;
+  /** The remembered phone isn't connected: the server says offline and offers a connect code. */
+  offline = false;
   /** The phone id the glasses opened the relay with. */
   askedFor: string | undefined;
   private commit = '';
@@ -31,7 +33,10 @@ class FakePhone {
     switch (message.type) {
       case 'phone':
         this.askedFor = message.phone;
-        if (this.needsCode && message.phone !== PHONE_ID) {
+        if (this.offline) {
+          this.send({ type: 'phoneStatus', state: 'offline' });
+          this.send({ type: 'connectCode', code: 'ABC-234' });
+        } else if (this.needsCode && message.phone !== PHONE_ID) {
           this.send({ type: 'connectCode', code: 'ABC-234' });
         } else {
           this.send({ type: 'phoneStatus', state: 'ready' });
@@ -212,6 +217,28 @@ describe('connecting to the phone', () => {
     waiting.closeFromPc('timeout');
     expect(waiting.events.onFailed).toHaveBeenCalledWith(expect.stringContaining('Connect glasses'));
     expect(waiting.events.onConnectCode).toHaveBeenLastCalledWith(null);
+  });
+
+  it('drops the connect code when the remembered phone comes back by itself', async () => {
+    const phone = new FakePhone();
+    phone.offline = true;
+    const waiting = connect(phone);
+    await settle();
+    expect(waiting.events.onConnectCode).toHaveBeenLastCalledWith('ABC-234');
+
+    phone.send({ type: 'phoneStatus', state: 'ready' });
+    await settle();
+    expect(waiting.events.onConnectCode).toHaveBeenLastCalledWith(null);
+    expect(phone.answerOk).toBe(true);
+  });
+
+  it('says how to get out when the remembered phone never comes back', async () => {
+    const phone = new FakePhone();
+    phone.offline = true;
+    const waiting = connect(phone);
+    await settle();
+    waiting.closeFromPc('phone offline');
+    expect(waiting.events.onFailed).toHaveBeenCalledWith(expect.stringContaining('unpaired or reinstalled'));
   });
 
   it('finds the phone again after Pair again', async () => {
