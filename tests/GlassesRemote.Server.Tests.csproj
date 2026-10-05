@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\server\GlassesRemote.Server.csproj" />
+    <ProjectReference Include="../relay-server/GlassesRemote.RelayServer.csproj" />
   </ItemGroup>
 
   <ItemGroup>

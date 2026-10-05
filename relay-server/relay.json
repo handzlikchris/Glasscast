@@ -1,0 +1,35 @@
+// The relay server's settings. Its own name (not appsettings.json) so it never mixes with the
+// PC server's when both are built into one folder (the tests). Machine-specific values go in
+// relay.Local.json next to it (git-ignored), or environment variables (Web__PublicHost).
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  // Web:PublicHost is added to these.
+  "AllowedHosts": "localhost;127.0.0.1",
+  // Loopback only: Caddy (or another proxy on this machine) terminates TLS and forwards here.
+  "Urls": "http://127.0.0.1:5090",
+
+  "Web": {
+    // Your public host name (e.g. relay.example.com): allowed as a host and as the https://
+    // origin of the sockets. Put it in relay.Local.json or set Web__PublicHost.
+    "PublicHost": "",
+    // The built glasses page (client-web/dist); the publish script copies it to wwwroot.
+    "ClientRoot": "../client-web/dist"
+  },
+
+  "Companion": {
+    // No one to click Approve on a relay: phones register themselves (always; rate-limited and
+    // capped). The phone itself still pairs and checks the glasses.
+    "MaxPhones": 1000,
+    "ForgetAfter": "90.00:00:00"
+  },
+
+  "Relay": {
+    // Where the registered phones are kept (token hashes only). Empty = LocalAppData/GlassesRemote/relay.
+    "DataDirectory": ""
+  }
+}

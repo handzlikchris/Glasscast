@@ -118,6 +118,31 @@ public static class RelayProtocol
     public static bool TryParse(string json, out GlassesSignal? message, out string? error) =>
         TryParse(System.Text.Encoding.UTF8.GetBytes(json), out message, out error);
 
+    /// <summary>The first message on a relay-only server's session socket: <c>{type:"phone", phone?}</c>, or null.</summary>
+    public static ConnectSignal? TryParseConnect(ReadOnlySpan<byte> utf8Json)
+    {
+        if (utf8Json.Length == 0 || utf8Json.Length > JsonRules.MaxMessageBytes)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(utf8Json.ToArray(), DocumentOptions);
+            var e = doc.RootElement;
+            return e.ValueKind == JsonValueKind.Object
+                   && e.TryGetProperty("type", out var type)
+                   && type.ValueKind == JsonValueKind.String
+                   && type.GetString() == "phone"
+                ? ParseConnect(e)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// The first message of a phone relay, <c>{type:"phone", phone?}</c>, from an already parsed
     /// object (the PC's session socket parses its first message with <c>ControlProtocol</c>).

@@ -566,8 +566,9 @@ public sealed class CompanionRegistry : IDisposable
                 return;
             }
 
-            // The one paired phone of earlier versions keeps working: it gets an id here, once.
-            if (File.Exists(_grantFile) && JsonSerializer.Deserialize<StoredGrant>(File.ReadAllText(_grantFile)) is { } grant)
+            // The one phone paired on the PC by earlier versions keeps working: it gets an id here,
+            // once. Never on a hosted relay, which may share the machine but not the PC's phone.
+            if (_options.Registration == CompanionRegistration.Approve && File.Exists(_grantFile) && JsonSerializer.Deserialize<StoredGrant>(File.ReadAllText(_grantFile)) is { } grant)
             {
                 var phone = new RegisteredPhone(Secrets.NewId(), grant.Name, Convert.FromBase64String(grant.TokenHash),
                     grant.PairedAt, grant.PairedAt);
