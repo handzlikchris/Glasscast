@@ -12,14 +12,13 @@ when asked.
 - The host is configuration now: `Web:PublicHost` (server), `GLASSES_HOST` (Caddyfile),
   `glassesServer` in `android-companion/local.properties` (the companion's default address,
   `BuildConfig.DEFAULT_SERVER`). Machine facts are in the git-ignored `CLAUDE.local.md`.
-- **Not pushed.** The rewrite removed the `origin` remote. Local `main` and `feat/phone-mode`
-  no longer share commits with `origin` (github.com/handzlikchris/GlassesRemote, private).
+- **Pushed over the old history (2026-10-05)**, to the same repo, renamed **Glasscast**
+  (github.com/handzlikchris/Glasscast, private). The user chose this over a fresh repo: the old
+  commits stay reachable on GitHub by hash (short hashes can be brute-forced) until GitHub
+  support purges them. Ask them to request a purge before making the repo public.
 
 ## Before publishing the repo
 
-- **Where to push:** a new GitHub repo, or delete and recreate the old one. Force-pushing over
-  the existing repo leaves old commits reachable by hash on GitHub until support purges them.
-  Ask the user; never force-push without a go-ahead.
 - **Package name** `uk.co.reliablesolutions.glassesremote.companion` names the user's company.
   Renaming means a new app on the phone (reinstall, accessibility again, pair again). Ask.
 - Harmless leftovers the user may want gone: LAN addresses (192.168.1.x), the PC name in old
