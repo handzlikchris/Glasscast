@@ -191,7 +191,7 @@ class Pairing(private val url: String, private val name: String, private val lis
                         val token = message.opt("token") as? String
                         if (token != null) finish { listener.onPaired(token) } else finish { listener.onFailed("no token") }
                     }
-                    "pairFailed" -> finish { listener.onFailed("Not approved on the PC") }
+                    "pairFailed" -> finish { listener.onFailed("Not approved (rejected on the PC, or the server is busy: try again in a minute)") }
                 }
             }
 
@@ -203,7 +203,7 @@ class Pairing(private val url: String, private val name: String, private val lis
                 finish { listener.onFailed("Pairing ended without approval") }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) =
-                finish { listener.onFailed("Couldn't reach the PC: ${t.message}") }
+                finish { listener.onFailed("Couldn't reach the server: ${t.message}") }
         })
     }
 

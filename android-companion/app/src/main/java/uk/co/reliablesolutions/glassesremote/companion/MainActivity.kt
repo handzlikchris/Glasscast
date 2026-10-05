@@ -32,10 +32,12 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * Setup, done once: pair with the PC (approve the code in its popup: that only lets this phone use
- * the PC as a meeting point), turn on the accessibility service, start the companion. The glasses
- * pair with this phone the first time they choose Phone (the same code on both, Approve in a
- * notification here); after that the phone only asks for the screen-capture consent each time.
+ * Setup, done once: connect to a server (your PC: approve the code in its popup; a hosted relay:
+ * at once. Either way it's only the meeting point the glasses use to reach this phone), turn on
+ * the accessibility service, start the companion. The first time the glasses look for this phone
+ * on a server they show a connect code, typed in here; then they pair with this phone (the same
+ * code on both, Approve in a notification here); after that the phone only asks for the
+ * screen-capture consent each time.
  *
  * Plain platform views (no AndroidX), laid out as Material-style cards: a status card on top, then
  * one card per step. Colours come from the device theme (light or dark).
@@ -49,6 +51,9 @@ class MainActivity : Activity() {
     private lateinit var pairButton: Button
     private lateinit var pairCard: View
     private lateinit var unpairButton: Button
+    private lateinit var connectCard: View
+    private lateinit var connectCode: EditText
+    private lateinit var connectStatus: TextView
     private val statusRows = mutableMapOf<String, Pair<TextView, TextView>>()
     private var pairing: Pairing? = null
     private val watcher: () -> Unit = { runOnUiThread { refresh() } }
@@ -82,7 +87,7 @@ class MainActivity : Activity() {
         column.addView(
             card(
                 statusRow("companion", "Companion"),
-                statusRow("pc", "PC"),
+                statusRow("pc", "Server"),
                 statusRow("glasses", "Glasses"),
                 statusRow("input", "Input"),
                 statusRow("screen", "Screen"),
@@ -90,7 +95,7 @@ class MainActivity : Activity() {
             margins(top = 16),
         )
 
-        // Pair with the PC.
+        // Connect to the server (the PC, or a hosted relay).
         server = EditText(this).apply {
             setText(prefs.server)
             inputType = InputType.TYPE_TEXT_VARIATION_URI
@@ -101,8 +106,11 @@ class MainActivity : Activity() {
         code = text("", 22f, bold = true).apply { visibility = View.GONE }
         // Shown only until the phone is paired: then Run is the first card, and Unpair is in it.
         pairCard = card(
-            title("Pair with the PC"),
-            body("The PC is only the meeting point the glasses use to reach this phone. Approve the code in its popup."),
+            title("Connect to the server"),
+            body(
+                "The server (your PC, or a hosted relay) is only the meeting point the glasses use to reach this " +
+                    "phone. On your PC, approve the code in its popup.",
+            ),
             server,
             buttonRow(filledButton("Pair") { startPairing() }.also { pairButton = it }),
             code,
@@ -124,11 +132,33 @@ class MainActivity : Activity() {
                         prefs.glasses = null
                         refresh()
                     },
-                    textButton("Unpair from the PC") { confirmUnpair() }.also { unpairButton = it },
+                    textButton("Unpair from the server") { confirmUnpair() }.also { unpairButton = it },
                 ),
             ),
             margins(top = 16),
         )
+
+        // Connect glasses: the code they show the first time they look for this phone on a server.
+        connectCode = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            hint = "ABC-234"
+            isSingleLine = true
+            textSize = 22f
+            letterSpacing = 0.1f
+        }
+        connectStatus = body("").apply { visibility = View.GONE }
+        connectCard = card(
+            title("Connect glasses"),
+            body(
+                "The first time, the glasses show a code instead of finding this phone. Type it here while " +
+                    "the companion runs.",
+            ),
+            connectCode,
+            buttonRow(filledButton("Connect") { sendConnectCode() }),
+            connectStatus,
+        )
+        column.addView(connectCard, margins(top = 16))
 
         // Input.
         column.addView(
@@ -222,15 +252,34 @@ class MainActivity : Activity() {
         val paired = prefs.token != null
         pairCard.visibility = if (paired) View.GONE else View.VISIBLE
         unpairButton.visibility = if (paired) View.VISIBLE else View.GONE
+        connectCard.visibility = if (paired) View.VISIBLE else View.GONE
+        CompanionService.claimStatus?.let {
+            connectStatus.visibility = View.VISIBLE
+            connectStatus.text = it
+        }
     }
 
-    /** Forgets the PC's companion token here (the PC still lists the phone until Forget phone in its tray). */
+    /** Sends the typed connect code, if it looks like one, through the running companion. */
+    private fun sendConnectCode() {
+        connectStatus.visibility = View.VISIBLE
+        val code = ConnectCode.normalize(connectCode.text.toString())
+        when {
+            code == null -> connectStatus.text = "Type the 6 characters the glasses show (letters and digits)"
+            !CompanionService.running -> connectStatus.text = "Tap Start first, then Connect"
+            else -> {
+                connectCode.setText(code)
+                CompanionService.claim(this, code)
+            }
+        }
+    }
+
+    /** Forgets the server's companion token here (the PC still lists the phone until Forget phones in its tray). */
     private fun confirmUnpair() {
         AlertDialog.Builder(this)
-            .setTitle("Unpair from the PC?")
+            .setTitle("Unpair from the server?")
             .setMessage(
-                "The companion stops and forgets this PC. To use the glasses again, pair with the PC again " +
-                    "(approve the code in its popup). On the PC, Forget phone in the tray removes it there too.",
+                "The companion stops and forgets this server. To use the glasses again, connect to it again " +
+                    "(on a PC, approve the code in its popup). On a PC, Forget phones in the tray removes it there too.",
             )
             .setPositiveButton("Unpair") { _, _ ->
                 if (CompanionService.running) CompanionService.stop(this)
@@ -284,7 +333,7 @@ class MainActivity : Activity() {
         }
         prefs.server = url
         pairing?.cancel()
-        code.text = "Contacting the PC…"
+        code.text = "Contacting the server…"
         pairing = Pairing(url, Build.MODEL.take(32), object : Pairing.Listener {
             override fun onCode(code: String, expiresInSeconds: Int) = runOnUiThread {
                 this@MainActivity.code.text = "On the PC, approve if it shows\n$code"

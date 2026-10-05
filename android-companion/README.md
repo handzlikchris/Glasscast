@@ -34,9 +34,10 @@ Or open `android-companion/` in Android Studio.
 
 1. Open **Glasscast** and enter the server's companion address,
    `wss://<your host>/ws/companion` (a build can fill it in: `glassesServer=wss://...` in
-   `android-companion/local.properties`, git-ignored). Tap **Pair**: the PC shows a
-   "Phone pairing request" popup with the same code. Approve it there. (This only lets the
-   phone use the PC as a meeting point; the glasses pair with the phone itself, below.)
+   `android-companion/local.properties`, git-ignored). Tap **Pair**. On your PC's server, the PC
+   shows a "Phone pairing request" popup with the same code: approve it there. A hosted relay
+   (`relay-server/`) registers the phone at once. (This only lets the phone use the server as a
+   meeting point; the glasses pair with the phone itself, below.)
 2. **Accessibility:** Settings > Accessibility > Installed apps > Glasscast > on. A
    sideloaded app is greyed out at first ("Restricted setting"): Settings > Apps >
    Glasscast > ⋮ > **Allow restricted settings**, then turn it on.
@@ -56,7 +57,10 @@ Or open `android-companion/` in Android Studio.
 
 ## A session
 
-On the glasses choose **Phone**. The first time (or after Pair again / Forget the glasses), the
+On the glasses choose **Phone**. The first time on a server (or after Pair again) the glasses may
+show a **connect code** instead (always on a hosted relay, or when the PC knows several phones):
+type it under **Connect glasses** in the companion while it runs. From then on the glasses ask
+for this phone by its id. The first time (or after Pair again / Forget the glasses), the
 glasses show a code and the phone a notification "Pair glasses? Code …": if the codes match, tap
 **Approve**. Then the phone shows the screen-capture prompt (or a notification to open it): tap
 **Start**. The glasses then see the whole screen; the notification offers
@@ -69,7 +73,8 @@ glasses' ping.
 
 | File | Role |
 | --- | --- |
-| `CompanionService.kt` | Foreground service: the PC connection, relays, the pairing prompt, the session's life |
+| `CompanionService.kt` | Foreground service: the server connection, relays, connect codes (`claim`), the pairing prompt, the session's life |
+| `ConnectCode.kt` | A typed connect code in the server's shape ("abc 234" → "ABC-234"; unit-tested) |
 | `GlassesRelay.kt` | The phone's side of a glasses relay: pairing (code, Approve), proof, the session key |
 | `GlassesTrust.kt` | The crypto: ECDH P-256, HMACs (same test vector as the glasses' `phoneTrust.ts`) |
 | `ServerLink.kt` | `Prefs` (server, token, paired glasses), `ServerLink` (auth, ping, reconnect), `Pairing` |
@@ -78,5 +83,5 @@ glasses' ping.
 | `CropProcessor.kt` | Crops frames to the region, long side ≤ 600 |
 | `InputService.kt` | Accessibility service: gestures, global actions, text into the focused field, keep screen on |
 | `InputProtocol.kt` | Strict parser for the glasses' DataChannel messages (unit-tested) |
-| `MainActivity.kt` | Setup screen: a status card (companion, PC, glasses, input, screen) and one card per step, Material-style with plain views and the device theme's colours; Start/Stop in one button (the first card once paired; before that, Pair leads, and once paired Unpair replaces it); Square screen / Reset screen and the ⓘ setup pop-up |
+| `MainActivity.kt` | Setup screen: a status card (companion, server, glasses, input, screen) and one card per step, Material-style with plain views and the device theme's colours; Start/Stop in one button (the first card once paired; before that, Pair leads, and once paired Unpair replaces it); Connect glasses (the connect code); Square screen / Reset screen and the ⓘ setup pop-up |
 | `DisplayOverride.kt` | Square screen and reset: the window manager's forced size and density (hidden API via HiddenApiBypass; needs `WRITE_SECURE_SETTINGS`, granted once over adb) |

@@ -44,6 +44,7 @@ class CompanionService : Service() {
         const val ACTION_CONSENT = "consent"
         const val ACTION_END_SESSION = "endSession"
         const val ACTION_PAIR = "pair"
+        const val ACTION_CLAIM = "claim"
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
         const val EXTRA_APPROVE = "approve"
@@ -59,6 +60,11 @@ class CompanionService : Service() {
 
         @Volatile
         var status: String = "Stopped"
+            private set
+
+        /** What became of the last connect code typed on the setup screen; null before one. */
+        @Volatile
+        var claimStatus: String? = null
             private set
 
         /** Started and not stopped since (the setup screen's Start / Stop button). */
@@ -81,6 +87,11 @@ class CompanionService : Service() {
 
         fun stop(context: Context) {
             context.startService(Intent(context, CompanionService::class.java).setAction(ACTION_STOP))
+        }
+
+        /** Sends a connect code (already normalized) to the server: the glasses showing it are after this phone. */
+        fun claim(context: Context, code: String) {
+            context.startService(Intent(context, CompanionService::class.java).setAction(ACTION_CLAIM).putExtra(EXTRA_CODE, code))
         }
     }
 
@@ -131,7 +142,7 @@ class CompanionService : Service() {
             ACTION_START -> {
                 running = true
                 watchers.forEach { it() }
-                foreground(projection = false, "Connecting to the PC…")
+                foreground(projection = false, "Connecting to the server…")
                 handler.post { connect() }
             }
             ACTION_STOP -> handler.post {
@@ -164,6 +175,13 @@ class CompanionService : Service() {
                 val attempt = intent.getIntExtra(EXTRA_ATTEMPT, -1)
                 handler.post { relay.decide(approve, attempt) }
             }
+            ACTION_CLAIM -> {
+                val code = intent.getStringExtra(EXTRA_CODE) ?: return START_NOT_STICKY
+                handler.post {
+                    val sent = link?.send(JSONObject().put("type", "claim").put("code", code)) ?: false
+                    setClaimStatus(if (sent) "Checking the code…" else "Not connected to the server: tap Start first, then try again")
+                }
+            }
         }
         return START_NOT_STICKY
     }
@@ -185,11 +203,11 @@ class CompanionService : Service() {
         link?.stop()
         val token = prefs.token
         if (token == null) {
-            setStatus("Not paired: pair with the PC first")
+            setStatus("Not paired: connect to a server first")
             stopSelf()
             return
         }
-        setStatus("Connecting to the PC…")
+        setStatus("Connecting to the server…")
         link = ServerLink(prefs.server, token, object : ServerLink.Listener {
             override fun onConnected() = handler.post { setStatus("Ready: the glasses can start a phone session") }.let {}
 
@@ -197,12 +215,12 @@ class CompanionService : Service() {
                 // A connected session carries on: it doesn't need the PC. Only what was still
                 // being set up through it goes.
                 relayGone()
-                if (session == null) setStatus("Reconnecting to the PC…")
+                if (session == null) setStatus("Reconnecting to the server…")
             }.let {}
 
             override fun onAuthFailed() = handler.post {
                 prefs.token = null
-                setStatus("The PC doesn't know this phone any more: pair again")
+                setStatus("The server doesn't know this phone any more: pair again")
                 link = null
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -219,6 +237,10 @@ class CompanionService : Service() {
                 relay.open()
             }
             "relayClosed" -> relayGone()
+            "claimed" -> setClaimStatus(
+                if (prefs.glasses != null) "Found the glasses: connecting" else "Found the glasses: approve the pairing code when it shows",
+            )
+            "claimFailed" -> setClaimStatus("That code didn't work: check it on the glasses (it changes each time), or wait a minute after several tries")
             "pairStart", "pairReveal", "hello", "proof" -> relay.receive(message)
             "rtcAnswer" -> {
                 val sdp = message.opt("sdp") as? String ?: return
@@ -360,6 +382,11 @@ class CompanionService : Service() {
 
     private fun sendState(state: String) {
         link?.send(JSONObject().put("type", "sessionState").put("state", state))
+    }
+
+    private fun setClaimStatus(text: String) {
+        claimStatus = text
+        watchers.forEach { it() }
     }
 
     private fun setStatus(text: String) {
