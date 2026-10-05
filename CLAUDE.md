@@ -78,6 +78,8 @@ relay/                  GlassesRemote.Relay (net10.0 library, no Windows/capture
   Sessions/             SocketIO (capped WS reads/writes), TokenBucket
   Protocol/             JsonRules (the strict-parsing helpers), ControlMessage, IceCandidateMessage
   Alerts/               AlertLog
+relay-server/           GlassesRemote.RelayServer: headless phone relay to host anywhere (page +
+                        relays, nothing else; relay.json / relay.Local.json; see deployment doc)
 client-web/             glasses client (600×600)
   build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory
@@ -104,8 +106,9 @@ tests/                  xUnit: unit + WebSocket integration (TestServerHost) + r
 android-companion/      phone companion app (Kotlin, no AndroidX, libwebrtc + OkHttp); see its README
 tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and app switches) +
                         browser/drive.mjs (headless Chrome, 48 checks)
-deploy/                 Caddyfile, firewall.ps1
+deploy/                 Caddyfile, firewall.ps1; Caddyfile.relay + relay/ (start scripts, systemd unit)
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
+scripts/publish-relay.ps1  publishes the relay server with the page (self-contained)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
 .claude/tasks/          task briefs for new sessions
 architecture/           one doc per feature area (files, flows, rules, tests); start at README.md
@@ -120,6 +123,8 @@ cd client-web; npm test; npx tsc --noEmit; npm run build   # ~110 client tests, 
 cd android-companion; .\gradlew.bat assembleDebug testDebugUnitTest   # companion app (see its README)
 .\scripts\run.ps1 -Dev                          # local: http://127.0.0.1:5080
 .\scripts\run.ps1 -Lan                          # other devices on the LAN (needs firewall.ps1 -LanTesting)
+dotnet run --project relay-server --launch-profile relay   # hosted phone relay: http://127.0.0.1:5090
+.\scripts\publish-relay.ps1 [-Runtime linux-x64]  # self-contained relay + page, for another box
 $env:GLASSES_HOST='<host>'; .\tools\bin\caddy.exe run --config deploy\Caddyfile   # public HTTPS
 dotnet run --project tools/e2e-harness          # then: cd tools/e2e-harness/browser; npm run drive
 ```
@@ -317,7 +322,9 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). Model in
 ## Security invariants — do not break
 
 - Only public ports: TCP 443 (→ Caddy 8443) and UDP 50000 (phone mode adds none: its media goes
-  phone ↔ glasses). App listens on loopback (except the
+  phone ↔ glasses). A hosted relay (`relay-server/`) exposes TCP 443 only, and must never
+  reference `server/` or anything that captures, injects input, moves windows or sends media
+  (`RelayServerIsolationTests`). App listens on loopback (except the
   dev `lan` profile). RDP, admin endpoints, shells, file APIs: never.
 - No PC session without a human clicking **Approve** on the PC, or a device token from such an
   approval less than 24 h ago. (Phone sessions are gated on the phone instead: see Phone mode.) **Never** add auto-approve, a bypass flag, or a network approval

@@ -36,6 +36,23 @@ there"). Limit changes. Many phones from the start. The hosted page is phone onl
 Commits in that order: plan, move to `relay/` (no behaviour change), many phones + connect
 codes (server, tests), relay server (+ tests), client, companion, deploy + docs.
 
+## Done on the branch (2026-10-05)
+
+All of the plan above: `relay/` library, many phones with connect codes (PC keeps the popup and
+routes id-less glasses to its only phone), `relay-server/`, `/features` and the phone-only page,
+the companion's Connect glasses card, `scripts/publish-relay.ps1`, `deploy/Caddyfile.relay`,
+`deploy/relay/` (start scripts, systemd unit). Verified: 317 server tests, 173 client tests,
+23 companion unit tests, 49/49 e2e checks, and a published win-x64 relay driven through
+registration → connect code → by-id by a script.
+
+**Not verified yet:** the relay on the user's box behind Caddy with a real certificate; the
+glasses and the S25 against it (connect code typed on the phone, pairing, a session); the PC
+server restarted with this branch (it imports `companion-grant.json` into `phones.json` once;
+the glasses then get `phoneFound` for the only phone).
+
+Next: deploy to the user's box (host name, Caddy or IIS there), install the new companion,
+try it from the glasses. Then the rest of "Before publishing the repo" below.
+
 ## Already done (2026-10-05)
 
 - The real host name and public IP were removed from every file and commit message, all history
