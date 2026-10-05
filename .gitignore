@@ -11,6 +11,8 @@ TestResults/
 node_modules/
 dist/
 dist-e2e/
+dist-relay/
+publish/
 *.local
 .vite/
 

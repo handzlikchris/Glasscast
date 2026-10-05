@@ -17,8 +17,9 @@
     // Your public host name (e.g. relay.example.com): allowed as a host and as the https://
     // origin of the sockets. Put it in relay.Local.json or set Web__PublicHost.
     "PublicHost": "",
-    // The built glasses page (client-web/dist); the publish script copies it to wwwroot.
-    "ClientRoot": "../client-web/dist"
+    // The built glasses page: scripts/publish-relay.ps1 puts it in wwwroot next to the program.
+    // (The launch profiles point at client-web/dist instead.)
+    "ClientRoot": "wwwroot"
   },
 
   "Companion": {

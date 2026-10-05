@@ -33,7 +33,7 @@
 	# Allowlist: only the web client, health check and the WebSockets (glasses pair/session,
 	# the phone companion app) reach the app.
 	# The CSP header is set by the app itself.
-	@allowed path / /index.html /favicon.svg /icon-192.png /icon-512.png /apple-touch-icon.png /manifest.webmanifest /assets/* /health /ws/pair /ws/session /ws/companion
+	@allowed path / /index.html /favicon.svg /icon-192.png /icon-512.png /apple-touch-icon.png /manifest.webmanifest /assets/* /health /features /ws/pair /ws/session /ws/companion
 	handle @allowed {
 		reverse_proxy 127.0.0.1:5080
 	}

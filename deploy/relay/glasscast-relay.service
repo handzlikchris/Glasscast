@@ -1,0 +1,26 @@
+# systemd unit for the Glasscast phone relay on Linux. Publish with
+#   .\scripts\publish-relay.ps1 -Runtime linux-x64     (or linux-arm64)
+# copy the folder to /opt/glasscast-relay, then:
+#   sudo useradd --system --no-create-home glasscast
+#   sudo cp glasscast-relay.service /etc/systemd/system/ && sudo systemctl enable --now glasscast-relay
+[Unit]
+Description=Glasscast phone relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=glasscast
+WorkingDirectory=/opt/glasscast-relay
+ExecStart=/opt/glasscast-relay/GlassesRemote.RelayServer
+Environment=Web__PublicHost=relay.example.com
+# The registered phones (token hashes only) live here.
+StateDirectory=glasscast-relay
+Environment=Relay__DataDirectory=/var/lib/glasscast-relay
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

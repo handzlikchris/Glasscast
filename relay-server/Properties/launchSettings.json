@@ -7,7 +7,8 @@
       "launchBrowser": false,
       "applicationUrl": "http://127.0.0.1:5090",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Production"
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "Web__ClientRoot": "../client-web/dist"
       }
     },
     "relay-dev": {
@@ -16,7 +17,8 @@
       "launchBrowser": false,
       "applicationUrl": "http://127.0.0.1:5090",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Web__ClientRoot": "../client-web/dist"
       }
     }
   }

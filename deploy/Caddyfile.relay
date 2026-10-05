@@ -1,0 +1,52 @@
+# Public reverse proxy for a hosted phone relay (relay-server/), on the machine it runs on.
+#   Windows:  $env:RELAY_HOST = 'relay.example.com'; caddy run --config deploy/Caddyfile.relay
+#   Linux:    RELAY_HOST=relay.example.com caddy run --config Caddyfile.relay
+#
+# Caddy needs public TCP 443 to reach it (the certificate comes over TLS-ALPN on that port). If
+# something else holds 443 on the machine (IIS), let the router forward 443 to another port and
+# set HTTPS_PORT to it, as the PC's Caddyfile does with 8443. Nothing else is public: no UDP,
+# the phone's video goes straight to the glasses.
+{
+	https_port {$HTTPS_PORT:443}
+
+	# Port 80 may be taken or not forwarded: no HTTP->HTTPS redirect listener.
+	auto_https disable_redirects
+}
+
+{$RELAY_HOST} {
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Allowlist: the glasses page, health and features, the glasses' relay socket and the
+	# phones' companion socket. The CSP header is set by the relay itself.
+	@allowed path / /index.html /favicon.svg /icon-192.png /icon-512.png /apple-touch-icon.png /manifest.webmanifest /assets/* /health /features /ws/session /ws/companion
+	handle @allowed {
+		reverse_proxy 127.0.0.1:5090
+	}
+
+	handle {
+		respond 404
+	}
+
+	# Tokens never travel in URLs (they go in the first WebSocket message), so the access log
+	# cannot capture them.
+	log {
+		output file caddy-relay-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		format json
+	}
+}
