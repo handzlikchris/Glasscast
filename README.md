@@ -21,7 +21,7 @@ the glasses as they are, with nothing for their makers to build.
 They look right there, too. The glasses' display is a 600×600 square, and **Square screen** in
 the companion turns the phone's screen into a 1080×1080 square, so apps lay themselves out
 for it: the whole app fills the display, no letterboxing, text big enough to read. **Reset
-screen** puts the phone back when you're done. (Square screen needs a one-off permission granted over
+screen** puts the phone back when you're done. (Square screen needs a [one-off permission](#square-screen-recommended-one-off-setup) granted over
 ADB; without it the view still follows the app in front, letterboxed.)
 
 Your phone sits on the table, on a stand or in your bag. The glasses show its screen live, and
@@ -121,8 +121,36 @@ server? See [Host it yourself](#host-it-yourself).)
    phone; Glasscast only acts on what the glasses send during a session.
 5. Tap **Start**. A notification stays while the companion is ready for the glasses.
 
-Optional: **Square screen** (fills the glasses' square display, one-off ADB permission, ⓘ in
-the app explains) and a small keyboard (see [Use Gboard, made small](#use-gboard-made-small)).
+Then the square screen (recommended) and a small keyboard (see
+[Use Gboard, made small](#use-gboard-made-small)).
+
+#### Square screen (recommended, one-off setup)
+
+The glasses' display is square, the phone's isn't, so by default the glasses show the phone's
+screen with black bars. **Square screen** in the companion makes the phone's screen square
+(1080×1080) while you use the glasses: apps then lay themselves out to fill the display, and
+text comes out much bigger. **Reset screen** puts the phone back. Both are one tap in the app,
+any time.
+
+Changing the screen size needs a permission Android only gives through ADB, so it takes a
+**one-off step with a computer**. You do it once: the phone keeps the permission through
+restarts and app updates (only uninstalling the app drops it).
+
+1. On the phone: Settings → About phone (on Samsung, then Software information) → tap **Build
+   number** seven times (this turns on Developer options), then Settings → Developer options →
+   **USB debugging** on.
+2. On a computer, get Android's
+   [platform-tools](https://developer.android.com/tools/releases/platform-tools) (it contains
+   `adb`), connect the phone by USB and allow the computer when the phone asks.
+3. Run:
+
+   ```
+   adb shell pm grant uk.co.reliablesolutions.glassesremote.companion android.permission.WRITE_SECURE_SETTINGS
+   ```
+
+That's it: unplug, and use **Square screen** / **Reset screen** in the app whenever you like
+(change it before starting a session). The ⓘ next to them in the app shows the same steps and
+copies the command for you. USB debugging can be turned off again afterwards.
 
 ### 2. The glasses: add Glasscast
 
