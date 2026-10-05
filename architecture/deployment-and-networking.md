@@ -154,7 +154,11 @@ in one go: Web Deploy syncs `publish\relay-win-x64` to the IIS site over
 logs and `data` stay), then checks `/health` and `/features`. (Only taking the site offline with
 `app_offline.htm` wasn't enough: the relay held its DLLs a while longer, with the phones'
 companions connected, and the copy failed with `ERROR_FILE_IN_USE`.) `-NoBuild` deploys the last publish, `-WhatIf` only lists changes. The
-password comes from `-Password`, `GLASSCAST_DEPLOY_PASSWORD` or a prompt.
+password comes from `-Password`, a saved login, `GLASSCAST_DEPLOY_PASSWORD` or a prompt.
+`-Save -Server <host> -User <user>` once stores the server and login in
+`%LOCALAPPDATA%\GlassesRemote\deploy-relay.clixml`, the password encrypted with DPAPI for that
+Windows account; after that `.\scripts\deploy-relay.ps1` alone deploys. The password is never
+printed.
 
 Once, on the server (admin PowerShell):
 

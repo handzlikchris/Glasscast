@@ -2,6 +2,12 @@
 #
 #   .\scripts\deploy-relay.ps1 -Server relay.example.com -User deployer
 #
+# Or save the server and login once (you type the password; it's kept encrypted for your Windows
+# account with DPAPI, in %LOCALAPPDATA%\GlassesRemote\deploy-relay.clixml), and from then on:
+#
+#   .\scripts\deploy-relay.ps1 -Save -Server relay.example.com -User deployer   # once
+#   .\scripts\deploy-relay.ps1                                                   # every deploy
+#
 # It builds the page and the relay (scripts\publish-relay.ps1), then syncs the folder to the IIS
 # site through Web Deploy (https://<Server>:8172): it stops the site's app pool for the copy (the
 # running relay holds its files), copies only changed files, deletes nothing on the server
@@ -12,23 +18,49 @@
 # Web Deploy, with TCP 8172 open to this PC only. Setup: architecture\deployment-and-networking.md,
 # "Deploying updates with Web Deploy".
 #
-# The password: -Password, the GLASSCAST_DEPLOY_PASSWORD environment variable, or a prompt.
+# The password: -Password, the saved login, the GLASSCAST_DEPLOY_PASSWORD environment variable, or a
+# prompt. It is never printed.
 
 param(
-    [Parameter(Mandatory = $true)][string]$Server,
-    [Parameter(Mandatory = $true)][string]$User,
+    [string]$Server,
+    [string]$User,
     [string]$Site = 'GlasscastRelay',
     [int]$Port = 8172,
     [securestring]$Password,
     # Deploy the last publish as it is, without building again.
     [switch]$NoBuild,
     # Show what would change, change nothing.
-    [switch]$WhatIf
+    [switch]$WhatIf,
+    # Save -Server, -User and a password typed now for later deploys, then stop.
+    [switch]$Save
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'publish\relay-win-x64'
+$savedLogin = Join-Path $env:LOCALAPPDATA 'GlassesRemote\deploy-relay.clixml'
+
+if ($Save) {
+    if (-not $Server -or -not $User) { throw 'With -Save, give -Server and -User too.' }
+    $typed = if ($Password) { $Password } else { Read-Host "Password for $User on $Server" -AsSecureString }
+    New-Item -ItemType Directory -Force (Split-Path $savedLogin) | Out-Null
+    # Export-Clixml encrypts the SecureString with DPAPI: only this Windows account on this PC can read it.
+    [pscustomobject]@{ Server = $Server; Credential = New-Object PSCredential($User, $typed) } | Export-Clixml $savedLogin
+    Write-Host "Saved the login for $User on $Server in $savedLogin (encrypted for this Windows account)." -ForegroundColor Green
+    return
+}
+
+if (-not $Server -or -not $User) {
+    if (-not (Test-Path $savedLogin)) {
+        throw 'Give -Server and -User, or save them once: .\scripts\deploy-relay.ps1 -Save -Server <host> -User <user>'
+    }
+    $saved = Import-Clixml $savedLogin
+    if (-not $Server) { $Server = $saved.Server }
+    if (-not $User) {
+        $User = $saved.Credential.UserName
+        if (-not $Password) { $Password = $saved.Credential.Password }
+    }
+}
 
 $msdeploy = @(
     "$env:ProgramFiles\IIS\Microsoft Web Deploy V3\msdeploy.exe",
