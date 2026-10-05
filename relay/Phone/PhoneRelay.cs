@@ -154,16 +154,34 @@ public sealed class PhoneRelay
             return now;
         }
 
+        // Offline, or gone for good: a companion that was unpaired (or reinstalled) and registered
+        // again is a new phone here, and the glasses would wait for the old one forever. So they
+        // also get a connect code; whichever comes first wins: that phone back, or a claim.
         await _io.SendAsync(new { type = "phoneStatus", state = "offline" }, ct);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(_companion.StartTimeout);
+        var connect = _s.Registry.OpenConnectCode();
         try
         {
-            return await _s.Registry.WaitForLinkAsync(phoneId, deadline.Token);
+            await _io.SendAsync(new { type = "connectCode", code = connect.Code }, ct);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(_companion.StartTimeout);
+            var back = _s.Registry.WaitForLinkAsync(phoneId, deadline.Token);
+            var claimed = connect.Claimed.WaitAsync(deadline.Token);
+            var first = await Task.WhenAny(back, claimed);
+            var link = await first;
+            if (first == claimed)
+            {
+                await _io.SendAsync(new { type = "phoneFound", phone = link.PhoneId }, ct);
+                _s.Logger.LogInformation("Glasses from {Remote} found their phone {Name} by connect code", _remote, link.Name);
+            }
+            return link;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             return null;
+        }
+        finally
+        {
+            _s.Registry.CloseConnectCode(connect);
         }
     }
 

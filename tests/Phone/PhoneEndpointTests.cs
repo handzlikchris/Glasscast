@@ -254,6 +254,43 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Glasses_waiting_for_an_offline_phone_can_find_it_again_by_connect_code()
+    {
+        // What happened on the device: the glasses remember phone A; its companion was unpaired
+        // and paired again, so the server now also has phone B, and A never comes back.
+        await PairCompanionAsync();
+        var oldId = Assert.Single(_host.Companion.Phones).Id;
+        using var again = await ConnectCompanionAsync(await PairCompanionAsync());
+        var newId = _host.Companion.Phones.Single(p => p.Id != oldId).Id;
+
+        using var glasses = await OpenRelayAsync(oldId);
+        Assert.Equal("offline", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+        var code = (await glasses.ReceiveAsync("connectCode")).GetProperty("code").GetString()!;
+        await again.SendAsync(new { type = "claim", code });
+
+        await again.ReceiveAsync("claimed");
+        await again.ReceiveAsync("relayOpen");
+        Assert.Equal(newId, (await glasses.ReceiveAsync("phoneFound")).GetProperty("phone").GetString());
+        Assert.Equal("ready", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+    }
+
+    [Fact]
+    public async Task An_offline_phone_that_comes_back_needs_no_code()
+    {
+        var token = await PairCompanionAsync();
+        await PairCompanionAsync();
+        var firstId = _host.Companion.Phones[0].Id;
+
+        using var glasses = await OpenRelayAsync(firstId);
+        Assert.Equal("offline", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+        await glasses.ReceiveAsync("connectCode");
+        using var companion = await ConnectCompanionAsync(token);
+
+        await companion.ReceiveAsync("relayOpen");
+        Assert.Equal("ready", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+    }
+
+    [Fact]
     public async Task Relays_are_rate_limited_per_address()
     {
         string? last = null;

@@ -189,7 +189,9 @@ base64url characters), once the glasses know it. Server → glasses:
   the relay), then `phoneFound{phone}` once someone types it into a companion. On the PC with
   exactly one approved phone, id-less glasses get `phoneFound` for it at once instead.
 - Then `phoneStatus{state}` (`offline`: that phone's companion isn't connected, waiting up to
-  `Companion:StartTimeout`; `ready`: the phone is reached; `asking`: consent dialog; `live`:
+  `Companion:StartTimeout`, with a `connectCode` too: a companion that was unpaired or reinstalled
+  registered again as a new phone, and the old one never comes back; whichever comes first wins,
+  that phone or a claim, which sends `phoneFound`; `ready`: the phone is reached; `asking`: consent dialog; `live`:
   capturing), `pong`, and everything the phone sends.
 - Nothing is read from the glasses until the phone is found (one reader per socket).
 - Close reasons: `phone offline`, `phone declined`, `phone ended`, `replaced` (newer glasses),
