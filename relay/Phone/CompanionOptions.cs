@@ -39,6 +39,9 @@ public sealed class CompanionOptions
 
     public int MaxMessagesPerSecond { get; set; } = 60;
 
+    /// <summary>Sustained message rate allowed from glasses in a phone relay; bursts up to twice this.</summary>
+    public int RelayMaxMessagesPerSecond { get; set; } = 120;
+
     /// <summary>Where the paired phone's token hash is kept; null = the default under LocalAppData.</summary>
     public string? GrantFile { get; set; }
 

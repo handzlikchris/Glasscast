@@ -29,9 +29,6 @@ public enum KeyCommand
     WinShiftRight,
 }
 
-/// <summary>A validated message from the glasses. Anything else is rejected before it gets here.</summary>
-public abstract record ControlMessage;
-
 public sealed record AuthenticateMessage(string Token) : ControlMessage
 {
     // Never print the token, even in debug output.
@@ -52,8 +49,6 @@ public sealed record ResumeMessage(string Token) : ControlMessage
 public sealed record ConnectPhoneMessage : ControlMessage;
 
 public sealed record RtcAnswerMessage(string Sdp) : ControlMessage;
-
-public sealed record IceCandidateMessage(string Candidate, string? SdpMid, int SdpMLineIndex) : ControlMessage;
 
 public sealed record SetModeMessage(ViewMode Mode) : ControlMessage;
 

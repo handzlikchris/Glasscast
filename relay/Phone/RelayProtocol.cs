@@ -30,7 +30,7 @@ public sealed record GlassesIceSignal(IceCandidateMessage Candidate) : GlassesSi
 public sealed record RelayPingSignal(double T) : GlassesSignal;
 
 /// <summary>
-/// Strict parser for the glasses' side of a phone relay, in the style of <see cref="ControlProtocol"/>.
+/// Strict parser for the glasses' side of a phone relay, in the style of <c>ControlProtocol</c>.
 /// Keys, nonces and MACs are base64url of fixed sizes; anything else is rejected, and there is no
 /// input: the glasses' input for the phone only ever goes over WebRTC.
 /// </summary>
@@ -48,7 +48,7 @@ public static class RelayProtocol
     {
         message = null;
         error = null;
-        if (utf8Json.Length == 0 || utf8Json.Length > ControlProtocol.MaxMessageBytes)
+        if (utf8Json.Length == 0 || utf8Json.Length > JsonRules.MaxMessageBytes)
         {
             error = "size";
             return false;
@@ -68,26 +68,26 @@ public static class RelayProtocol
 
             message = typeElement.GetString() switch
             {
-                "pairStart" => ControlProtocol.Only(e, "commit") && B64u(e, "commit", HashLength, out var commit)
+                "pairStart" => JsonRules.Only(e, "commit") && B64u(e, "commit", HashLength, out var commit)
                     ? new PairStartSignal(commit)
                     : null,
-                "pairReveal" => ControlProtocol.Only(e, "key") && B64u(e, "key", PublicKeyLength, out var key)
+                "pairReveal" => JsonRules.Only(e, "key") && B64u(e, "key", PublicKeyLength, out var key)
                     ? new PairRevealSignal(key)
                     : null,
-                "hello" => ControlProtocol.Only(e, "id", "nonce") && B64u(e, "id", IdLength, out var id)
+                "hello" => JsonRules.Only(e, "id", "nonce") && B64u(e, "id", IdLength, out var id)
                            && B64u(e, "nonce", NonceLength, out var nonce)
                     ? new HelloSignal(id, nonce)
                     : null,
-                "proof" => ControlProtocol.Only(e, "mac") && B64u(e, "mac", HashLength, out var mac)
+                "proof" => JsonRules.Only(e, "mac") && B64u(e, "mac", HashLength, out var mac)
                     ? new ProofSignal(mac)
                     : null,
-                "rtcAnswer" => ControlProtocol.Only(e, "sdp", "mac")
-                               && ControlProtocol.Str(e, "sdp", ControlProtocol.MaxSdpLength, out var sdp)
+                "rtcAnswer" => JsonRules.Only(e, "sdp", "mac")
+                               && JsonRules.Str(e, "sdp", JsonRules.MaxSdpLength, out var sdp)
                                && B64u(e, "mac", HashLength, out var answerMac)
                     ? new AnswerSignal(sdp, answerMac)
                     : null,
-                "iceCandidate" => ControlProtocol.ParseIce(e) is { } candidate ? new GlassesIceSignal(candidate) : null,
-                "ping" => ControlProtocol.Only(e, "t") && ControlProtocol.Num(e, "t", out var t) ? new RelayPingSignal(t) : null,
+                "iceCandidate" => JsonRules.ParseIce(e) is { } candidate ? new GlassesIceSignal(candidate) : null,
+                "ping" => JsonRules.Only(e, "t") && JsonRules.Num(e, "t", out var t) ? new RelayPingSignal(t) : null,
                 _ => null,
             };
         }
@@ -112,7 +112,7 @@ public static class RelayProtocol
     /// <summary>A base64url string (no padding) of exactly <paramref name="length"/> characters.</summary>
     internal static bool B64u(JsonElement e, string name, int length, out string value)
     {
-        if (!ControlProtocol.Str(e, name, length, out value) || value.Length != length)
+        if (!JsonRules.Str(e, name, length, out value) || value.Length != length)
         {
             return false;
         }

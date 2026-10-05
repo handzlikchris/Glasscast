@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Threading.Channels;
 using GlassesRemote.Server.Alerts;
-using GlassesRemote.Server.Hosting;
 using GlassesRemote.Server.Protocol;
 using GlassesRemote.Server.Sessions;
 using Microsoft.Extensions.Options;
@@ -13,7 +12,6 @@ namespace GlassesRemote.Server.Phone;
 public sealed record PhoneServices(
     CompanionRegistry Registry,
     IOptions<CompanionOptions> Companion,
-    IOptions<ControlSessionOptions> Session,
     AlertLog Alerts,
     TimeProvider Time,
     ILogger<PhoneRelay> Logger);
@@ -38,7 +36,6 @@ public sealed class PhoneRelay
     private readonly IPAddress _remote;
     private readonly PhoneServices _s;
     private readonly CompanionOptions _companion;
-    private readonly ControlSessionOptions _session;
 
     public PhoneRelay(SocketIO io, IPAddress remote, PhoneServices services)
     {
@@ -46,7 +43,6 @@ public sealed class PhoneRelay
         _remote = remote;
         _s = services;
         _companion = services.Companion.Value;
-        _session = services.Session.Value;
     }
 
     public async Task RunAsync(CancellationToken requestAborted)
@@ -202,7 +198,7 @@ public sealed class PhoneRelay
     /// <summary>Passes the glasses' messages to the phone. Returns null when they leave, or a reason when they break the rules.</summary>
     private async Task<string?> FromGlassesAsync(CompanionLink link, CancellationToken ct)
     {
-        var rate = Math.Max(1, _session.MaxMessagesPerSecond);
+        var rate = Math.Max(1, _companion.RelayMaxMessagesPerSecond);
         var bucket = new TokenBucket(_s.Time, rate, rate * 2);
 
         while (!ct.IsCancellationRequested)

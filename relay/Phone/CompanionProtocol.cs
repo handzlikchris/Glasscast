@@ -59,13 +59,13 @@ public sealed record CompanionChallengeMessage(string Nonce, string Mac) : Compa
 public sealed record CompanionAuthFailedMessage : CompanionMessage;
 
 /// <summary>
-/// Strict parser for the companion socket, in the same style as <see cref="ControlProtocol"/>:
+/// Strict parser for the companion socket, in the same style as <c>ControlProtocol</c>:
 /// a small JSON object, a known type, exactly its properties, capped sizes. The PC only relays
 /// signalling, pairing and authentication between the phone and the glasses, so that's all there is.
 /// </summary>
 public static class CompanionProtocol
 {
-    public const int MaxMessageBytes = ControlProtocol.MaxMessageBytes;
+    public const int MaxMessageBytes = JsonRules.MaxMessageBytes;
     public const int MaxNameLength = 32;
 
     private static readonly JsonDocumentOptions DocumentOptions = new() { MaxDepth = 4 };
@@ -107,30 +107,30 @@ public static class CompanionProtocol
             message = typeElement.GetString() switch
             {
                 "pair" => ParsePair(e),
-                "auth" => ControlProtocol.Only(e, "token") && ControlProtocol.Str(e, "token", ControlProtocol.MaxTokenLength, out var token)
+                "auth" => JsonRules.Only(e, "token") && JsonRules.Str(e, "token", JsonRules.MaxTokenLength, out var token)
                     ? new CompanionAuthMessage(token)
                     : null,
-                "ping" => ControlProtocol.Only(e, "t") && ControlProtocol.Num(e, "t", out var t) ? new CompanionPingMessage(t) : null,
-                "sessionState" => ControlProtocol.Only(e, "state") && ControlProtocol.Str(e, "state", 16, out var state)
+                "ping" => JsonRules.Only(e, "t") && JsonRules.Num(e, "t", out var t) ? new CompanionPingMessage(t) : null,
+                "sessionState" => JsonRules.Only(e, "state") && JsonRules.Str(e, "state", 16, out var state)
                                   && States.TryGetValue(state, out var parsed)
                     ? new CompanionStateMessage(parsed)
                     : null,
-                "rtcOffer" => ControlProtocol.Only(e, "sdp", "mac") && ControlProtocol.Str(e, "sdp", ControlProtocol.MaxSdpLength, out var sdp)
+                "rtcOffer" => JsonRules.Only(e, "sdp", "mac") && JsonRules.Str(e, "sdp", JsonRules.MaxSdpLength, out var sdp)
                                && RelayProtocol.B64u(e, "mac", RelayProtocol.HashLength, out var offerMac)
                     ? new CompanionOfferMessage(sdp, offerMac)
                     : null,
-                "pairKey" => ControlProtocol.Only(e, "key") && RelayProtocol.B64u(e, "key", RelayProtocol.PublicKeyLength, out var key)
+                "pairKey" => JsonRules.Only(e, "key") && RelayProtocol.B64u(e, "key", RelayProtocol.PublicKeyLength, out var key)
                     ? new CompanionPairKeyMessage(key)
                     : null,
-                "paired" => ControlProtocol.Only(e) ? new CompanionPairedMessage() : null,
-                "pairFailed" => ControlProtocol.Only(e) ? new CompanionPairFailedMessage() : null,
-                "challenge" => ControlProtocol.Only(e, "nonce", "mac")
+                "paired" => JsonRules.Only(e) ? new CompanionPairedMessage() : null,
+                "pairFailed" => JsonRules.Only(e) ? new CompanionPairFailedMessage() : null,
+                "challenge" => JsonRules.Only(e, "nonce", "mac")
                                && RelayProtocol.B64u(e, "nonce", RelayProtocol.NonceLength, out var nonce)
                                && RelayProtocol.B64u(e, "mac", RelayProtocol.HashLength, out var mac)
                     ? new CompanionChallengeMessage(nonce, mac)
                     : null,
-                "authFailed" => ControlProtocol.Only(e) ? new CompanionAuthFailedMessage() : null,
-                "iceCandidate" => ControlProtocol.ParseIce(e) is { } candidate ? new CompanionIceMessage(candidate) : null,
+                "authFailed" => JsonRules.Only(e) ? new CompanionAuthFailedMessage() : null,
+                "iceCandidate" => JsonRules.ParseIce(e) is { } candidate ? new CompanionIceMessage(candidate) : null,
                 _ => null,
             };
         }
@@ -154,13 +154,13 @@ public static class CompanionProtocol
 
     private static CompanionMessage? ParsePair(JsonElement e)
     {
-        if (!ControlProtocol.Only(e, "name") || !ControlProtocol.Str(e, "name", MaxNameLength, out var name))
+        if (!JsonRules.Only(e, "name") || !JsonRules.Str(e, "name", MaxNameLength, out var name))
         {
             return null;
         }
 
         // Shown in the Approve popup: printable text on one line only.
-        var flattened = ControlProtocol.FlattenText(name);
+        var flattened = JsonRules.FlattenText(name);
         return flattened.Length == 0 ? null : new CompanionPairMessage(flattened);
     }
 }

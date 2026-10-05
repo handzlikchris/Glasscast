@@ -283,12 +283,12 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
 
 | File | Role |
 | --- | --- |
-| `server/Phone/PhoneRelay.cs` | A relay: waits for the companion, passes messages both ways, closes on decline, phone loss, replacement or timeout; tells the phone `relayClosed` |
-| `server/Phone/RelayProtocol.cs` | Strict parser for the glasses' relay messages (base64url sizes, no input) |
-| `server/Phone/CompanionEndpoint.cs` | `/ws/companion`: no-Origin check, 3 s first message, register or auth, receive loop (ping, rate limit, 45 s heartbeat) |
-| `server/Phone/CompanionRegistry.cs` | Companion registration, its token hash (`companion-grant.json`), the live connection, relay rate limits |
-| `server/Phone/CompanionLink.cs` | One authenticated companion connection; its one relay (`RelayHandle`) |
-| `server/Phone/CompanionProtocol.cs` | Strict parser for the companion's messages; `PhoneState` |
+| `relay/Phone/PhoneRelay.cs` | A relay: waits for the companion, passes messages both ways, closes on decline, phone loss, replacement or timeout; tells the phone `relayClosed` |
+| `relay/Phone/RelayProtocol.cs` | Strict parser for the glasses' relay messages (base64url sizes, no input) |
+| `relay/Phone/CompanionEndpoint.cs` | `/ws/companion`: no-Origin check, 3 s first message, register or auth, receive loop (ping, rate limit, 45 s heartbeat) |
+| `relay/Phone/CompanionRegistry.cs` | Companion registration, its token hash (`companion-grant.json`), the live connection, relay rate limits |
+| `relay/Phone/CompanionLink.cs` | One authenticated companion connection; its one relay (`RelayHandle`) |
+| `relay/Phone/CompanionProtocol.cs` | Strict parser for the companion's messages; `PhoneState` |
 | `server/Ui/ApprovePopup.cs`, `TrayApp.cs` | The popup registers a phone; tray **Forget phone** |
 | `client-web/src/App.tsx`, `target.ts` | The PC/Phone first screen; the last choice in localStorage |
 | `client-web/src/PhoneScreen.tsx` | The phone session: video, local cursor, gestures, bar, Type, the pairing code panel, pings |

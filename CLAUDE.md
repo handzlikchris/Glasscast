@@ -51,12 +51,9 @@ protocols, status: **`architecture/phone-mode.md`**.
 server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
   Program.cs            STA Main: DPI init, web host in background, tray on UI thread
   Hosting/              ServerApp.Create (DI + pipeline, shared with tests), GlassesEndpoints
-                        (/health, /ws/pair, /ws/session, OriginPolicy), SecurityHeaders,
-                        ClientCaching (no-cache page, immutable assets), Options
-  Pairing/              PairingCoordinator (state machine), DeviceGrant (+ store), Secrets (tokens/codes),
-                        SlidingWindowLimiter, PairingOptions
-  Sessions/             ControlSession (one authenticated session), InputController (mode gating),
-                        SocketIO (capped WS reads/writes), TokenBucket
+                        (/health, /ws/pair, /ws/session), Options
+  Pairing/              PairingCoordinator (state machine), DeviceGrant (+ store), PairingOptions
+  Sessions/             ControlSession (one authenticated session), InputController (mode gating)
   Protocol/             ControlMessages + ControlProtocol (strict allowlist parser)
   Desktop/              interfaces (IScreen, ICaptureSource, IInputInjector, IKeepAwake, IWindowSwitcher),
                         RegionMath, RegionStore, CastArea (region of the active session), AppShortcuts
@@ -70,10 +67,17 @@ server/                 GlassesRemote.Server (ASP.NET Core + WinForms)
                         ProcessLoopbackCapture + LoopbackAudioCapture (WASAPI), NativeMethods
   Ui/                   TrayApp, ApprovePopup, AlertsForm, SessionBanner, CastFrame (orange frame
                         around the cast area on the PC monitor), TerminateHotkey
-  Alerts/               AlertLog, AlertThrottle
+  Alerts/               AlertThrottle (Windows notifications)
+relay/                  GlassesRemote.Relay (net10.0 library, no Windows/capture/input/media code):
+                        the phone relay and what both servers share; namespaces kept from server/
   Phone/                phone mode: CompanionEndpoint (/ws/companion), CompanionRegistry (companion
                         registration, token hash, live connection, relay limits), CompanionLink,
                         CompanionProtocol, PhoneRelay + RelayProtocol (glasses ⇄ phone, opaque)
+  Hosting/              OriginPolicy, SecurityHeaders, ClientCaching (no-cache page, immutable assets)
+  Pairing/              Secrets (tokens/codes), SlidingWindowLimiter, PairingRequest
+  Sessions/             SocketIO (capped WS reads/writes), TokenBucket
+  Protocol/             JsonRules (the strict-parsing helpers), ControlMessage, IceCandidateMessage
+  Alerts/               AlertLog
 client-web/             glasses client (600×600)
   build-label.mjs       stamps "Build <commit> · <time>" into the bundle (shown on the pairing screen)
   src/connection.ts     pair + session sockets; token lives ONLY here, in memory

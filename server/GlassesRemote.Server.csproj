@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../relay/GlassesRemote.Relay.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="GlassesRemote.Server.Tests" />
     <!-- The e2e harness loses the start of a stream (SipsorceryMediaPeer.DropFirstFrames). -->
     <InternalsVisibleTo Include="E2eHarness" />

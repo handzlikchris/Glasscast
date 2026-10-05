@@ -14,8 +14,8 @@ See [phone-mode.md](phone-mode.md).
 | --- | --- |
 | `server/Hosting/GlassesEndpoints.cs` | `SessionAsync`: origin check, 3 s auth deadline, lease, `authenticated`, then `ControlSession.RunAsync`. |
 | `server/Sessions/ControlSession.cs` | Runs a session: `hello`, `rtcOffer`, receive loop, frame pump, idle/heartbeat watch, close. `SessionServices` is its DI bundle. |
-| `server/Sessions/SocketIO.cs` | Size-capped text reads (16 KB), serialised JSON writes (one send lock), quiet close. |
-| `server/Sessions/TokenBucket.cs` | Per-session message rate limit (120/s, burst 240). |
+| `relay/Sessions/SocketIO.cs` | Size-capped text reads (16 KB), serialised JSON writes (one send lock), quiet close. |
+| `relay/Sessions/TokenBucket.cs` | Per-session message rate limit (120/s, burst 240). |
 | `server/Sessions/InputController.cs` | Mode + region state; turns input messages into injector calls (see [input-and-desktop.md](input-and-desktop.md)). |
 | `server/Protocol/ControlMessages.cs` | Typed messages, `ViewMode`, `KeyCommand` allowlist. |
 | `server/Protocol/ControlProtocol.cs` | The strict parser: allowlisted types and properties, caps, clamping, text flattening, stats field list. |

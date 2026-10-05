@@ -5,7 +5,7 @@ Who may start a session, and how. Nothing reaches the desktop without a human cl
 
 This is the PC's pairing, for **PC sessions** only. Phone mode is different (see
 [phone-mode.md](phone-mode.md)): the companion app registers with the PC once through the same
-Approve popup (`server/Phone/CompanionRegistry.cs`, token hash in `companion-grant.json`, tray
+Approve popup (`relay/Phone/CompanionRegistry.cs`, token hash in `companion-grant.json`, tray
 **Forget phone**), which only lets it use the PC as a meeting point; the **glasses pair with the
 phone itself** (a code on both screens, Approve on the phone) and prove themselves to the phone
 on every session. The PC's approval and device token play no part in a phone session.
@@ -16,11 +16,11 @@ on every session. The PC's approval and device token play no part in a phone ses
 | --- | --- |
 | `server/Pairing/PairingCoordinator.cs` | The state machine, `PairingRequest`, `SessionLease`, device-grant logic. Everything under one lock (`_gate`). |
 | `server/Pairing/DeviceGrant.cs` | `DeviceGrant` record + `DeviceGrantStore` (hashes in `%LOCALAPPDATA%\GlassesRemote\device-grant.json`). |
-| `server/Pairing/Secrets.cs` | Pairing codes, ids, 256-bit tokens, SHA-256 hashing, constant-time compare. |
-| `server/Pairing/SlidingWindowLimiter.cs` | Pairing rate limits (per IP and global). |
+| `relay/Pairing/Secrets.cs` | Pairing codes, ids, 256-bit tokens, SHA-256 hashing, constant-time compare. |
+| `relay/Pairing/SlidingWindowLimiter.cs` | Pairing rate limits (per IP and global). |
 | `server/Pairing/PairingOptions.cs` | `Pairing:*` settings (timeouts, limits, grant lifetime/file, takeover timeout). |
 | `server/Hosting/GlassesEndpoints.cs` | `/ws/pair` (`PairAsync`), the auth step of `/ws/session` (`SessionAsync`), `OriginPolicy`. |
-| `server/Alerts/AlertLog.cs`, `AlertThrottle.cs` | Probe signals → recent list + throttled Windows notifications (see [pc-ui.md](pc-ui.md)). |
+| `relay/Alerts/AlertLog.cs`, `server/Alerts/AlertThrottle.cs` | Probe signals → recent list + throttled Windows notifications (see [pc-ui.md](pc-ui.md)). |
 | `server/Ui/ApprovePopup.cs` | The Approve/Reject window. |
 | `client-web/src/connection.ts` | Client side: pair socket, holds the approval token in module memory, device token in localStorage. |
 | `client-web/src/PairingScreen.tsx`, `App.tsx` | Code display, retry, "remembered → go straight to a session". |
