@@ -6,6 +6,7 @@ using GlassesRemote.Server.Pairing;
 using GlassesRemote.Server.Phone;
 using GlassesRemote.Server.Sessions;
 using GlassesRemote.Server.Windows;
+using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
@@ -33,6 +34,19 @@ public static class ServerApp
             if (!isDevelopment)
             {
                 web.AllowSameOrigin = false;
+            }
+
+            if (web.PublicHost is { Length: > 0 } host)
+            {
+                web.AllowedOrigins = [.. web.AllowedOrigins, $"https://{host}"];
+            }
+        });
+        // Runs after the host's own PostConfigure, which fills AllowedHosts from config.
+        services.AddOptions<HostFilteringOptions>().PostConfigure<IOptions<WebOptions>>((filter, web) =>
+        {
+            if (web.Value.PublicHost is { Length: > 0 } host && !filter.AllowedHosts.Contains("*"))
+            {
+                filter.AllowedHosts = [.. filter.AllowedHosts, host];
             }
         });
         services.PostConfigure<PairingOptions>(pairing =>

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.WebSockets;
 using System.Text.Json;
 using GlassesRemote.Server.Alerts;
@@ -65,6 +66,30 @@ public sealed class EndpointTests : IAsyncLifetime
         Assert.False(OriginPolicy.IsAllowed("https://glasses.example.com.evil.com", allowed));
         Assert.False(OriginPolicy.IsAllowed("https://evil.com/glasses.example.com", allowed));
         Assert.False(OriginPolicy.IsAllowed("", allowed));
+    }
+
+    [Fact]
+    public async Task Public_host_is_allowed_as_origin_and_host()
+    {
+        await using var host = new TestServerHost(new()
+        {
+            ["AllowedHosts"] = "localhost",
+            ["Web:PublicHost"] = "glasses.public.test",
+        });
+        using var socket = await host.ConnectAsync("/ws/session", "https://glasses.public.test");
+        Assert.Equal(System.Net.WebSockets.WebSocketState.Open, socket.Socket.State);
+
+        using var http = host.CreateHttpClient();
+        Assert.Equal(HttpStatusCode.OK, await StatusFor(http, "glasses.public.test"));
+        Assert.Equal(HttpStatusCode.BadRequest, await StatusFor(http, "evil.test"));
+
+        static async Task<HttpStatusCode> StatusFor(HttpClient http, string hostName)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+            request.Headers.Host = hostName;
+            using var response = await http.SendAsync(request);
+            return response.StatusCode;
+        }
     }
 
     [Fact]
