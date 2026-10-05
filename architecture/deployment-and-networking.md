@@ -13,7 +13,7 @@ UDP 50000 (internet) → router → 192.168.1.114:50000 SIPSorcery (bound to Med
 
 - **Caddy** (`deploy/Caddyfile`): the site address comes from `GLASSES_HOST` (the same name as
   `Web:PublicHost`); `https_port 8443` because IIS owns 443/80 locally; HTTP
-  challenge and redirects off; path allowlist (`/`, `/index.html`, `/favicon.svg`,
+  challenge and redirects off; path allowlist (`/`, `/index.html`, `/favicon.svg`, the icons and `/manifest.webmanifest`,
   `/assets/*`, `/health`, `/ws/pair`, `/ws/session`), everything else 404; HSTS, nosniff,
   no-referrer; JSON access log `caddy-access.log` (rolled 10 MiB × 5). Tokens never go in
   URLs, so the log can't hold them.
