@@ -26,6 +26,10 @@ sealed interface InputCommand {
     data class SwitchApp(val previous: Boolean) : InputCommand
     /** Where the app overview's row of apps (its suggestions) is, to step through with swipes. */
     data object OverviewApps : InputCommand
+    /** What you can press in the followed app's window, for the glasses' app profiles. */
+    data object Controls : InputCommand
+    /** Step to the next (or previous) thing of [unit] in the followed app, in reading order. */
+    data class Walk(val next: Boolean, val unit: WalkUnit) : InputCommand
     /** The glasses' heartbeat: the phone ends a session it stops hearing from. */
     data class Ping(val t: Double) : InputCommand
     /** End on the glasses. */
@@ -81,6 +85,8 @@ object InputProtocol {
             "ping" -> if (only(o, "t")) num(o, "t")?.let { InputCommand.Ping(it) } else null
             "end" -> if (only(o)) InputCommand.End else null
             "overviewApps" -> if (only(o)) InputCommand.OverviewApps else null
+            "controls" -> if (only(o)) InputCommand.Controls else null
+            "walk" -> walk(o)
             else -> null
         }
     }
@@ -136,6 +142,17 @@ object InputProtocol {
             unit(o, "y2") ?: return null,
             ms.toLong().coerceIn(SWIPE_MIN_MS, SWIPE_MAX_MS),
         )
+    }
+
+    private fun walk(o: JSONObject): InputCommand? {
+        if (!only(o, "dir", "unit")) return null
+        val next = when (o.opt("dir")) {
+            "next" -> true
+            "previous" -> false
+            else -> return null
+        }
+        val unit = (o.opt("unit") as? String)?.let(WalkUnit::of) ?: return null
+        return InputCommand.Walk(next, unit)
     }
 
     private fun typeText(o: JSONObject): InputCommand? {

@@ -7,6 +7,7 @@ import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.util.Log
 import android.view.Display
+import android.view.accessibility.AccessibilityNodeInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.DataChannel
@@ -75,6 +76,10 @@ class ScreenSession(
          * until a scroll). So the last frame goes again after this long without one.
          */
         private const val STILL_REPEAT_MS = 400L
+        /** A walk's target scrolled into view: check its box this often until it stops moving. */
+        private const val WALK_SETTLE_MS = 100L
+        /** The longest a walk waits for the page to stop scrolling before answering. */
+        private const val WALK_MAX_WAIT_MS = 1_000L
 
         @Volatile
         private var initialized = false
@@ -106,6 +111,10 @@ class ScreenSession(
      * app picked next is followed.
      */
     private var picking = false
+    /** Where the last walk (app profiles) ended, to step on from; dropped when the followed app changes. */
+    private var walked: AccessibilityNodeInfo? = null
+    /** Counts walks, so a walk still waiting for its page to settle gives way to a newer one. */
+    private var walkCount = 0
     private val pc: PeerConnection
     private val channel: DataChannel
     private val screenWidth: Int
@@ -308,6 +317,8 @@ class ScreenSession(
                 if (command.action == NavAction.RECENTS) pickApp()
             }
             is InputCommand.OverviewApps -> sendOverviewApps(input)
+            is InputCommand.Controls -> sendControls(input)
+            is InputCommand.Walk -> walk(input, command)
             is InputCommand.TypeText -> sendResult("typeText", input?.typeText(command.text) ?: false)
             is InputCommand.Key -> sendResult("key", input?.key(command.key) ?: false)
         }
@@ -338,6 +349,7 @@ class ScreenSession(
     }
 
     private fun followApp(pkg: String?) {
+        if (pkg != followPackage) walked = null
         followPackage = pkg
         watchWindows()
         refit()
@@ -367,6 +379,7 @@ class ScreenSession(
         val input = InputService.instance ?: return
         val pkg = followPackage?.takeIf { input.appWindow(it) != null } ?: input.appToFit(screenWidth, screenHeight)
         val renamed = pkg != followPackage
+        if (renamed) walked = null
         followPackage = pkg
         val bounds = pkg?.let { input.appWindow(it) }
         val region = if (bounds == null) {
@@ -421,6 +434,93 @@ class ScreenSession(
             }
         }
         send(JSONObject().put("type", "overviewApps").put("apps", apps))
+    }
+
+    /** The crop in screen pixels: what the glasses see. */
+    private fun cropBox(): Box {
+        val r = crop.region
+        return Box(
+            (r.x * screenWidth).toInt(), (r.y * screenHeight).toInt(),
+            ((r.x + r.width) * screenWidth).toInt(), ((r.y + r.height) * screenHeight).toInt(),
+        )
+    }
+
+    /** A control for the glasses: its box in 0..1 of their frame (clipped to it), or null if it's outside. */
+    private fun controlJson(control: Control): JSONObject? {
+        val area = cropBox()
+        val left = maxOf(control.box.left, area.left)
+        val top = maxOf(control.box.top, area.top)
+        val right = minOf(control.box.right, area.right)
+        val bottom = minOf(control.box.bottom, area.bottom)
+        if (right <= left || bottom <= top) return null
+        val w = (area.right - area.left).toDouble()
+        val h = (area.bottom - area.top).toDouble()
+        return JSONObject()
+            .put("x", (left - area.left) / w).put("y", (top - area.top) / h)
+            .put("w", (right - left) / w).put("h", (bottom - top) / h)
+            .put("kind", control.kind).put("label", control.label).put("id", control.id)
+    }
+
+    /**
+     * What you can press in the followed app's window, for the glasses' app profiles. Labels are
+     * words on the screen: counted in the log, never written to it.
+     */
+    private fun sendControls(input: InputService?) {
+        val pkg = followPackage
+        val items = JSONArray()
+        val root = if (picking) null else pkg?.let { input?.appRoot(it) }
+        if (root != null) ScreenControls.onScreen(A11yNode(root)).forEach { c -> controlJson(c)?.let(items::put) }
+        Log.i(TAG, "controls: ${items.length()}")
+        send(JSONObject().put("type", "controls").put("pkg", pkg.orEmpty()).put("items", items))
+    }
+
+    /**
+     * Steps to the next (or previous) thing of a kind in the followed app, in reading order, from
+     * where the last walk ended (or where you're reading, after a scroll). Something off screen is
+     * scrolled into view first, and the answer waits for the page to stop moving.
+     */
+    private fun walk(input: InputService?, command: InputCommand.Walk) {
+        val count = ++walkCount
+        val pkg = followPackage
+        val root = if (picking) null else pkg?.let { input?.appRoot(it) }
+        if (root == null) return sendWalked(pkg, null)
+        val area = cropBox()
+        val list = ScreenControls.walkable(A11yNode(root), command.unit)
+        val last = walked
+        val from = last?.let { node -> list.indexOfFirst { (it.node as A11yNode).info == node } }
+            ?.takeIf { it >= 0 && list[it].box.touches(area) }
+        val at = ScreenControls.step(list, from, command.next, area)
+        Log.i(TAG, "walk ${command.unit.wire} ${if (command.next) "next" else "previous"}: ${at ?: "end"} of ${list.size}")
+        if (at == null) return sendWalked(pkg, null)
+        val target = list[at]
+        val node = (target.node as A11yNode).info
+        walked = node
+        if (target.box.within(area)) return sendWalked(pkg, target)
+        node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
+        settle(count, pkg, target, previous = null, waited = 0L)
+    }
+
+    /** Answers a walk once its target's box holds still on screen (Chrome scrolls smoothly), or after a second. */
+    private fun settle(count: Int, pkg: String?, target: Control, previous: Box?, waited: Long) {
+        postDelayed(WALK_SETTLE_MS) {
+            if (closed || count != walkCount) return@postDelayed
+            val node = (target.node as A11yNode)
+            node.info.refresh()
+            val box = node.box
+            val still = previous != null && box == previous
+            when {
+                still && box.touches(cropBox()) -> sendWalked(pkg, target.copy(box = box))
+                waited + WALK_SETTLE_MS >= WALK_MAX_WAIT_MS ->
+                    sendWalked(pkg, if (box.touches(cropBox())) target.copy(box = box) else null)
+                else -> settle(count, pkg, target, box, waited + WALK_SETTLE_MS)
+            }
+        }
+    }
+
+    private fun sendWalked(pkg: String?, control: Control?) {
+        val message = JSONObject().put("type", "walked").put("pkg", pkg.orEmpty())
+        control?.let(::controlJson)?.let { message.put("item", it) }
+        send(message)
     }
 
     private fun sendResult(of: String, ok: Boolean) = send(JSONObject().put("type", "result").put("of", of).put("ok", ok))

@@ -89,17 +89,21 @@ A profile may use both ways of moving: Chrome could later take a map for its own
 ### Walking the page (Chrome)
 
 A web page already says what its parts are: links, buttons, form fields, headings, landmarks and
-articles, from its HTML and ARIA roles. Chrome turns that into Android's accessibility tree, and
-lets an accessibility service step through it **by kind, in reading order**: the same
-`ACTION_NEXT_HTML_ELEMENT` / `ACTION_PREVIOUS_HTML_ELEMENT` that TalkBack's "Links", "Headings"
-and "Controls" reading modes use. Chrome finds the next one even when it's off screen and
-scrolls it into view. So the companion doesn't need to understand Reddit or any other site: it
-asks Chrome for "the next link after this one", waits for the scroll to settle, and reports
-where it ended up. A well-built site (real links and headings) works best; a site that makes
-buttons out of plain `div`s may hide some of them from the walk.
+articles, from its HTML and ARIA roles. Chrome turns that into Android's accessibility tree (each
+web node's role in its extras, `AccessibilityNodeInfo.chromeRole`; headings marked as such), the
+tree TalkBack's "Links" and "Headings" reading modes step through. The companion steps through it
+**by kind, in reading order** (tree order is the page's order), scrolls the one it lands on into
+view (`ACTION_SHOW_ON_SCREEN`), waits for the page to stop moving, and reports where it ended up.
+So it doesn't need to understand Reddit or any other site. A well-built site (real links and
+headings) works best; a site that makes buttons out of plain `div`s may hide some of them.
 
-- **Units** (a fixed list, mapped to Chrome's element types): `item` (anything you can press:
-  links, buttons, fields; Chrome's `FOCUSABLE`), `link`, `heading`, `field`, `landmark`.
+- **Units** (a fixed list, `WalkUnit`): `item` (anything you can press: links, buttons, fields),
+  `link`, `heading`, `field`, `article` (a post or story), `landmark` (header, navigation, main,
+  search, …).
+- **The same walk for native apps.** Built as the companion's own walk over the tree (`ScreenControls`)
+  rather than Chrome's `ACTION_NEXT_HTML_ELEMENT`, so Walk works in any app and the units mean the
+  same everywhere; a native list only holds the rows laid out, so there a walk ends at the last one
+  on screen until you scroll.
 - **Where a walk starts:** from the highlighted thing if it's still on screen; otherwise (nothing
   highlighted yet, or you scrolled it away) from the top of the screen going down, the bottom
   going up. So scroll, then down twice, and you get the first item where you're reading, not
@@ -112,10 +116,10 @@ buttons out of plain `div`s may hide some of them from the walk.
   below the screen** (their boxes squashed flat at the bottom edge). So the walk can reach
   things off screen; a box that's flat isn't on screen yet, and the phone waits for Chrome to
   scroll it in before answering.
-- **Still to check:** whether Chrome's element walk (`ACTION_NEXT_HTML_ELEMENT`) answers our
-  service, and scrolls. If it doesn't, the companion walks the same tree itself in reading
-  order and scrolls the node in (`ACTION_SHOW_ON_SCREEN`). That is a fallback inside the
-  companion; the protocol and the profile stay the same.
+- **Still to check on the device:** that Chrome scrolls a node in for `ACTION_SHOW_ON_SCREEN`,
+  and how long a walk over a big page takes (a Reddit page is ~650 nodes, read over binder). If
+  it's slow, Chrome's own `ACTION_NEXT_HTML_ELEMENT` is the faster route for web content; the
+  protocol and the profile stay the same either way.
 
 ## The app overview stays separate
 
@@ -209,7 +213,7 @@ empty: Jetpack Compose apps such as Claude have none). `label` (≤ 40 character
 | `screen{…, pkg?}` | phone → glasses | New field: the package of the app the view follows (`com.anthropic.claude`; ≤ 100 chars, letters, digits, `_` and `.`). `app` stays the display name for the status bar. Profiles are keyed by package because display names change with the language and with Samsung's renaming. |
 | `controls{}` | glasses → phone | Where are the tappable things in the window the view follows? |
 | `controls{pkg, items}` | phone → glasses | Up to 64 items: visible nodes that are clickable or editable, at most 20 levels deep. `pkg` lets the glasses drop an answer that arrives after the app changed. |
-| `walk{dir, unit}` | glasses → phone | Step to the `next` or `previous` thing of that `unit` (`item`, `link`, `heading`, `field`, `landmark`) in the window the view follows, from where the last walk ended (see "Where a walk starts"). |
+| `walk{dir, unit}` | glasses → phone | Step to the `next` or `previous` thing of that `unit` (`item`, `link`, `heading`, `field`, `article`, `landmark`) in the window the view follows, from where the last walk ended (see "Where a walk starts"). |
 | `walked{pkg, item?}` | phone → glasses | Where it landed, once the page has stopped scrolling; no `item` at the end of the page. |
 
 What the phone **never** sends:
@@ -292,15 +296,15 @@ type ControlMatcher =
 ### On the phone
 
 - `ScreenSession.sendScreen` adds `pkg` (it has `followPackage`).
-- `InputService.controls()` walks the followed app's top window, like `overviewApps()`, with the
-  same limits on depth and count, and the filtering above.
-- `InputService.walk(dir, unit)`: Chrome's element walk on the web content of the followed
-  window (or the fallback above), remembering the node it ended on for the next walk; it waits
-  for the page to stop scrolling (its box steady for ~150 ms, at most 1 s) before answering.
-- New `InputCommand.Controls` and `InputCommand.Walk` in `InputProtocol.kt`, with tests.
-- Possibly a change to the accessibility service's config if Chrome needs it to build the full
-  web tree (step 1 finds out). Any added event types must stay cheap: the service sees every
-  app on the phone.
+- `ScreenControls.kt` (pure, tested with a fake tree): the list of what you can press on screen,
+  labels and kinds, the walkable list for a unit, and where a walk lands. `A11yNode.kt` reads a
+  live `AccessibilityNodeInfo` for it; `InputService.appRoot(pkg)` gives the followed window.
+- `ScreenSession`: `controls{}` answers at once; `walk{}` remembers the node it ended on (dropped
+  when the followed app changes), scrolls an off-screen target in and answers once its box holds
+  still (checked every 100 ms, at most 1 s). A newer walk replaces one still waiting. The log
+  counts items; labels never go in it.
+- `InputCommand.Controls` and `InputCommand.Walk` in `InputProtocol.kt`, with tests.
+- The accessibility service's config is unchanged: Chrome already gives it the whole page.
 
 ## Claude: the first map
 

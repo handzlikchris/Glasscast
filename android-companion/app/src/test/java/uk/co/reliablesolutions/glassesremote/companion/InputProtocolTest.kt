@@ -20,6 +20,9 @@ class InputProtocolTest {
         assertEquals(InputCommand.Ping(3.0), InputProtocol.parse("""{"type":"ping","t":3}"""))
         assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
         assertEquals(InputCommand.OverviewApps, InputProtocol.parse("""{"type":"overviewApps"}"""))
+        assertEquals(InputCommand.Controls, InputProtocol.parse("""{"type":"controls"}"""))
+        assertEquals(InputCommand.Walk(true, WalkUnit.ITEM), InputProtocol.parse("""{"type":"walk","dir":"next","unit":"item"}"""))
+        assertEquals(InputCommand.Walk(false, WalkUnit.HEADING), InputProtocol.parse("""{"type":"walk","dir":"previous","unit":"heading"}"""))
         assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))
         assertEquals(InputCommand.DoubleTap(0.5, 0.5), InputProtocol.parse("""{"type":"doubleTap","x":0.5,"y":0.5}"""))
         assertEquals(InputCommand.SwitchApp(previous = true), InputProtocol.parse("""{"type":"switchApp","dir":"previous"}"""))
@@ -65,6 +68,11 @@ class InputProtocolTest {
             """{"type":"switchApp","dir":"sideways"}""",
             """{"type":"switchApp","package":"com.example"}""",
             """{"type":"touch","phase":"down","x":0}""",
+            """{"type":"controls","package":"com.example"}""",
+            """{"type":"walk","dir":"next"}""",
+            """{"type":"walk","dir":"up","unit":"item"}""",
+            """{"type":"walk","dir":"next","unit":"script"}""",
+            """{"type":"walk","dir":"next","unit":"item","package":"com.example"}""",
         ).forEach { assertNull(it, InputProtocol.parse(it)) }
     }
 }

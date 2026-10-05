@@ -132,6 +132,13 @@ class InputService : AccessibilityService() {
             }
     }
 
+    /** The root of the app's top window on screen, for its controls (app profiles), or null. */
+    fun appRoot(pkg: String): AccessibilityNodeInfo? =
+        windows
+            .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { it.layer }
+            .firstNotNullOfOrNull { window -> window.root?.takeIf { it.packageName?.toString() == pkg } }
+
     /**
      * The app the glasses' view follows when nothing else says which: the top floating window's
      * (a Samsung pop-up view, a split-screen half), else the app you're using. Null for us.
