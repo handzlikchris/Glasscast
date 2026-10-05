@@ -275,6 +275,38 @@ public sealed class PhoneEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_code_typed_late_still_leaves_the_rest_its_full_time()
+    {
+        // On the device the code ran out before it was typed. Finding the phone has its own time
+        // (StartTimeout); the relay's own limit (RelayTimeout) only starts once it's found.
+        await using var host = new TestServerHost(new Dictionary<string, string?>
+        {
+            ["Companion:StartTimeout"] = "00:00:10",
+            ["Companion:RelayTimeout"] = "00:00:02",
+            ["Companion:Registration"] = "Open",
+        });
+        using var pairing = await host.ConnectAsync("/ws/companion", origin: null);
+        await pairing.SendAsync(new { type = "pair", name = "Phone" });
+        var token = (await pairing.ReceiveAsync("paired")).GetProperty("token").GetString()!;
+        using var companion = await host.ConnectAsync("/ws/companion", origin: null);
+        await companion.SendAsync(new { type = "auth", token });
+        await companion.ReceiveAsync("authenticated");
+
+        using var glasses = await host.ConnectAsync("/ws/session");
+        await glasses.SendAsync(new { type = "phone" });
+        var code = (await glasses.ReceiveAsync("connectCode")).GetProperty("code").GetString()!;
+        await Task.Delay(3000);   // longer than RelayTimeout
+        await companion.SendAsync(new { type = "claim", code });
+
+        await companion.ReceiveAsync("claimed");
+        await companion.ReceiveAsync("relayOpen");
+        Assert.Equal("ready", (await glasses.ReceiveAsync("phoneStatus")).GetProperty("state").GetString());
+        // ...and RelayTimeout then applies from here.
+        await glasses.WaitForCloseAsync(timeoutMs: 10_000);
+        Assert.Equal("timeout", glasses.Socket.CloseStatusDescription);
+    }
+
+    [Fact]
     public async Task An_offline_phone_that_comes_back_needs_no_code()
     {
         var token = await PairCompanionAsync();

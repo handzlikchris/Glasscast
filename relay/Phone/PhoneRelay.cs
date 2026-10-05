@@ -50,8 +50,10 @@ public sealed class PhoneRelay
 
     public async Task RunAsync(CancellationToken requestAborted)
     {
+        // Finding the phone has its own limit (StartTimeout, in WaitForPhoneAsync); the rest of the
+        // relay's life (RelayTimeout) starts once it's found, so a slowly typed code leaves the
+        // pairing and the consent their full time.
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
-        cts.CancelAfter(_companion.RelayTimeout);
         var ct = cts.Token;
 
         var closeStatus = WebSocketCloseStatus.NormalClosure;
@@ -66,6 +68,7 @@ public sealed class PhoneRelay
                 closeReason = "phone offline";
                 return;
             }
+            cts.CancelAfter(_companion.RelayTimeout);
 
             relay = link.OpenRelay();
             using var untilGone = CancellationTokenSource.CreateLinkedTokenSource(ct, link.Closed, relay.Replaced);
@@ -185,8 +188,8 @@ public sealed class PhoneRelay
         }
     }
 
-    /// <summary>Shows a connect code on the glasses and waits for a companion to claim it.</summary>
-    private async Task<CompanionLink> WaitForClaimAsync(CancellationToken ct)
+    /// <summary>Shows a connect code on the glasses and waits for a companion to claim it; null after StartTimeout.</summary>
+    private async Task<CompanionLink?> WaitForClaimAsync(CancellationToken ct)
     {
         var connect = _s.Registry.OpenConnectCode();
         try
@@ -195,7 +198,19 @@ public sealed class PhoneRelay
 
             // Like the wait for an offline phone, nothing is read from the glasses meanwhile (one
             // reader per socket); their pings are answered once the phone is found.
-            var link = await connect.Claimed.WaitAsync(ct);
+            CompanionLink link;
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                deadline.CancelAfter(_companion.StartTimeout);
+                try
+                {
+                    link = await connect.Claimed.WaitAsync(deadline.Token);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    return null;
+                }
+            }
             await _io.SendAsync(new { type = "phoneFound", phone = link.PhoneId }, ct);
             _s.Logger.LogInformation("Glasses from {Remote} found their phone {Name} by connect code", _remote, link.Name);
             return link;

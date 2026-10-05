@@ -47,12 +47,16 @@ public sealed class CompanionOptions
     /// <summary>A connected companion that sends nothing (it pings every 15 s) for this long is dropped.</summary>
     public TimeSpan HeartbeatTimeout { get; set; } = TimeSpan.FromSeconds(45);
 
-    /// <summary>How long glasses wait in a phone relay for the companion to connect before giving up.</summary>
-    public TimeSpan StartTimeout { get; set; } = TimeSpan.FromSeconds(90);
+    /// <summary>
+    /// How long glasses wait in a phone relay to find their phone: for it to connect, or for their
+    /// connect code to be typed into a companion (on the phone, not in a hurry).
+    /// </summary>
+    public TimeSpan StartTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// A phone relay's whole life: pairing on the phone, the capture consent, the offer and answer.
-    /// The glasses close it once their video is up; the session itself doesn't need the PC.
+    /// A phone relay's life once the phone is found: pairing on the phone, the capture consent, the
+    /// offer and answer. The glasses close it once their video is up; the session itself doesn't
+    /// need the server.
     /// </summary>
     public TimeSpan RelayTimeout { get; set; } = TimeSpan.FromMinutes(3);
 

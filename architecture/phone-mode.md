@@ -180,8 +180,10 @@ the companion's setup screen, **Pair again** on the glasses' ended screen.
 
 ### Glasses ⇄ server (`/ws/session`, first message `{type:"phone", phone?}`)
 
-No login on the server; relays are rate-limited per IP (10 a minute) and overall (30), and last
-at most 3 minutes (`Companion:RelayTimeout`). `phone` is the phone's id on this server (22
+No login on the server; relays are rate-limited per IP (10 a minute) and overall (30). Finding
+the phone (it connecting, or its connect code being typed) may take up to 5 minutes
+(`Companion:StartTimeout`); from then on the relay lasts at most 3 minutes
+(`Companion:RelayTimeout`), so a slowly typed code still leaves pairing and the consent their time. `phone` is the phone's id on this server (22
 base64url characters), once the glasses know it. Server → glasses:
 
 - Finding the phone: a known id goes to that phone. Otherwise (no id, or one the server doesn't
