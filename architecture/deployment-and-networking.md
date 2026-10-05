@@ -145,6 +145,36 @@ reboot and keeps it going; it sits beside the other sites on its own host name (
   serves that page), copy the new publish over (it has no `relay.Local.json`, so yours stays),
   then delete `app_offline.htm`. Registered phones are kept (they're in `data`).
 
+### Deploying updates with Web Deploy
+
+`.\scripts\deploy-relay.ps1 -Server relay.example.com -User <windows user>` publishes and deploys
+in one go: Web Deploy syncs `publish\relay-win-x64` to the IIS site over
+`https://<server>:8172`, taking the site offline for the copy (`app_offline.htm`), moving only
+changed files and deleting nothing (`relay.Local.json`, logs and `data` stay), then checks
+`/health` and `/features`. `-NoBuild` deploys the last publish, `-WhatIf` only lists changes. The
+password comes from `-Password`, `GLASSCAST_DEPLOY_PASSWORD` or a prompt.
+
+Once, on the server (admin PowerShell):
+
+1. The Web Management Service, accepting remote connections:
+   ```powershell
+   Install-WindowsFeature Web-Mgmt-Service
+   Set-ItemProperty HKLM:\SOFTWARE\Microsoft\WebManagement\Server -Name EnableRemoteManagement -Value 1
+   Set-Service WMSVC -StartupType Automatic; Restart-Service WMSVC
+   ```
+2. **Web Deploy** (https://www.iis.net/downloads/microsoft/web-deploy), setup type **Complete**
+   (it includes the IIS Deployment Handler that answers on 8172).
+3. **Only your IP on 8172:** in the Azure portal, the VM → Networking → add an inbound port rule:
+   source *IP addresses* = your home IP, destination port `8172`, TCP, Allow. (Windows Firewall
+   gets its rule from step 1; check `Get-NetFirewallRule -DisplayName '*Management*'`.) Nobody
+   else can reach the deploy endpoint at all.
+4. The account: any local administrator of the server works (Basic authentication over TLS). A
+   dedicated one is tidier: a local user that's an administrator, used only for deploying.
+
+The service's certificate is self-signed, hence `-allowUntrusted` in the script; the connection
+is still encrypted, and the NSG rule is what keeps others out. This PC has Web Deploy already
+(`msdeploy.exe`); another one needs it installed too.
+
 ## Configuration
 
 Sources, later wins: `appsettings.json` → `appsettings.{Environment}.json` →

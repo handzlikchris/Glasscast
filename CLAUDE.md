@@ -109,6 +109,7 @@ tools/e2e-harness/      DEV-ONLY host (auto-approves pairing, records input and 
 deploy/                 Caddyfile, firewall.ps1; Caddyfile.relay + relay/ (start scripts, systemd unit)
 scripts/run.ps1         builds client if needed, runs server (-Dev, -Lan)
 scripts/publish-relay.ps1  publishes the relay server with the page (self-contained)
+scripts/deploy-relay.ps1   publishes and deploys it to IIS with Web Deploy (-Server -User)
 tools/bin/caddy.exe     local Caddy binary (git-ignored)
 .claude/tasks/          task briefs for new sessions
 architecture/           one doc per feature area (files, flows, rules, tests); start at README.md
