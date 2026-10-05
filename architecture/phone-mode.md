@@ -98,6 +98,9 @@ that:
 - It survives losing one network while another carries internet (SIM off on home Wi-Fi: the
   session carried on). Moving between networks (leaving home Wi-Fi for mobile data) makes Meta
   rebuild the group, and the session drops within seconds; Reconnect starts a new one.
+- **The phone's Wi-Fi radio must be on**, connected to a network or not (user, on the device,
+  2026-10-05): that's what the Wi-Fi Direct link runs on. With Wi-Fi off, Meta's app carries the
+  glasses' traffic over Bluetooth, and the video lags badly. The README says so.
 - So: phone mode needs the phone online, like the web app itself. Truly offline would take
   Meta's native Device Access Toolkit over Bluetooth, set aside for its still-frame video
   (`.claude/tasks/phone-direct-dat.md`).
