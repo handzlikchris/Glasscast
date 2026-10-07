@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GlassesRemote.Server.Tests.RelayServer;
 
@@ -131,10 +132,52 @@ public sealed class RelayServerTests : IAsyncLifetime
             Assert.True(File.Exists(Path.Combine(program, "data", "phones.json")));
             Assert.NotEqual(Path.GetFullPath(program), Path.GetFullPath(Directory.GetCurrentDirectory()));
             Assert.Contains(host.Logs, line => line.Contains(Path.Combine(program, "data"), StringComparison.Ordinal));
+
+            // Next to the program, but never served.
+            using var http = host.CreateHttpClient();
+            var served = await http.GetAsync("/data/phones.json");
+            Assert.DoesNotContain("TokenHash", await served.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         }
         finally
         {
             Directory.Delete(program, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void By_default_the_phones_are_kept_in_data_next_to_the_program()
+    {
+        var program = Path.Combine(Path.GetTempPath(), "relay-site");
+        Assert.Equal(Path.Combine(program, "data"), new RelayOptions().ResolveDataDirectory(program));
+    }
+
+    [Fact]
+    public void Phones_kept_in_the_old_default_folder_are_copied_over_once()
+    {
+        var folder = Directory.CreateTempSubdirectory("relay-move-").FullName;
+        try
+        {
+            var oldFile = Path.Combine(folder, "old", "phones.json");
+            var phonesFile = Path.Combine(folder, "data", "phones.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(oldFile)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(phonesFile)!);
+            File.WriteAllText(oldFile, "[\"old\"]");
+
+            RelayServerApp.CopyOldPhones(NullLogger.Instance, oldFile, phonesFile);
+            Assert.Equal("[\"old\"]", File.ReadAllText(phonesFile));
+            Assert.True(File.Exists(oldFile));
+
+            // Never over phones registered here since.
+            File.WriteAllText(phonesFile, "[\"new\"]");
+            RelayServerApp.CopyOldPhones(NullLogger.Instance, oldFile, phonesFile);
+            Assert.Equal("[\"new\"]", File.ReadAllText(phonesFile));
+
+            RelayServerApp.CopyOldPhones(NullLogger.Instance, null, Path.Combine(folder, "other", "phones.json"));
+            Assert.False(File.Exists(Path.Combine(folder, "other", "phones.json")));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
         }
     }
 
