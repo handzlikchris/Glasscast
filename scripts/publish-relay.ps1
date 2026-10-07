@@ -45,6 +45,8 @@ Copy-Item (Join-Path $root 'deploy\relay\start-relay.ps1') $Output
 Copy-Item (Join-Path $root 'deploy\relay\start-relay.sh') $Output
 Copy-Item (Join-Path $root 'deploy\relay\start-caddy.ps1') $Output
 Copy-Item (Join-Path $root 'deploy\Caddyfile.relay') $Output
+# Where the relay keeps the registered phones (Relay:DataDirectory's default); empty here.
+New-Item -ItemType Directory -Force (Join-Path $Output 'data') | Out-Null
 # Caddy too, when this machine has it (tools\bin is git-ignored); Linux hosts install their own.
 $caddy = Join-Path $root 'tools\bin\caddy.exe'
 if ($Runtime -like 'win-*' -and (Test-Path $caddy)) { Copy-Item $caddy $Output }

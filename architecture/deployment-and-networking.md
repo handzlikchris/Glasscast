@@ -48,8 +48,9 @@ phone ⇄ glasses WebRTC (video, input): straight between them, never through th
 - **Settings:** `relay.json` next to the program, then `relay.Local.json` (git-ignored:
   `Web:PublicHost`), then environment variables (`Web__PublicHost`), then arguments. Their own
   names, so they never mix with the PC server's `appsettings.json`. `Relay:DataDirectory` holds
-  `phones.json` (token hashes only); default `LocalAppData/GlassesRemote/relay`, never the PC
-  server's files. `Web:ClientRoot` is `wwwroot` (the launch profiles use `../client-web/dist`).
+  `phones.json` (token hashes only); default `data` next to the program (since 2026-10-07;
+  before, the account's `LocalAppData/GlassesRemote/relay`, whose phones are copied over once
+  at startup), never the PC server's files. `Web:ClientRoot` is `wwwroot` (the launch profiles use `../client-web/dist`).
 - **Publish:** `.\scripts\publish-relay.ps1 [-Runtime win-x64|linux-x64|linux-arm64] [-Output dir]`
   builds the page into `client-web/dist-relay` (not `dist`, which a running PC server serves),
   publishes self-contained (no .NET needed on the box, ~106 MB) and copies the page to
@@ -90,15 +91,17 @@ reboot and keeps it going; it sits beside the other sites on its own host name (
 **Copy and configure:**
 
 4. Copy the contents of `publish\relay-win-x64` (from `.\scripts\publish-relay.ps1`) to
-   `C:\GlasscastRelay\site`, and make `C:\GlasscastRelay\data` (outside the site, so updates
-   never touch the phones).
+   `C:\GlasscastRelay\site`. Its empty `data` folder is where the relay keeps the registered
+   phones (`phones.json`); updates never delete or overwrite its files (`deploy-relay.ps1` skips
+   them), but a copy that mirrors the folder (`robocopy /MIR`) would.
 5. In `C:\GlasscastRelay\site` create `relay.Local.json`:
    ```json
    {
-     "Web": { "PublicHost": "relay.example.com" },
-     "Relay": { "DataDirectory": "C:\\GlasscastRelay\\data" }
+     "Web": { "PublicHost": "relay.example.com" }
    }
    ```
+   To keep the phones elsewhere, add `"Relay": { "DataDirectory": "D:\\somewhere" }` and give
+   the pool Modify there instead.
 
 **IIS Manager:**
 
@@ -111,7 +114,7 @@ reboot and keeps it going; it sits beside the other sites on its own host name (
 7. Give that account access (admin PowerShell):
    ```powershell
    icacls C:\GlasscastRelay\site /grant "IIS AppPool\GlasscastRelay:(OI)(CI)RX"
-   icacls C:\GlasscastRelay\data /grant "IIS AppPool\GlasscastRelay:(OI)(CI)M"
+   icacls C:\GlasscastRelay\site\data /grant "IIS AppPool\GlasscastRelay:(OI)(CI)M"
    ```
 8. **Sites > Add Website:** name `GlasscastRelay`, pool `GlasscastRelay`, physical path
    `C:\GlasscastRelay\site`, binding **https**, IP *All Unassigned*, port **443**, host name
@@ -151,7 +154,9 @@ reboot and keeps it going; it sits beside the other sites on its own host name (
 in one go: Web Deploy syncs `publish\relay-win-x64` to the IIS site over
 `https://<server>:8172`: it stops the site's app pool for the copy and always starts it again
 (Web Deploy's `recycleApp`), moves only changed files and deletes nothing (`relay.Local.json`,
-logs and `data` stay), then checks `/health` and `/features`. (Only taking the site offline with
+logs and `data` stay; files in `data` are never overwritten), gives the pool Modify on `data`
+(Web Deploy's `setAcl`, which grants the site's app pool identity; a warning with the `icacls`
+line if the deploy account may not), then checks `/health` and `/features`. (Only taking the site offline with
 `app_offline.htm` wasn't enough: the relay held its DLLs a while longer, with the phones'
 companions connected, and the copy failed with `ERROR_FILE_IN_USE`.) `-NoBuild` deploys the last publish, `-WhatIf` only lists changes. The
 password comes from `-Password`, a saved login, `GLASSCAST_DEPLOY_PASSWORD` or a prompt.
@@ -218,8 +223,8 @@ sets `Urls` as an environment variable for that reason.
 
 `%LOCALAPPDATA%\GlassesRemote\`: `device-grant.json` (hashes), `phones.json` (the registered
 phones: token hashes; the old `companion-grant.json` is imported once), `region.json`,
-`stats\stats-yyyy-MM-dd.jsonl`. The relay server: `relay\phones.json` there, or
-`Relay:DataDirectory`. Caddy's certificates: `%APPDATA%\Caddy`.
+`stats\stats-yyyy-MM-dd.jsonl`. The relay server: `data\phones.json` next to
+the program, or `Relay:DataDirectory`. Caddy's certificates: `%APPDATA%\Caddy`.
 
 ## Rules
 
