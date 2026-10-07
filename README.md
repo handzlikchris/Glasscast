@@ -220,8 +220,12 @@ other, because a page on the glasses can't reach a phone directly (see
 - **The screen video and your input never go through it.** They go straight between the phone
   and the glasses over WebRTC, encrypted end to end (DTLS-SRTP), and a session carries on if the
   relay goes away.
-- It keeps, per phone, a random id, a hash of the companion's token and the phone's model name,
-  and its web server logs connections (IP addresses), as any website does.
+- **What it keeps about you:** per phone, a random id, a hash of the companion's token, the
+  phone's model name (e.g. `SM-S931B`), when it registered and when it last connected (to the
+  hour). Nothing about the glasses, what's on your screen or what you do with it. I look at that
+  list to see how many people use Glasscast. Entries stay until the list is full; then phones
+  unused for 90 days make room. Its web server also logs
+  connections (IP addresses), as any website does.
 - It also **serves the glasses app**: the page your glasses run comes from this server. You're
   trusting it to serve the code in this repository, as with any web app. That's the one thing
   self-hosting removes.
