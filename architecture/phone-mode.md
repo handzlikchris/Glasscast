@@ -239,7 +239,10 @@ Phone → glasses (`CompanionProtocol.cs`): `pairKey{key}`, `paired`, `pairFaile
   overview: where its row of apps is), `controls{}` and `walk{dir, unit}` (app profiles: what you
   can press in the followed app, and the next or previous thing of a kind; see
   [app-profiles.md](app-profiles.md)), `ping{t}` (every 2 s: the phone's only
-  sign the glasses are there), `end{}` (End on the glasses).
+  sign the glasses are there), `end{}` (End on the glasses), `pause{}` / `resume{}` (the glasses'
+  page hidden and shown again, e.g. the display turned off and on: the phone stops and restarts
+  the video, keeps the session and the capture, and waits up to 10 min for the glasses while
+  paused instead of 15 s; 2026-11-12).
 - Phone → glasses: `screen{width, height, region, app?, pkg?}` (the crop, the followed app's name
   and its package, which picks its profile), `controls{pkg, items}` and `walked{pkg, item?}`
   (items `{x, y, w, h, kind, label, id}`, boxes 0..1 in the frame; a field's label is its hint,

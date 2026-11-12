@@ -274,7 +274,10 @@ app's profile off (or Walk on, for any app), remembered per app. Model in
 - **Leaving the app ends the session:** hidden for 5 s (`HIDDEN_MS`, Page Visibility), the client
   closes it; a page frozen outright stops pinging and the PC closes it after
   `Session:HeartbeatTimeout` (15 s, any message counts). Either way the cast frame and banner go,
-  and the ended screen's Reconnect (focused) resumes with the device token.
+  and the ended screen's Reconnect (focused) resumes with the device token. **A connected phone
+  session pauses instead** (2026-11-12): the glasses send `pause{}`, the phone stops the video and
+  keeps the session and its capture for up to 10 min, and `resume{}` brings the video back, so
+  turning the display off and on (double middle pinch) needs no new capture consent on the phone.
 - **Stats** (last bar button) shows the latency panel; see "Measuring on the device".
 
 ## Measuring on the device (Stats panel and stats log)
