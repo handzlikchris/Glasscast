@@ -14,7 +14,9 @@ export type ProfileAction =
   /** Highlight a named control, found in the phone's `controls` list with the profile's matchers. */
   | { highlight: string }
   /** Ask the phone for the next or previous thing of a kind, in reading order. */
-  | { walk: 'next' | 'previous'; unit: WalkUnit };
+  | { walk: 'next' | 'previous'; unit: WalkUnit }
+  /** Tap the first of these named controls on screen, without highlighting it. */
+  | { press: readonly string[] };
 
 /** How a profile finds one of its named controls in the phone's list; a control's matchers are tried in order. */
 export type ControlMatcher =
@@ -34,6 +36,11 @@ export interface AppProfile {
   packages: readonly string[];
   /** View gestures it takes over; the rest stay generic. */
   gestures: Partial<Record<SwipeGesture, ProfileAction>>;
+  /**
+   * A single pinch held still for 3 s (LONG_HOLD_MS), which nothing generic uses: tap the first of
+   * these named controls on screen. `says`: what it does, for the ? panel and the status bar.
+   */
+  hold?: { press: readonly string[]; says: string };
   /**
    * While something is highlighted: 'map' = single swipes step through `moves` at once (no doubles),
    * one the map doesn't list drops the highlight; 'view' = swipes act as on the view (a scroll drops
@@ -79,5 +86,6 @@ export const unitName = (unit: WalkUnit): string => UNIT_NAMES[unit];
 /** A profile action in a few words, for the ? panel and the status bar. */
 export function describeAction(profile: AppProfile, action: ProfileAction): string {
   if ('highlight' in action) return controlName(profile, action.highlight);
+  if ('press' in action) return action.press.map((name) => controlName(profile, name)).join(' or ');
   return `${action.walk} ${unitName(action.unit)}`;
 }

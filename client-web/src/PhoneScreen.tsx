@@ -33,8 +33,8 @@ import { activeProfile, ownProfile, profileMark } from './apps';
 import { highlightStatus, mapMove, notFoundStatus, opensType, type Highlight } from './apps/highlight';
 import { firstOnScreen } from './apps/match';
 import { loadProfileSwitches, saveProfileSwitches, withSwitch, type ProfileSwitches } from './apps/prefs';
-import { describeAction, type AppProfile, type ProfileAction } from './apps/profile';
-import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, type GestureEvent } from './gestures';
+import { controlName, describeAction, type AppProfile, type ProfileAction } from './apps/profile';
+import { DEFAULT_GESTURES, DOUBLE_TAP_MS, GestureTracker, HOLD_DRAG_MS, LONG_HOLD_MS, type GestureEvent } from './gestures';
 import type { Point, Rect } from './geometry';
 import {
   frameRect,
@@ -88,6 +88,8 @@ const TYPE_GUARD_MS = 800;
 /** How often a held finger's position goes to the phone while dragging (ms). */
 const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
+/** A single pinch kept still this long says what the profile's long hold will do (it acts at LONG_HOLD_MS). */
+const LONG_HOLD_HINT_MS = 1000;
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
   ready: 'checking the phone…',
@@ -121,6 +123,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   // A pinch released before the hold (HOLD_DRAG_MS) is a tap; after it, the hold has taken over.
   const tracker = useRef(new GestureTracker(DEFAULT_GESTURES));
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A single pinch kept still: the hint, then the profile's long hold (Claude: microphone, send). */
+  const longHoldTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
   const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
   const touchSentAt = useRef(0);
@@ -543,8 +547,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         touch('down');
         break;
       case 'dragStart':
-        // Moving the cursor by hand lets go of a highlight.
+        // Moving the cursor by hand lets go of a highlight, and isn't a long hold.
         clearHighlight();
+        clearLongHold();
         if (event.held) {
           clearPendingTap();
           touch('down');
@@ -567,12 +572,36 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       case 'holdEnd':
         touch('up');
         break;
+      case 'longHold': {
+        const hold = profileRef.current?.hold;
+        if (hold) runProfileAction({ press: hold.press });
+        break;
+      }
     }
+  };
+
+  const clearLongHold = () => {
+    longHoldTimers.current.forEach(clearTimeout);
+    longHoldTimers.current = [];
   };
 
   const clearHoldTimer = () => {
     if (holdTimer.current !== null) clearTimeout(holdTimer.current);
     holdTimer.current = null;
+    clearLongHold();
+  };
+
+  /** A single pinch in an app whose profile has a long hold: say what's coming, then do it if still held. */
+  const startLongHold = (id: number) => {
+    const hold = profileRef.current?.hold;
+    if (!hold) return;
+    longHoldTimers.current = [
+      setTimeout(() => setLastInput(`keep holding: ${hold.says}`), LONG_HOLD_HINT_MS),
+      setTimeout(() => {
+        longHoldTimers.current = [];
+        tracker.current.longHold(id).forEach(handleGestureRef.current);
+      }, LONG_HOLD_MS),
+    ];
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -585,7 +614,10 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (armed) clearTimeout(pendingTap.current!.timer);
     tracker.current.down(e.pointerId, e.clientX, e.clientY, e.timeStamp, armed);
     clearHoldTimer();
-    if (!armed) return;
+    if (!armed) {
+      startLongHold(e.pointerId);
+      return;
+    }
     const id = e.pointerId;
     holdTimer.current = setTimeout(() => {
       holdTimer.current = null;
@@ -672,7 +704,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const runProfileAction = (action: ProfileAction, names?: readonly string[]) => {
     const profile = profileRef.current;
     if (!profile) return;
-    const wanted = names ?? ('highlight' in action ? [action.highlight] : []);
+    const wanted = names ?? ('highlight' in action ? [action.highlight] : 'press' in action ? action.press : []);
     pendingAction.current = { action, names: wanted, pkg: pkgRef.current };
     const label = `${profile.name}: ${describeAction(profile, action)}…`;
     if ('walk' in action) send({ type: 'walk', dir: action.walk, unit: action.unit }, label);
@@ -695,6 +727,16 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (!taken) return;
     const { pending, profile } = taken;
     const found = firstOnScreen(profile, pending.names, items);
+    if ('press' in pending.action) {
+      // A long hold: tap it where it is, nothing highlighted (Claude: the microphone, or Send).
+      if (found) {
+        const { item } = found;
+        send({ type: 'tap', x: item.x + item.w / 2, y: item.y + item.h / 2 }, `${profile.name}: ${controlName(profile, found.name)}`);
+      } else {
+        setLastInput(notFoundStatus(profile, pending.action));
+      }
+      return;
+    }
     // Not found: say so; anything highlighted stays where it was.
     if (found) showHighlight(profile, { item: found.item, name: found.name });
     else setLastInput(notFoundStatus(profile, { highlight: pending.names[0] }));

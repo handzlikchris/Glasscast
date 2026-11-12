@@ -89,6 +89,7 @@ export function shortcutRows(target: 'pc' | 'phone', app: PhoneApp = { profile: 
     return [
       { gesture: `In ${profile.name}`, action: '', heading: true },
       ...own,
+      ...(profile.hold ? [{ gesture: 'pinch held 3 s', action: profile.hold.says }] : []),
       ...profile.notes,
       { gesture: 'Everywhere', action: '', heading: true },
       ...generic,
