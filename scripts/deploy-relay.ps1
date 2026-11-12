@@ -11,7 +11,8 @@
 # It builds the page and the relay (scripts\publish-relay.ps1), then syncs the folder to the IIS
 # site through Web Deploy (https://<Server>:8172): it stops the site's app pool for the copy (the
 # running relay holds its files), copies only changed files, deletes nothing on the server
-# (relay.Local.json, logs and the data folder stay) and starts the pool again, whatever happened.
+# (relay.Local.json, logs and the data folder stay), gives the app pool write access to data\
+# (the registered phones), and starts the pool again, whatever happened.
 # Then it checks https://<Server>/health and /features.
 #
 # Needs Web Deploy on this PC (msdeploy.exe) and, on the server, the Web Management Service plus
@@ -100,6 +101,8 @@ $copy = @(
     "-dest:contentPath=`"$Site`",$remote",
     # Never delete on the server: relay.Local.json, logs and old page assets stay.
     '-enableRule:DoNotDeleteRule',
+    # Nor overwrite the server's registered phones with a local test run's (the folder itself goes).
+    '-skip:objectName=filePath,absolutePath=\\data\\',
     # A file the stopping relay still holds is tried again a few times.
     '-retryAttempts:10',
     '-retryInterval:2000'
@@ -120,6 +123,15 @@ try {
     Write-Host "Copying $source..."
     & $msdeploy @copy
     $copied = $LASTEXITCODE
+
+    # The relay keeps the registered phones in data\ next to it: the app pool needs Modify there.
+    # setAcl without a user grants it to the site's app pool identity. Harmless when already set.
+    if ($copied -eq 0) {
+        & $msdeploy '-verb:sync' '-source:setAcl' "-dest:setAcl=`"$Site/data`",setAclAccess=Modify,$remote" @common
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Couldn't give the app pool write access to $Site\data (exit $LASTEXITCODE): registered phones won't survive a restart. On the server: icacls <site folder>\data /grant `"IIS AppPool\${Site}:(OI)(CI)M`""
+        }
+    }
 
     # An app_offline.htm left on the server (Web Deploy's AppOffline rule, from an interrupted
     # deploy) would keep the site showing "Site Under Construction": remove it if it's there.

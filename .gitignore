@@ -29,6 +29,7 @@ appsettings.Local.json
 relay.Local.json
 CLAUDE.local.md
 server/data/
+relay-server/data/
 
 # Android companion (android-companion/)
 .gradle/

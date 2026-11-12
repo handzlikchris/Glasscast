@@ -14,17 +14,23 @@ public sealed class RelayOptions
 
     /// <summary>
     /// Where the registered phones are kept. Relative = next to the program (its content root),
-    /// never the working directory, which under IIS is system32. Empty = LocalAppData/GlassesRemote/relay
-    /// (or "data" next to the program when the account has no LocalAppData).
+    /// never the working directory, which under IIS is system32. Empty = "data" next to the program,
+    /// so on a server it sits with the site (deploys leave it alone; under IIS the pool needs Modify).
     /// </summary>
     public string DataDirectory { get; set; } = "";
 
-    public static string DefaultDataDirectory
+    public const string DefaultDataDirectory = "data";
+
+    /// <summary>
+    /// Where versions before 2026-10-07 kept the phones by default: the account's LocalAppData,
+    /// which under IIS is the app pool's hidden profile. Null when the account has none.
+    /// </summary>
+    public static string? OldDefaultPhonesFile
     {
         get
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return string.IsNullOrEmpty(local) ? "data" : Path.Combine(local, "GlassesRemote", "relay");
+            return string.IsNullOrEmpty(local) ? null : Path.Combine(local, "GlassesRemote", "relay", "phones.json");
         }
     }
 
@@ -76,6 +82,10 @@ public static class RelayServerApp
         var phonesFile = app.Services.GetRequiredService<IOptions<CompanionOptions>>().Value.PhonesFile!;
         app.Logger.LogInformation("Phone relay: phones kept in {PhonesFile}", phonesFile);
         WarnIfNotWritable(app.Logger, Path.GetDirectoryName(phonesFile)!);
+        if (string.IsNullOrEmpty(config["Relay:DataDirectory"]) && string.IsNullOrEmpty(config["Companion:PhonesFile"]))
+        {
+            CopyOldPhones(app.Logger, RelayOptions.OldDefaultPhonesFile, phonesFile);
+        }
 
         app.UseGlassesWeb();
         app.MapRelayEndpoints();
@@ -102,6 +112,29 @@ public static class RelayServerApp
             logger.LogError(ex, "Can't write to {Directory}: registered phones won't survive a restart. " +
                 "Give this account write access there (under IIS: Modify for IIS AppPool\\<pool name>), " +
                 "or set Relay:DataDirectory", directory);
+        }
+    }
+
+    /// <summary>
+    /// Brings the phones over from the old default folder once, so they don't have to register
+    /// again: only when there's no phones file here yet. The old file stays where it was.
+    /// </summary>
+    public static void CopyOldPhones(ILogger logger, string? oldFile, string phonesFile)
+    {
+        if (oldFile is null || File.Exists(phonesFile) || !File.Exists(oldFile)
+            || Path.GetFullPath(oldFile).Equals(Path.GetFullPath(phonesFile), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Copy(oldFile, phonesFile);
+            logger.LogWarning("Copied the registered phones from {OldFile} to {PhonesFile}", oldFile, phonesFile);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(ex, "Couldn't copy the registered phones from {OldFile} to {PhonesFile}; they have to register again", oldFile, phonesFile);
         }
     }
 
