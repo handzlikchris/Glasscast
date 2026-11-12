@@ -78,8 +78,14 @@ type Focus = 'view' | 'bar' | 'type';
 const PING_MS = 2000;
 /** Nothing from the phone this long over the direct connection: it's gone (the phone uses 15 s). */
 const SILENT_MS = 10_000;
-/** Hidden this long (the app left), the session ends, as in a PC session. */
+/** Hidden this long before the phone is reached (the app left), the session ends, as in a PC session. */
 const HIDDEN_MS = 5000;
+/**
+ * Once connected, hidden (the display off: double middle pinch) pauses the video instead of
+ * ending, so turning it back on needs no new capture consent on the phone (user's request,
+ * 2026-11-12). Paused this long, the session ends; the phone waits as long.
+ */
+const PAUSED_MS = 10 * 60_000;
 /**
  * After the Type panel moves focus to Send text or Enter, presses are ignored this long: the pinch
  * on the composer's Insert reached the page too and pressed Send text by itself (seen on the S25).
@@ -301,7 +307,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     // so); before it opens, the relay's round trip.
     const ping = setInterval(() => {
       if (link.send({ type: 'ping', t: Date.now() })) {
-        if (performance.now() - lastHeard.current > SILENT_MS) end('The phone stopped answering (out of range, or its app stopped).');
+        // Not while hidden: the page's timers may be throttled, and the phone waits for us then.
+        const silent = document.visibilityState !== 'hidden' && performance.now() - lastHeard.current > SILENT_MS;
+        if (silent) end('The phone stopped answering (out of range, or its app stopped).');
       } else {
         connector?.ping();
       }
@@ -310,12 +318,25 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       link.path().then(setPath, () => {});
     }, 2000);
     let hiddenTimer: ReturnType<typeof setTimeout> | null = null;
+    let paused = false;
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        hiddenTimer ??= setTimeout(() => end('The session was closed while the app was hidden.'), HIDDEN_MS);
+        if (hiddenTimer !== null) return;
+        // Connected: pause (the phone stops the video and waits). Not yet: end, as before.
+        paused = link.send({ type: 'pause' });
+        hiddenTimer = paused
+          ? setTimeout(() => end('The display was off for 10 minutes, so the session ended.'), PAUSED_MS)
+          : setTimeout(() => end('The session was closed while the app was hidden.'), HIDDEN_MS);
       } else if (hiddenTimer !== null) {
         clearTimeout(hiddenTimer);
         hiddenTimer = null;
+        if (paused) {
+          paused = false;
+          // The phone's answers may not have reached a frozen page: count from now.
+          lastHeard.current = performance.now();
+          link.send({ type: 'resume' });
+          setLastInput('display back on: video resumed');
+        }
       }
     };
     document.addEventListener('visibilitychange', onVisibility);

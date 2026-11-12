@@ -62,7 +62,11 @@ export type ToPhone =
   /** Every couple of seconds: the phone ends a session it stops hearing from (no PC to tell it). */
   | { type: 'ping'; t: number }
   /** End on the glasses: the phone stops capturing. */
-  | { type: 'end' };
+  | { type: 'end' }
+  /** The glasses' display went off: no video, but the session (and the capture) stays. */
+  | { type: 'pause' }
+  /** It's back on: the video again. */
+  | { type: 'resume' };
 
 /** The crop, in 0..1 of the phone's screen. */
 export type PhoneRegion = Region;
