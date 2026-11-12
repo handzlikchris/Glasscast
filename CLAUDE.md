@@ -221,13 +221,15 @@ app's profile off (or Walk on, for any app), remembered per app. Model in
 
 - **Swipes (PC and phone alike, decided 2026-09-27; `swipes.ts` is the only place they're
   mapped, table in `architecture/glasses-client.md` "Swipes"):** **right twice → Type**; **left
-  twice → next app** (PC) / **the app overview** (phone: Recents; swipe left/right, which act at
-  once there, pinch to pick, Back leaves; the view follows the pick; down there steps the cursor along the
-  row of apps under the cards, up goes back); phone only: **down twice →
+  twice → next app** (PC only: on the phone it opened the app overview until 2026-11-12, too often
+  by mistake, so the phone's overview is only **Apps** on the bar now: swipe left/right, which act
+  at once there, pinch to pick, Back leaves; the view follows the pick; down there steps the cursor
+  along the row of apps under the cards, up goes back); phone only: **down twice →
   Back** (closes the keyboard). Nothing on up twice, so up scrolls at once (user's choices,
   2026-09-29). Doubles within 0.3 s.
   A single swipe that can double waits 0.3 s, then does its plain action (scroll, pan, page); up
-  acts at once on both, and down on the PC. Up/down drops a waiting left (the band reads some down-swipes as left).
+  acts at once on both, down on the PC, left on the phone. Up/down drops a waiting left or right
+  (the band reads some down-swipes as sideways).
 - **Pinches (PC and phone alike, 2026-09-27; table in `architecture/glasses-client.md` "Pinches"):**
   like a laptop touchpad (user's choice): pinch = click / tap (after 350 ms: two quick ones =
   double-click / double tap); pinch and move = cursor only; **pinch, then pinch and hold (tap-and-

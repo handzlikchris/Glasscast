@@ -10,11 +10,11 @@
 //   cursor; a pinch taps there, two quick ones double-tap; a pinch then a second pinch held
 //   (tap-and-a-half) puts a finger down at the cursor, which follows the drag until release
 //   (drag and drop, selecting; held still, a long press). Swipes (swipes.ts, shared with PC sessions):
-//   up scrolls around the cursor at once, down scrolls and left/right page after a 0.3 s wait for
-//   a second swipe; right twice opens Type, down twice presses Back, left twice opens the app
-//   overview (swipe left/right through it, pinch to pick; the view follows the app you pick).
-//   There, down goes to the row of apps under the cards (the cursor steps along it with left and
-//   right, a pinch opens the one under it) and up goes back to the cards.
+//   up scrolls and left pages around the cursor at once, down scrolls and right pages after a
+//   0.3 s wait for a second swipe; right twice opens Type, down twice presses Back. Apps on the bar
+//   opens the app overview (swipe left/right through it, pinch to pick; the view follows the app
+//   you pick). There, down goes to the row of apps under the cards (the cursor steps along it with
+//   left and right, a pinch opens the one under it) and up goes back to the cards.
 // - Back (middle-finger pinch) brings up the bar, Apps focused (so Back then a pinch opens the app
 //   overview from anywhere): Apps · Back · Home · Notif · Type · ↕ · ✦ · ? · End
 //   (↕: how far a scroll swipe goes, per app, 150/100/75/50/25 % of the first one; 75 to start;
@@ -111,7 +111,7 @@ const PHONE_STATUS: Record<PhoneState, string> = {
 const APPS_HINT = 'apps: swipe left/right, down for the row of apps, pinch to pick, Back to leave';
 
 // Apps first: the bar opens with it focused, so Back then a pinch is the app overview from anywhere
-// (an app profile may take left twice). The glasses also reset focus to the first button after a Back.
+// (no swipe opens it any more). The glasses also reset focus to the first button after a Back.
 const NAV_BUTTONS: { action: PhoneNav; label: string }[] = [
   { action: 'recents', label: 'Apps' },
   { action: 'back', label: 'Back' },
@@ -512,8 +512,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       setLastInput('swipe right twice → type');
     } else if (action.kind === 'back') {
       send({ type: 'nav', action: 'back' }, 'swipe down twice → back');
-    } else if (action.kind === 'apps') {
-      openApps();
     } else if (action.kind === 'swipe') {
       const strength = phoneLevelFor(scrollLevelsRef.current, appNameRef.current) / 100;
       send(scrollSwipe(action.direction, atCursor(), strength), `swipe ${action.direction}`);

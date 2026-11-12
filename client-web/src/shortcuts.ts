@@ -52,8 +52,6 @@ function phoneDouble(gesture: SwipeGesture, profile: AppProfile | null): string 
   switch (phoneSwipeAction(gesture, profile).kind) {
     case 'type':
       return 'Type';
-    case 'apps':
-      return 'app overview';
     case 'back':
       return 'Back';
     default:

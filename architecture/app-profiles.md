@@ -34,9 +34,9 @@ tests follow them.
    up, every gesture does what it does in any other app.
 3. **On the view, the app's gestures come first and the rest stay generic.** A profile lists the
    swipes it takes over. Anything it doesn't list does what it does in any other app: Claude
-   takes only down twice, so right twice is still Type there. Chrome takes all four doubles, so
-   in Chrome Type is a text field's pinch (rule 4) or the bar's Type button, and the app overview
-   is Back then a pinch (rule 1).
+   takes down twice, so right twice is still Type there. Chrome takes all four doubles, so in
+   Chrome Type is a text field's pinch (rule 4) or the bar's Type button. The app overview is
+   Back then a pinch everywhere (rule 1): no swipe opens it since 2026-11-12.
 4. **Pinches don't change.** A pinch taps at the cursor, two make a double tap, and
    tap-and-a-half holds a finger down, in every app. A profile only decides where the cursor is.
    A highlighted **text field** opens Type after its tap, in every profile. Two pinches a profile
@@ -129,7 +129,7 @@ headings) works best; a site that makes buttons out of plain `div`s may hide som
 
 ## The app overview stays separate
 
-The app overview (left twice, or Apps on the bar: `pickingApps`, `appsRow` and the
+The app overview (Apps on the bar: `pickingApps`, `appsRow` and the
 `overviewApps` message) works much like a highlight, but it isn't an app's profile: it's opened
 rather than followed, it's the same in every app, it swipes the phone's cards rather than
 stepping between buttons, and ✦ must never switch it off. Folding it into the profile structure
@@ -346,7 +346,7 @@ the box saying "Type / for commands"). What the dump showed:
 | up / down | scroll the chat (generic) |
 | down twice | highlight the **message box** (instead of the phone's Back, which stays on the bar) |
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
-| right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
+| right twice | generic: Type |
 | **a pinch held still 1 s** | the **microphone** ("Start speech input"): talk; held again while Claude listens: **Send dictation**, what was said goes at once (never Stop dictation or Cancel) |
 | **swipe left** (once) | in the **artifact view** (its top bar: Close · Comments · Share · More options), **Close**: back to the chat. Anywhere else in Claude a page sideways, as in any app (2026-11-12) |
 
@@ -398,7 +398,8 @@ What the Reddit dump says about the hops:
 | pinch | press the highlighted thing; a text field also opens Type |
 
 - Taken over from the generic set: down twice (Back: on the bar), right twice (Type: pinch a
-  field, or the bar), left twice (the app overview: Back then a pinch).
+  field, or the bar). Left twice has nothing generic on the phone any more, so in Chrome it only
+  adds a 0.3 s wait to a single left.
 - **Open question:** whether right and left twice should hop by heading, by article (a Reddit
   post is an `<article>`), or by landmark. Headings are the most common on the web; the unit is
   one word in `chrome.ts`, so it's cheap to try each on the device.

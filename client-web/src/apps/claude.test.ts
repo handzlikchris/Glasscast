@@ -39,10 +39,10 @@ describe('the Claude profile', () => {
     expect(firstOnScreen(CLAUDE, CLAUDE.moves!.model.right!, noMic)?.name).toBe('send');
   });
 
-  it('takes only down twice: Type and the app overview stay generic', () => {
+  it('takes down twice: Type stays generic', () => {
     expect(phoneSwipeAction('doubleDown', CLAUDE)).toEqual({ kind: 'profile', action: { highlight: 'box' } });
     expect(phoneSwipeAction('doubleRight', CLAUDE)).toEqual({ kind: 'type' });
-    expect(phoneSwipeAction('doubleLeft', CLAUDE)).toEqual({ kind: 'apps' });
+    expect(phoneSwipeAction('doubleLeft', CLAUDE)).toEqual({ kind: 'swipe', direction: 'left' });
     expect(phoneSwipeAction('doubleUp', CLAUDE)).toEqual({ kind: 'swipe', direction: 'up' });
   });
 

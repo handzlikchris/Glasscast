@@ -154,7 +154,7 @@ The same habits on both targets. **?** on the glasses' bar shows them during a s
 | Pinch, then pinch and hold | Long press | Held click |
 | Swipe up / down | Scroll | Scroll (or push the cursor past the edge) |
 | Swipe left / right | Page sideways | Pan the view (with **Pan** on) |
-| Swipe left twice | App overview: swipe through, pinch to pick | Next app shortcut |
+| Swipe left twice | | Next app shortcut |
 | Swipe right twice | Type | Type |
 | Swipe down twice | Back | |
 | Middle-finger pinch | The control bar | The control bar |
@@ -169,7 +169,7 @@ phone's screen. On the bar, swipe left / right to move between buttons and pinch
 | --- | --- |
 | **Back** | The phone's Back (the same as **swiping down twice**, which needs no bar) |
 | **Home** | The phone's home screen |
-| **Apps** | The app overview: swipe left / right through your apps, pinch to pick, Back to leave (or **swipe left twice** from anywhere) |
+| **Apps** | The app overview: swipe left / right through your apps, pinch to pick, Back to leave. The bar opens with Apps focused, so it's Back then a pinch from anywhere |
 | **Notif** | The notification shade |
 | **Type** | A text box for the glasses' voice or handwriting composer: **Send text**, then **Send** (or **swipe right twice**) |
 | **↕** | How far one scroll swipe goes, remembered per app |

@@ -8,7 +8,7 @@ const actionFor = (target: 'pc' | 'phone', gesture: string) =>
 describe('the ? panel', () => {
   it("lists the phone's swipe shortcuts as swipes.ts maps them", () => {
     expect(actionFor('phone', 'swipe right ×2')).toBe('Type');
-    expect(actionFor('phone', 'swipe left ×2')).toBe('app overview');
+    expect(actionFor('phone', 'swipe left ×2')).toBeUndefined();
     expect(actionFor('phone', 'swipe down ×2')).toBe('Back');
     expect(actionFor('phone', 'swipe up ×2')).toBeUndefined();
     expect(actionFor('phone', 'pinch')).toBe('tap');
@@ -30,10 +30,10 @@ describe('the ? panel', () => {
     const ownRows = rows.slice(0, rows.findIndex((r) => r.gesture === 'Everywhere'));
     expect(ownRows.find((r) => r.gesture === 'swipe down ×2')?.action).toBe('next item');
     expect(ownRows.find((r) => r.gesture === 'swipe up ×2')?.action).toBe('previous item');
-    // Walk took down twice: Back is gone from the generic rows; Type and the app overview stay.
+    // Walk took down twice: Back is gone from the generic rows; Type stays.
     expect(generic.find((r) => r.gesture === 'swipe down ×2')).toBeUndefined();
     expect(generic.find((r) => r.gesture === 'swipe right ×2')?.action).toBe('Type');
-    expect(generic.find((r) => r.gesture === 'swipe left ×2')?.action).toBe('app overview');
+    expect(generic.find((r) => r.gesture === 'swipe left ×2')).toBeUndefined();
   });
 
   it("says when the app's own profile is off", () => {
