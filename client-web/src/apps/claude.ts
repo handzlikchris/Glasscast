@@ -1,7 +1,7 @@
 // Claude (the Android app): down twice puts the cursor on the message box; from there the
 // swipes step along the row under it (architecture/app-profiles.md, "Claude: the first map").
-// A pinch held still for 1 s presses the microphone; held again, Send (not Stop: what was said
-// goes straight away; user's choice, 2026-11-12).
+// A pinch held still for 1 s starts the microphone; pinch, then pinch and hold sends what was said
+// (Send dictation, never Stop: two different gestures, user's choice, 2026-11-12).
 // Matchers from a UI dump on the S25 (2026-10-05): Jetpack Compose, so no resource ids; labels
 // are English, on the icons inside the buttons; the model picker has none of its own.
 import type { AppProfile } from './profile';
@@ -12,9 +12,11 @@ export const CLAUDE: AppProfile = {
   gestures: {
     doubleDown: { highlight: 'box' },
   },
-  // The screen says which: listening, the row is Cancel · Stop dictation · Send dictation; not
-  // listening, the microphone says "Start speech input" (UI dumps on the S25, 2026-11-12).
-  hold: { press: ['sendDictation', 'mic'], says: 'microphone · held again: send' },
+  // Listening, the row is Cancel · Stop dictation · Send dictation; not listening, the microphone
+  // says "Start speech input" (UI dumps on the S25, 2026-11-12). One hold for each did the second
+  // unreliably on the device, so each has its own gesture.
+  hold: { press: ['mic'], says: 'start the microphone' },
+  doubleHold: { press: ['sendDictation'], says: 'send what you said' },
   whileHighlighted: 'map',
   controls: {
     box: [{ kind: 'field', pick: 'lowest' }],

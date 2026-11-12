@@ -39,10 +39,12 @@ tests follow them.
    is Back then a pinch (rule 1).
 4. **Pinches don't change.** A pinch taps at the cursor, two make a double tap, and
    tap-and-a-half holds a finger down, in every app. A profile only decides where the cursor is.
-   A highlighted **text field** opens Type after its tap, in every profile. The one pinch a
-   profile may take is the **long hold**: a single pinch kept still for 1 s (3 s at first: too long), which does nothing
-   generic (Claude: the microphone, then Send; 2026-11-12). After a second the status bar says
-   what's coming; moving the pinch cancels it.
+   A highlighted **text field** opens Type after its tap, in every profile. Two pinches a profile
+   may take (2026-11-12): the **long hold**, a single pinch kept still for 1 s (3 s at first: too
+   long), which does nothing generic; after 0.4 s the status bar says what's coming, moving the
+   pinch cancels it, and another within 2 s is ignored. And the **double hold**, pinch then pinch
+   and hold still, which generically holds a finger down; moving after the second pinch still
+   drags. Claude: the long hold starts the microphone, the double hold sends what was said.
 5. **Only the app in front counts.** The phone tells the glasses which app the view follows. When
    that app changes, its profile stops, and anything highlighted is dropped.
 6. **You can turn an app's profile off, and the glasses remember it for that app.** Profiles are
@@ -345,15 +347,15 @@ the box saying "Type / for commands"). What the dump showed:
 | down twice | highlight the **message box** (instead of the phone's Back, which stays on the bar) |
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
-| **a pinch held still 1 s** | the **microphone** (press it, then talk); held 1 s again: **Send**, so what was said goes at once (not Stop; user's choice, 2026-11-12) |
+| **a pinch held still 1 s** | the **microphone** ("Start speech input"): talk |
+| **pinch, then pinch and hold** | **Send dictation**: what was said goes at once (never Stop dictation or Cancel) |
 
-The screen says which (UI dumps on the S25, 2026-11-12): while Claude listens the row is
-**Cancel · Stop dictation · Send dictation**, so the hold presses **Send dictation**; otherwise
-the microphone says **Start speech input** and the hold presses that. Never Stop dictation or
-Cancel. A long hold within 2 s of the last one is ignored: a pinch held for 2 s pressed the
-microphone and then Send at once. While Claude works, the row is + · the box ("Queue a
-message…") · microphone · **Stop** (no Send, no model picker); + sits left of the box then, so
-the box's map also goes left to + and right to the microphone.
+UI dumps on the S25 (2026-11-12): while Claude listens the row is **Cancel · Stop dictation ·
+Send dictation**; otherwise the microphone says **Start speech input**. At first one long hold
+did both (the microphone, or Send dictation when listening), but on the device the second hold
+didn't send, so the user gave each its own gesture. While Claude works, the row is + · the box
+("Queue a message…") · microphone · **Stop** (no Send, no model picker); + sits left of the box
+then, so the box's map also goes left to + and right to the microphone.
 
 | Highlighted | up | down | left | right | pinch |
 | --- | --- | --- | --- | --- | --- |

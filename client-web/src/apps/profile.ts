@@ -42,6 +42,12 @@ export interface AppProfile {
    */
   hold?: { press: readonly string[]; says: string };
   /**
+   * Pinch, then pinch and hold still (tap-and-a-half, kept still for HOLD_DRAG_MS): instead of
+   * holding a finger down, tap the first of these named controls on screen. Moving after the
+   * second pinch still drags, as everywhere.
+   */
+  doubleHold?: { press: readonly string[]; says: string };
+  /**
    * While something is highlighted: 'map' = single swipes step through `moves` at once (no doubles),
    * one the map doesn't list drops the highlight; 'view' = swipes act as on the view (a scroll drops
    * the highlight, a profile's double moves it again).

@@ -136,6 +136,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** A single pinch kept still: the hint, then the profile's long hold (Claude: microphone, send). */
   const longHoldTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** The profile took this tap-and-a-half hold (Claude: send): no finger goes down, not even if it moves. */
+  const doubleHoldTaken = useRef(false);
   /** When the last long hold acted: another within LONG_HOLD_GAP_MS is the same pinch held on. */
   const lastLongHold = useRef(-Infinity);
   /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
@@ -570,17 +572,24 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         }
         break;
       }
-      case 'hold':
+      case 'hold': {
         clearPendingTap();
+        const doubleHold = profileRef.current?.doubleHold;
+        if (doubleHold) {
+          doubleHoldTaken.current = true;
+          runProfileAction({ press: doubleHold.press });
+          break;
+        }
         touch('down');
         break;
+      }
       case 'dragStart':
         // Moving the cursor by hand lets go of a highlight, and isn't a long hold.
         clearHighlight();
         clearLongHold();
         if (event.held) {
           clearPendingTap();
-          touch('down');
+          if (!doubleHoldTaken.current) touch('down');
         } else {
           flushTap();
         }
@@ -596,9 +605,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         break;
       case 'dragEnd':
         if (event.held) touch('up');
+        doubleHoldTaken.current = false;
         break;
       case 'holdEnd':
         touch('up');
+        doubleHoldTaken.current = false;
         break;
       case 'longHold': {
         const hold = profileRef.current?.hold;
