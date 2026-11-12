@@ -39,7 +39,10 @@ tests follow them.
    is Back then a pinch (rule 1).
 4. **Pinches don't change.** A pinch taps at the cursor, two make a double tap, and
    tap-and-a-half holds a finger down, in every app. A profile only decides where the cursor is.
-   A highlighted **text field** opens Type after its tap, in every profile.
+   A highlighted **text field** opens Type after its tap, in every profile. The one pinch a
+   profile may take is the **long hold**: a single pinch kept still for 3 s, which does nothing
+   generic (Claude: the microphone, then Send; 2026-11-12). After a second the status bar says
+   what's coming; moving the pinch cancels it.
 5. **Only the app in front counts.** The phone tells the glasses which app the view follows. When
    that app changes, its profile stops, and anything highlighted is dropped.
 6. **You can turn an app's profile off, and the glasses remember it for that app.** Profiles are
@@ -323,7 +326,8 @@ the box saying "Type / for commands"). What the dump showed:
   the **microphone** ("Start speech input"); **Send** ("Send", there even with the box empty).
   Top: **menu** ("Open menu…", top left) and, in a Code session, "Session menu" (top right).
 - The "close" button the user remembered after the microphone is Send on this screen. While
-  Claude is answering it may become Stop; to check on the device.
+  Claude is answering it may become Stop; to check on the device. Send's matcher never takes
+  Stop.
 - Labels are the English ones; another phone language needs its own matchers.
 
 | Button | Matcher |
@@ -332,7 +336,7 @@ the box saying "Type / for commands"). What the dump showed:
 | + (attach) | `{ label: /^Add context$/ }` |
 | model picker | `{ between: ['attach', 'mic'] }` |
 | microphone | `{ label: /^Start speech input$/ }` |
-| send / stop | `{ label: /^(Send\|Stop)/ }` |
+| send | `{ label: /^Send\b/ }` |
 | menu | `{ label: /^Open menu/ }` |
 
 | On the view | Does |
@@ -341,14 +345,20 @@ the box saying "Type / for commands"). What the dump showed:
 | down twice | highlight the **message box** (instead of the phone's Back, which stays on the bar) |
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
+| **a pinch held still 3 s** | the **microphone** (press it, then talk); held 3 s again: **Send**, so what was said goes at once (not Stop; user's choice, 2026-11-12) |
+
+The hold presses the first of microphone, send that's on screen. It relies on the microphone's
+button changing once Claude listens (no longer "Start speech input"), so the second hold finds
+Send. **To check on the S25:** what the row shows while listening, and that Send then sends
+the dictated text.
 
 | Highlighted | up | down | left | right | pinch |
 | --- | --- | --- | --- | --- | --- |
 | message box | leave | **+** | | | tap it, then the **Type panel** (composer → Send text → Send) |
 | + (attach) | message box | | | model picker | tap (opens Claude's menu) |
 | model picker | message box | | + | microphone | tap |
-| microphone | message box | | model picker | send / stop | tap |
-| send / stop | message box | | microphone | | tap |
+| microphone | message box | | model picker | send | tap |
+| send | message box | | microphone | | tap |
 
 - If a button is missing (a different screen, or Claude swaps one), the map's lists ("the first
   of these on screen") skip to the next one without a second map.
