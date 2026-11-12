@@ -213,7 +213,7 @@ in `client-web/src/shortcuts.ts` (tested in `shortcuts.test.ts`). **Phone app pr
 (`client-web/src/apps/`, `architecture/app-profiles.md`; branch `app-controls`, 2026-10-05): the
 app in front may have its own gestures (Chrome: up/down twice hop by link or button, right/left
 twice by heading; Claude: down twice → the message box, then swipes step along its row; a pinch
-held still 1 s → the microphone; pinch, then pinch and hold → Send dictation); Back is
+held still 1 s → the microphone, again while listening → Send dictation); Back is
 never a profile's and brings the phone bar with **Apps** focused; **✦** on that bar turns the
 app's profile off (or Walk on, for any app), remembered per app. Model in
 `focusnav.ts`; the app is either on the **view** (swipes act on the desktop) or on the

@@ -44,7 +44,7 @@ tests follow them.
    long), which does nothing generic; after 0.4 s the status bar says what's coming, moving the
    pinch cancels it, and another within 2 s is ignored. And the **double hold**, pinch then pinch
    and hold still, which generically holds a finger down; moving after the second pinch still
-   drags. Claude: the long hold starts the microphone, the double hold sends what was said.
+   drags. Claude: the long hold starts the microphone, or sends what was said while it listens.
 5. **Only the app in front counts.** The phone tells the glasses which app the view follows. When
    that app changes, its profile stops, and anything highlighted is dropped.
 6. **You can turn an app's profile off, and the glasses remember it for that app.** Profiles are
@@ -347,13 +347,15 @@ the box saying "Type / for commands"). What the dump showed:
 | down twice | highlight the **message box** (instead of the phone's Back, which stays on the bar) |
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
-| **a pinch held still 1 s** | the **microphone** ("Start speech input"): talk |
-| **pinch, then pinch and hold** | **Send dictation**: what was said goes at once (never Stop dictation or Cancel) |
+| **a pinch held still 1 s** | the **microphone** ("Start speech input"): talk; held again while Claude listens: **Send dictation**, what was said goes at once (never Stop dictation or Cancel) |
 
 UI dumps on the S25 (2026-11-12): while Claude listens the row is **Cancel · Stop dictation ·
 Send dictation**; otherwise the microphone says **Start speech input**. At first one long hold
-did both (the microphone, or Send dictation when listening), but on the device the second hold
-didn't send, so the user gave each its own gesture. While Claude works, the row is + · the box
+does both, from what's on screen. On the device the second hold kept failing; a double hold for
+sending failed the same way ("no microphone found"), which gave it away: the companion's view of
+the screen was stale (Android's node cache for a service without content-changed events), still
+showing the listening row after dictation ended. The companion now clears that cache before each
+read, and the single hold does both again (user's choice, 2026-11-12). While Claude works, the row is + · the box
 ("Queue a message…") · microphone · **Stop** (no Send, no model picker); + sits left of the box
 then, so the box's map also goes left to + and right to the microphone.
 
