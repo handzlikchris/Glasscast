@@ -40,7 +40,7 @@ tests follow them.
 4. **Pinches don't change.** A pinch taps at the cursor, two make a double tap, and
    tap-and-a-half holds a finger down, in every app. A profile only decides where the cursor is.
    A highlighted **text field** opens Type after its tap, in every profile. The one pinch a
-   profile may take is the **long hold**: a single pinch kept still for 3 s, which does nothing
+   profile may take is the **long hold**: a single pinch kept still for 1 s (3 s at first: too long), which does nothing
    generic (Claude: the microphone, then Send; 2026-11-12). After a second the status bar says
    what's coming; moving the pinch cancels it.
 5. **Only the app in front counts.** The phone tells the glasses which app the view follows. When
@@ -345,7 +345,7 @@ the box saying "Type / for commands"). What the dump showed:
 | down twice | highlight the **message box** (instead of the phone's Back, which stays on the bar) |
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
-| **a pinch held still 3 s** | the **microphone** (press it, then talk); held 3 s again: **Send**, so what was said goes at once (not Stop; user's choice, 2026-11-12) |
+| **a pinch held still 1 s** | the **microphone** (press it, then talk); held 1 s again: **Send**, so what was said goes at once (not Stop; user's choice, 2026-11-12) |
 
 The hold presses the first of microphone, send that's on screen. It relies on the microphone's
 button changing once Claude listens (no longer "Start speech input"), so the second hold finds

@@ -4,6 +4,7 @@
 // In a phone session with an app profile (apps/), the app's gestures come first under its name,
 // then the generic ones it leaves alone.
 import { describeAction, type AppProfile } from './apps/profile';
+import { LONG_HOLD_MS } from './gestures';
 import { pcSwipeAction, phoneSwipeAction, type SwipeGesture } from './swipes';
 
 export interface ShortcutRow {
@@ -89,7 +90,7 @@ export function shortcutRows(target: 'pc' | 'phone', app: PhoneApp = { profile: 
     return [
       { gesture: `In ${profile.name}`, action: '', heading: true },
       ...own,
-      ...(profile.hold ? [{ gesture: 'pinch held 3 s', action: profile.hold.says }] : []),
+      ...(profile.hold ? [{ gesture: `pinch held ${LONG_HOLD_MS / 1000} s`, action: profile.hold.says }] : []),
       ...profile.notes,
       { gesture: 'Everywhere', action: '', heading: true },
       ...generic,

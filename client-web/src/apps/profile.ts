@@ -37,7 +37,7 @@ export interface AppProfile {
   /** View gestures it takes over; the rest stay generic. */
   gestures: Partial<Record<SwipeGesture, ProfileAction>>;
   /**
-   * A single pinch held still for 3 s (LONG_HOLD_MS), which nothing generic uses: tap the first of
+   * A single pinch held still for 1 s (LONG_HOLD_MS), which nothing generic uses: tap the first of
    * these named controls on screen. `says`: what it does, for the ? panel and the status bar.
    */
   hold?: { press: readonly string[]; says: string };

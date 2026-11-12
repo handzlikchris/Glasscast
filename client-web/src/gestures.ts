@@ -37,8 +37,8 @@ export const DEFAULT_GESTURES: GestureOptions = { tapThreshold: 14, tapMaxMs: 50
 /** An armed pinch (the second of a pair) kept still this long holds the button/finger down. */
 export const HOLD_DRAG_MS = 400;
 
-/** A single pinch kept still this long is a long hold (user's choice, 2026-11-12: "like 3 seconds"). */
-export const LONG_HOLD_MS = 3000;
+/** A single pinch kept still this long is a long hold (user's choice, 2026-11-12: 3 s at first, too long; 1 s). */
+export const LONG_HOLD_MS = 1000;
 
 export type GestureEvent =
   /** `held`: an armed press (tap-and-a-half), so the drag keeps the button or finger down. */

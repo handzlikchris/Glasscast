@@ -1,6 +1,6 @@
 // Claude (the Android app): down twice puts the cursor on the message box; from there the
 // swipes step along the row under it (architecture/app-profiles.md, "Claude: the first map").
-// A pinch held still for 3 s presses the microphone; held again, Send (not Stop: what was said
+// A pinch held still for 1 s presses the microphone; held again, Send (not Stop: what was said
 // goes straight away; user's choice, 2026-11-12).
 // Matchers from a UI dump on the S25 (2026-10-05): Jetpack Compose, so no resource ids; labels
 // are English, on the icons inside the buttons; the model picker has none of its own.

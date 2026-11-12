@@ -54,14 +54,14 @@ describe('the Claude profile', () => {
     expect(rows.find((r) => r.gesture === 'swipe right ×2')?.action).toBe('Type');
   });
 
-  it('a 3 s hold presses the microphone, and once it listens (its button changed), Send; never Stop', () => {
+  it('a long hold presses the microphone, and once it listens (its button changed), Send; never Stop', () => {
     const hold = CLAUDE.hold!;
     expect(firstOnScreen(CLAUDE, hold.press, items)?.item.label).toBe('Start speech input');
     // Listening: the microphone's button no longer says "Start speech input".
     const listening = items.map((i) => (i.label === 'Start speech input' ? { ...i, label: 'Stop speech input' } : i));
     expect(firstOnScreen(CLAUDE, hold.press, listening)?.item.label).toBe('Send');
     expect(findControl(CLAUDE, 'send', items.map((i) => (i.label === 'Send' ? { ...i, label: 'Stop' } : i)))).toBeNull();
-    expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'pinch held 3 s')?.action).toBe('microphone · held again: send');
+    expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'pinch held 1 s')?.action).toBe('microphone · held again: send');
   });
 });
 

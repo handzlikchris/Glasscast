@@ -95,7 +95,7 @@ const TYPE_GUARD_MS = 800;
 const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
 /** A single pinch kept still this long says what the profile's long hold will do (it acts at LONG_HOLD_MS). */
-const LONG_HOLD_HINT_MS = 1000;
+const LONG_HOLD_HINT_MS = 400;
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
   ready: 'checking the phone…',
