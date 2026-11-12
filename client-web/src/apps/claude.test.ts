@@ -48,18 +48,20 @@ describe('the Claude profile', () => {
 
   it('says where you are and where the swipes go', () => {
     const box = findControl(CLAUDE, 'box', items)!;
-    expect(highlightStatus(CLAUDE, { item: box, name: 'box' })).toBe('Claude · message box · pinch to type · down: +');
+    expect(highlightStatus(CLAUDE, { item: box, name: 'box' })).toBe('Claude · message box · pinch to type · down: + · left: + · right: microphone');
     const rows = shortcutRows('phone', { profile: CLAUDE });
     expect(rows.find((r) => r.gesture === 'swipe down ×2')?.action).toBe('message box');
     expect(rows.find((r) => r.gesture === 'swipe right ×2')?.action).toBe('Type');
   });
 
-  it('a long hold presses the microphone, and once it listens (its button changed), Send; never Stop', () => {
-    const hold = CLAUDE.hold!;
-    expect(firstOnScreen(CLAUDE, hold.press, items)?.item.label).toBe('Start speech input');
-    // Listening: the microphone's button no longer says "Start speech input".
-    const listening = items.map((i) => (i.label === 'Start speech input' ? { ...i, label: 'Stop speech input' } : i));
-    expect(firstOnScreen(CLAUDE, hold.press, listening)?.item.label).toBe('Send');
+  it('long holds take turns: the microphone, then Send; never Stop', () => {
+    const [first, second] = CLAUDE.hold!.steps;
+    expect(firstOnScreen(CLAUDE, first, items)?.item.label).toBe('Start speech input');
+    expect(firstOnScreen(CLAUDE, second, items)?.item.label).toBe('Send');
+    // The microphone by a looser label too, but never one that stops.
+    const relabel = (label: string) => items.map((i) => (i.label === 'Start speech input' ? { ...i, label } : i));
+    expect(findControl(CLAUDE, 'mic', relabel('Voice dictation'))?.label).toBe('Voice dictation');
+    expect(findControl(CLAUDE, 'mic', relabel('Stop speech input'))).toBeNull();
     expect(findControl(CLAUDE, 'send', items.map((i) => (i.label === 'Send' ? { ...i, label: 'Stop' } : i)))).toBeNull();
     expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'pinch held 1 s')?.action).toBe('microphone · held again: send');
   });

@@ -12,21 +12,22 @@ export const CLAUDE: AppProfile = {
   gestures: {
     doubleDown: { highlight: 'box' },
   },
-  // The microphone while it says "Start speech input"; once it's listening that button changes,
-  // so the next hold finds Send instead.
-  hold: { press: ['mic', 'send'], says: 'microphone · held again: send' },
+  // Taking turns, not reading the screen: the microphone's label isn't always "Start speech
+  // input" (a second try went straight to Send, 2026-11-12), so the glasses count the holds.
+  hold: { steps: [['mic'], ['send']], says: 'microphone · held again: send' },
   whileHighlighted: 'map',
   controls: {
     box: [{ kind: 'field', pick: 'lowest' }],
     attach: [{ label: /^Add context$/i }],
     model: [{ between: ['attach', 'mic'] }, { between: ['attach', 'send'] }],
-    mic: [{ label: /^Start speech input$/i }],
+    mic: [{ label: /^Start speech input$/i }, { label: /^(?!stop).*(speech|dictat|microphone)/i }],
     // Send, there even with the box empty. Never Stop: the hold sends what was dictated.
     send: [{ label: /^Send\b/i }],
   },
   names: { box: 'message box', attach: '+', model: 'model picker', mic: 'microphone', send: 'send' },
   moves: {
-    box: { down: 'attach' },
+    // + is under the box in a chat, left of it while Claude works (both seen on the S25).
+    box: { down: 'attach', left: 'attach', right: ['mic', 'send'] },
     attach: { up: 'box', right: ['model', 'mic', 'send'] },
     model: { up: 'box', left: 'attach', right: ['mic', 'send'] },
     mic: { up: 'box', left: ['model', 'attach'], right: 'send' },
