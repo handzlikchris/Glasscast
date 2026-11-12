@@ -67,6 +67,11 @@ class ScreenSession(
         private const val REFIT_DELAY_MS = 120L
         /** Nothing from the glasses this long on the channel: they're gone (they ping every 2 s). */
         private const val SILENT_MS = 15_000L
+        /**
+         * While the glasses' display is off (paused) their page may be throttled or frozen and
+         * stop pinging: this long, and they're gone. They end it themselves after the same time.
+         */
+        private const val PAUSED_SILENT_MS = 10 * 60_000L
         /** From the consent to an open channel. */
         private const val CONNECT_MS = 60_000L
         private const val WATCH_MS = 2_500L
@@ -117,6 +122,13 @@ class ScreenSession(
     private var walkCount = 0
     private val pc: PeerConnection
     private val channel: DataChannel
+    private val videoSender: org.webrtc.RtpSender
+    /**
+     * The glasses' display is off: no video is sent (nothing to encode here or decode there), and
+     * the session waits for them instead of ending, so turning the display back on needs no new
+     * capture consent (user's request, 2026-11-12).
+     */
+    private var paused = false
     private val screenWidth: Int
     private val screenHeight: Int
     private var closed = false
@@ -174,6 +186,7 @@ class ScreenSession(
         parameters.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
         parameters.encodings.forEach { it.maxBitrateBps = MAX_BITRATE_BPS }
         transceiver.sender.setParameters(parameters)
+        videoSender = transceiver.sender
 
         channel = pc.createDataChannel("input", DataChannel.Init().apply { ordered = true })
         channel.registerObserver(ChannelObserver())
@@ -247,7 +260,7 @@ class ScreenSession(
     private fun repeatWhileStill() {
         postDelayed(STILL_REPEAT_MS / 2) {
             if (closed) return@postDelayed
-            if (System.nanoTime() - crop.lastFrameAtNs >= STILL_REPEAT_MS * 1_000_000) helper.forceFrame()
+            if (!paused && System.nanoTime() - crop.lastFrameAtNs >= STILL_REPEAT_MS * 1_000_000) helper.forceFrame()
             repeatWhileStill()
         }
     }
@@ -258,7 +271,7 @@ class ScreenSession(
             if (closed) return@postDelayed
             val now = System.currentTimeMillis()
             when {
-                connected && now - lastHeard > SILENT_MS -> end("silent")
+                connected && now - lastHeard > (if (paused) PAUSED_SILENT_MS else SILENT_MS) -> end("silent")
                 !connected && now - startedAt > CONNECT_MS -> end("never connected")
                 else -> watch()
             }
@@ -293,6 +306,8 @@ class ScreenSession(
         when (command) {
             is InputCommand.Ping -> send(JSONObject().put("type", "pong").put("t", command.t))
             is InputCommand.End -> end("ended on the glasses")
+            is InputCommand.Pause -> setPaused(true)
+            is InputCommand.Resume -> setPaused(false)
             is InputCommand.SwitchApp -> {
                 val target = input?.recentApps?.step(command.previous, System.currentTimeMillis())
                 if (target == null || !input.bringToFront(target)) {
@@ -322,6 +337,18 @@ class ScreenSession(
             is InputCommand.TypeText -> sendResult("typeText", input?.typeText(command.text) ?: false)
             is InputCommand.Key -> sendResult("key", input?.key(command.key) ?: false)
         }
+    }
+
+    /** Stops or restarts the video (the encoding goes inactive); the capture and the channel stay. */
+    private fun setPaused(on: Boolean) {
+        if (paused == on) return
+        paused = on
+        val parameters = videoSender.parameters
+        parameters.encodings.forEach { it.active = !on }
+        videoSender.setParameters(parameters)
+        Log.i(TAG, if (on) "paused: the glasses' display is off" else "resumed")
+        // Back on: a frame at once (the encoder starts with a keyframe), not with the screen's next change.
+        if (!on) helper.forceFrame()
     }
 
     /** Shows the whole screen while the app overview is open, until an app comes to the front. */

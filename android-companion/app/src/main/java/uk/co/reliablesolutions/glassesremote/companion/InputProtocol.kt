@@ -34,6 +34,10 @@ sealed interface InputCommand {
     data class Ping(val t: Double) : InputCommand
     /** End on the glasses. */
     data object End : InputCommand
+    /** The glasses' display went off: stop the video, keep the session (and the capture). */
+    data object Pause : InputCommand
+    /** It's back on: the video again. */
+    data object Resume : InputCommand
 }
 
 /**
@@ -84,6 +88,8 @@ object InputProtocol {
             }
             "ping" -> if (only(o, "t")) num(o, "t")?.let { InputCommand.Ping(it) } else null
             "end" -> if (only(o)) InputCommand.End else null
+            "pause" -> if (only(o)) InputCommand.Pause else null
+            "resume" -> if (only(o)) InputCommand.Resume else null
             "overviewApps" -> if (only(o)) InputCommand.OverviewApps else null
             "controls" -> if (only(o)) InputCommand.Controls else null
             "walk" -> walk(o)

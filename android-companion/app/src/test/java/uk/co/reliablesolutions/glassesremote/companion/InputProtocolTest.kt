@@ -21,6 +21,8 @@ class InputProtocolTest {
         assertEquals(InputCommand.End, InputProtocol.parse("""{"type":"end"}"""))
         assertEquals(InputCommand.OverviewApps, InputProtocol.parse("""{"type":"overviewApps"}"""))
         assertEquals(InputCommand.Controls, InputProtocol.parse("""{"type":"controls"}"""))
+        assertEquals(InputCommand.Pause, InputProtocol.parse("""{"type":"pause"}"""))
+        assertEquals(InputCommand.Resume, InputProtocol.parse("""{"type":"resume"}"""))
         assertEquals(InputCommand.Walk(true, WalkUnit.ITEM), InputProtocol.parse("""{"type":"walk","dir":"next","unit":"item"}"""))
         assertEquals(InputCommand.Walk(false, WalkUnit.HEADING), InputProtocol.parse("""{"type":"walk","dir":"previous","unit":"heading"}"""))
         assertEquals(null, InputProtocol.parse("""{"type":"end","now":true}"""))
@@ -69,6 +71,7 @@ class InputProtocolTest {
             """{"type":"switchApp","package":"com.example"}""",
             """{"type":"touch","phase":"down","x":0}""",
             """{"type":"controls","package":"com.example"}""",
+            """{"type":"pause","for":600}""",
             """{"type":"walk","dir":"next"}""",
             """{"type":"walk","dir":"up","unit":"item"}""",
             """{"type":"walk","dir":"next","unit":"script"}""",
