@@ -469,6 +469,12 @@ or a commit message: the repo is going public. Tracked files use `glasses.exampl
   app sets plus `Process: "WindowsTerminal"`.
 - **WinForms DPI:** `ApplicationConfiguration.Initialize()` must run first in `Main`
   (PerMonitorV2), so capture bounds, `SendInput` and `SetWindowPos` use physical pixels.
+- **Phone app profiles on the device:** debug them with UI dumps of each state, the companion's
+  `controls: n` log and its debug switch (`setprop log.tag.GlasscastControls VERBOSE`, off
+  afterwards), the yellow readout and the build label, as in `architecture/app-profiles.md`,
+  "Debugging a profile on the device". The companion clears Android's accessibility node cache
+  before reading a screen: without content-changed events it went stale (Claude's microphone
+  "not found" after dictation, 2026-11-12).
 - **e2e harness:** it keeps recorded input for its whole life, so restart it between `drive` runs.
   Press top-bar buttons with `tapBar()` (a plain `el.click()`): the bar is hidden and
   click-through while on the view, and a mouse press after keyboard focus is treated as a pinch

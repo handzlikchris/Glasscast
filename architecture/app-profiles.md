@@ -422,6 +422,39 @@ What the Reddit dump says about the hops:
 6. Add the app's tables to this doc. Check it on the device, and when the app updates, take new
    fixtures.
 
+## Debugging a profile on the device
+
+How Claude's microphone and send hold got fixed (2026-11-12), as a routine, so a profile that
+misbehaves on the glasses doesn't take rounds of guessing. The phone is on adb over Wi-Fi
+(CLAUDE.local.md says where); all of this is read-only on the phone.
+
+1. **Dump each state the profile acts in**, while the user holds the phone in it ("say
+   'listening' while the microphone is on"). Check the app in front first (`adb shell dumpsys
+   activity activities | grep -m1 ResumedActivity`) and dump only if it's the app; delete a dump
+   of anything else unread. `adb shell uiautomator dump /sdcard/ui.xml`, pull it into the
+   scratchpad, remove it from the phone, and list the clickable nodes with their
+   `content-desc`, `text` and bounds. Apps change their rows by state (Claude: idle, working,
+   listening), so one dump isn't enough. Dumps hold personal text: keep them out of the repo.
+2. **Run the companion's own rules over the dump** (clickable or editable, visible, a label from
+   inside a button, a wrapper counted once; `ScreenControls`) to know what `controls{}` should
+   answer, and compare with the count the companion logs (`ScreenSession: controls: n`, in
+   `adb logcat -d -v time ScreenSession:I '*:S'`; one line per profile action).
+3. **If the counts differ, switch on the debug log:** `adb shell setprop log.tag.GlasscastControls
+   VERBOSE`. Each `controls{}` answer then logs the windows, every item sent and every clickable
+   node behind it, labels included. Switch it off afterwards (`... GlasscastControls INFO`): labels
+   stay out of the log otherwise.
+4. **Ask for the yellow readout** at the moment it fails. The status words say which side is
+   wrong: `no <control> found` with the right items in the phone's log means the glasses' matcher
+   or an old page; a wrong list in the log means the phone.
+5. **After a deploy, make sure the glasses run it:** Restart in the glasses' web app menu, and the
+   build label on the first screen must change. An old page looked exactly like a bug (the second
+   hold said "no microphone found" while the phone sent "Send dictation").
+
+What it found: the companion's view of the screen was stale. Android keeps a node cache per
+accessibility service and refreshes it from the events the service takes; ours takes no
+content-changed events, so after Claude's dictation ended it still saw the listening row. The
+companion now clears that cache before every read (`InputService.appRoot`, Android 14+).
+
 ## Security
 
 Nothing here gives the glasses a new power over the phone. They could already tap anywhere on
