@@ -347,10 +347,13 @@ the box saying "Type / for commands"). What the dump showed:
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
 | **a pinch held still 1 s** | the **microphone** (press it, then talk); held 1 s again: **Send**, so what was said goes at once (not Stop; user's choice, 2026-11-12) |
 
-The hold presses the first of microphone, send that's on screen. It relies on the microphone's
-button changing once Claude listens (no longer "Start speech input"), so the second hold finds
-Send. **To check on the S25:** what the row shows while listening, and that Send then sends
-the dictated text.
+The screen says which (UI dumps on the S25, 2026-11-12): while Claude listens the row is
+**Cancel · Stop dictation · Send dictation**, so the hold presses **Send dictation**; otherwise
+the microphone says **Start speech input** and the hold presses that. Never Stop dictation or
+Cancel. A long hold within 2 s of the last one is ignored: a pinch held for 2 s pressed the
+microphone and then Send at once. While Claude works, the row is + · the box ("Queue a
+message…") · microphone · **Stop** (no Send, no model picker); + sits left of the box then, so
+the box's map also goes left to + and right to the microphone.
 
 | Highlighted | up | down | left | right | pinch |
 | --- | --- | --- | --- | --- | --- |

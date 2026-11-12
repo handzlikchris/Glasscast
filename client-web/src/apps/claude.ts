@@ -12,15 +12,17 @@ export const CLAUDE: AppProfile = {
   gestures: {
     doubleDown: { highlight: 'box' },
   },
-  // Taking turns, not reading the screen: the microphone's label isn't always "Start speech
-  // input" (a second try went straight to Send, 2026-11-12), so the glasses count the holds.
-  hold: { steps: [['mic'], ['send']], says: 'microphone · held again: send' },
+  // The screen says which: listening, the row is Cancel · Stop dictation · Send dictation; not
+  // listening, the microphone says "Start speech input" (UI dumps on the S25, 2026-11-12).
+  hold: { press: ['sendDictation', 'mic'], says: 'microphone · held again: send' },
   whileHighlighted: 'map',
   controls: {
     box: [{ kind: 'field', pick: 'lowest' }],
     attach: [{ label: /^Add context$/i }],
     model: [{ between: ['attach', 'mic'] }, { between: ['attach', 'send'] }],
-    mic: [{ label: /^Start speech input$/i }, { label: /^(?!stop).*(speech|dictat|microphone)/i }],
+    mic: [{ label: /^Start speech input$/i }],
+    // While listening: sends what was said (never Stop dictation, never Cancel).
+    sendDictation: [{ label: /^Send dictation$/i }],
     // Send, there even with the box empty. Never Stop: the hold sends what was dictated.
     send: [{ label: /^Send\b/i }],
   },

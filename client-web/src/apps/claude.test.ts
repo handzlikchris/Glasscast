@@ -54,14 +54,14 @@ describe('the Claude profile', () => {
     expect(rows.find((r) => r.gesture === 'swipe right ×2')?.action).toBe('Type');
   });
 
-  it('long holds take turns: the microphone, then Send; never Stop', () => {
-    const [first, second] = CLAUDE.hold!.steps;
-    expect(firstOnScreen(CLAUDE, first, items)?.item.label).toBe('Start speech input');
-    expect(firstOnScreen(CLAUDE, second, items)?.item.label).toBe('Send');
-    // The microphone by a looser label too, but never one that stops.
-    const relabel = (label: string) => items.map((i) => (i.label === 'Start speech input' ? { ...i, label } : i));
-    expect(findControl(CLAUDE, 'mic', relabel('Voice dictation'))?.label).toBe('Voice dictation');
-    expect(findControl(CLAUDE, 'mic', relabel('Stop speech input'))).toBeNull();
+  it('a long hold starts the microphone, and while listening sends what was said; never Stop or Cancel', () => {
+    const press = CLAUDE.hold!.press;
+    expect(firstOnScreen(CLAUDE, press, items)?.item.label).toBe('Start speech input');
+    // Listening, as the S25 showed it (2026-11-12).
+    const button = (x: number, label: string): PhoneItem => ({ x, y: 0.79, w: 0.09, h: 0.09, kind: 'button', label, id: '' });
+    const listening = [button(0.03, 'Cancel'), button(0.79, 'Stop dictation'), button(0.88, 'Send dictation')];
+    expect(firstOnScreen(CLAUDE, press, listening)?.item.label).toBe('Send dictation');
+    expect(firstOnScreen(CLAUDE, press, listening.slice(0, 2))).toBeNull();
     expect(findControl(CLAUDE, 'send', items.map((i) => (i.label === 'Send' ? { ...i, label: 'Stop' } : i)))).toBeNull();
     expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'pinch held 1 s')?.action).toBe('microphone · held again: send');
   });

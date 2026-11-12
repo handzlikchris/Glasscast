@@ -37,11 +37,10 @@ export interface AppProfile {
   /** View gestures it takes over; the rest stay generic. */
   gestures: Partial<Record<SwipeGesture, ProfileAction>>;
   /**
-   * A single pinch held still for 1 s (LONG_HOLD_MS), which nothing generic uses. Each hold does
-   * the next of `steps` (round and round; back to the first when the app changes): a step taps the
-   * first of its named controls on screen. `says`: what it does, for the ? panel and status bar.
+   * A single pinch held still for 1 s (LONG_HOLD_MS), which nothing generic uses: tap the first of
+   * these named controls on screen. `says`: what it does, for the ? panel and the status bar.
    */
-  hold?: { steps: readonly (readonly string[])[]; says: string };
+  hold?: { press: readonly string[]; says: string };
   /**
    * While something is highlighted: 'map' = single swipes step through `moves` at once (no doubles),
    * one the map doesn't list drops the highlight; 'view' = swipes act as on the view (a scroll drops

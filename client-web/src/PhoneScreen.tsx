@@ -96,6 +96,11 @@ const TOUCH_MOVE_MS = 40;
 const POINTER_GAIN = 1.0;
 /** A single pinch kept still this long says what the profile's long hold will do (it acts at LONG_HOLD_MS). */
 const LONG_HOLD_HINT_MS = 400;
+/**
+ * After a long hold acts, another this soon is ignored: a pinch held 2 s pressed the microphone
+ * and then Send at once on the device (2026-11-12). A new hold needs a fresh pinch after it.
+ */
+const LONG_HOLD_GAP_MS = 2000;
 const PHONE_STATUS: Record<PhoneState, string> = {
   offline: 'phone offline: open the companion app',
   ready: 'checking the phone…',
@@ -131,8 +136,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** A single pinch kept still: the hint, then the profile's long hold (Claude: microphone, send). */
   const longHoldTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  /** Which of the profile's hold steps the next long hold does; back to the first when the app changes. */
-  const holdStep = useRef(0);
+  /** When the last long hold acted: another within LONG_HOLD_GAP_MS is the same pinch held on. */
+  const lastLongHold = useRef(-Infinity);
   /** A tap waiting DOUBLE_TAP_MS for a second one (then it's a double tap). */
   const pendingTap = useRef<{ at: Point; timer: ReturnType<typeof setTimeout> } | null>(null);
   const touchSentAt = useRef(0);
@@ -597,7 +602,10 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
         break;
       case 'longHold': {
         const hold = profileRef.current?.hold;
-        if (hold) runProfileAction({ press: hold.steps[holdStep.current % hold.steps.length] });
+        const now = performance.now();
+        if (!hold || now - lastLongHold.current < LONG_HOLD_GAP_MS) break;
+        lastLongHold.current = now;
+        runProfileAction({ press: hold.press });
         break;
       }
     }
@@ -755,9 +763,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       if (found) {
         const { item } = found;
         send({ type: 'tap', x: item.x + item.w / 2, y: item.y + item.h / 2 }, `${profile.name}: ${controlName(profile, found.name)}`);
-        // Pressed: the next hold does the next step (Claude: send after the microphone).
-        const steps = profile.hold?.steps ?? [];
-        if (steps[holdStep.current % Math.max(1, steps.length)] === pending.action.press) holdStep.current += 1;
       } else {
         setLastInput(notFoundStatus(profile, pending.action));
       }
@@ -797,7 +802,6 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   useEffect(() => {
     swipes.current.setWaitFor(phoneDoubles(profile));
     clearHighlight();
-    holdStep.current = 0;
     if (profile) setLastInput(`${profile.name}: ${profile.hint} · ✦ turns it off`);
   }, [profile]);
 
