@@ -133,11 +133,17 @@ class InputService : AccessibilityService() {
     }
 
     /** The root of the app's top window on screen, for its controls (app profiles), or null. */
-    fun appRoot(pkg: String): AccessibilityNodeInfo? =
-        windows
+    fun appRoot(pkg: String): AccessibilityNodeInfo? {
+        // This service doesn't take content-changed events, so Android's node cache for it goes
+        // stale: after Claude's dictation ended it still showed the listening row and no microphone
+        // (S25, 2026-11-12). Read the screen as it is now.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) clearCache()
+        return windows
             .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
             .sortedByDescending { it.layer }
             .firstNotNullOfOrNull { window -> window.root?.takeIf { it.packageName?.toString() == pkg } }
+            ?.also { it.refresh() }
+    }
 
     /**
      * The app the glasses' view follows when nothing else says which: the top floating window's
