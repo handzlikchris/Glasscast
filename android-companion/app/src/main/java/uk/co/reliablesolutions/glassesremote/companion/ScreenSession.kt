@@ -58,6 +58,12 @@ class ScreenSession(
 ) {
     companion object {
         private const val TAG = "ScreenSession"
+        /**
+         * Off unless switched on over adb (`adb shell setprop log.tag.GlasscastControls VERBOSE`):
+         * then the controls answer and every clickable node behind it go to the log, labels and
+         * all, to debug a profile on the device. Labels never go to the log otherwise.
+         */
+        private const val DEBUG_TAG = "GlasscastControls"
         private const val FPS = 30
         /** Enough for a sharp 600-pixel screen of text; libwebrtc adapts below it. */
         private const val MAX_BITRATE_BPS = 2_500_000
@@ -498,7 +504,27 @@ class ScreenSession(
         val root = if (picking) null else pkg?.let { input?.appRoot(it) }
         if (root != null) ScreenControls.onScreen(A11yNode(root)).forEach { c -> controlJson(c)?.let(items::put) }
         Log.i(TAG, "controls: ${items.length()}")
+        if (Log.isLoggable(DEBUG_TAG, Log.VERBOSE)) debugControls(input, pkg, root, items)
         send(JSONObject().put("type", "controls").put("pkg", pkg.orEmpty()).put("items", items))
+    }
+
+    /** The debug switch's log (see [DEBUG_TAG]): the windows, the answer, and each clickable node. */
+    private fun debugControls(input: InputService?, pkg: String?, root: AccessibilityNodeInfo?, items: JSONArray) {
+        Log.v(DEBUG_TAG, "pkg=$pkg picking=$picking crop=${cropBox()} root=${root?.let { A11yNode(it).box }}")
+        input?.windows?.forEach { w ->
+            val r = android.graphics.Rect().also { w.getBoundsInScreen(it) }
+            Log.v(DEBUG_TAG, "window type=${w.type} layer=${w.layer} active=${w.isActive} pkg=${w.root?.packageName} bounds=$r")
+        }
+        for (i in 0 until items.length()) Log.v(DEBUG_TAG, "sent ${items.getJSONObject(i)}")
+        fun walk(node: AccessibilityNodeInfo, depth: Int) {
+            if (depth > 60) return
+            if (node.isClickable || node.isEditable || !node.contentDescription.isNullOrEmpty()) {
+                val n = A11yNode(node)
+                Log.v(DEBUG_TAG, "node d=$depth click=${node.isClickable} vis=${node.isVisibleToUser} box=${n.box} desc=${node.contentDescription} cls=${node.className}")
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { walk(it, depth + 1) }
+        }
+        root?.let { walk(it, 0) }
     }
 
     /**
