@@ -213,7 +213,7 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   const highlight = useRef<Highlight | null>(null);
   const [highlightBox, setHighlightBox] = useState<Rect | null>(null);
   /** A profile action waiting for the phone's answer (controls or walked), for the app it was asked in. */
-  const pendingAction = useRef<{ action: ProfileAction; names: readonly string[]; pkg: string } | null>(null);
+  const pendingAction = useRef<{ action: ProfileAction; names: readonly string[]; pkg: string; gesture?: SwipeGesture } | null>(null);
   /** Text the phone had no field for, handed back to the Type panel. */
   const [refill, setRefill] = useState<{ text: string } | null>(null);
 
@@ -496,9 +496,15 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
     if (focusRef.current !== 'view') return;
     const action = phoneSwipeAction(gesture, profileRef.current);
     if (action.kind === 'profile') {
-      runProfileAction(action.action);
+      runProfileAction(action.action, undefined, gesture);
       return;
     }
+    genericSwipe(gesture);
+  };
+
+  /** A swipe as in any app (no profile, or a profile's press with nothing to press here). */
+  const genericSwipe = (gesture: SwipeGesture) => {
+    const action = phoneSwipeAction(gesture);
     // Any other gesture (a scroll above all) ends the highlight: its box would be stale.
     clearHighlight();
     if (action.kind === 'type') {
@@ -513,6 +519,8 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       send(scrollSwipe(action.direction, atCursor(), strength), `swipe ${action.direction}`);
     }
   };
+  const genericSwipeRef = useRef(genericSwipe);
+  genericSwipeRef.current = genericSwipe;
 
   // ---- gestures on the view ----
   // A pinch taps at the cursor; a second within DOUBLE_TAP_MS makes it a double tap (so a single
@@ -743,11 +751,11 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
   };
 
   /** Asks the phone for what a profile action needs: its controls (to find `names` in), or a walk. */
-  const runProfileAction = (action: ProfileAction, names?: readonly string[]) => {
+  const runProfileAction = (action: ProfileAction, names?: readonly string[], gesture?: SwipeGesture) => {
     const profile = profileRef.current;
     if (!profile) return;
     const wanted = names ?? ('highlight' in action ? [action.highlight] : 'press' in action ? action.press : []);
-    pendingAction.current = { action, names: wanted, pkg: pkgRef.current };
+    pendingAction.current = { action, names: wanted, pkg: pkgRef.current, gesture };
     const label = `${profile.name}: ${describeAction(profile, action)}…`;
     if ('walk' in action) send({ type: 'walk', dir: action.walk, unit: action.unit }, label);
     else send({ type: 'controls' }, label);
@@ -774,6 +782,9 @@ export function PhoneScreen({ pairAgain = false, onEnded, onLeave }: Props) {
       if (found) {
         const { item } = found;
         send({ type: 'tap', x: item.x + item.w / 2, y: item.y + item.h / 2 }, `${profile.name}: ${controlName(profile, found.name)}`);
+      } else if (pending.action.orGeneric && pending.gesture) {
+        // Nothing of the profile's here: the swipe does what it does in any app.
+        genericSwipeRef.current(pending.gesture);
       } else {
         setLastInput(notFoundStatus(profile, pending.action));
       }

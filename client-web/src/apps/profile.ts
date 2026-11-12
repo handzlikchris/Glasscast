@@ -15,15 +15,23 @@ export type ProfileAction =
   | { highlight: string }
   /** Ask the phone for the next or previous thing of a kind, in reading order. */
   | { walk: 'next' | 'previous'; unit: WalkUnit }
-  /** Tap the first of these named controls on screen, without highlighting it. */
-  | { press: readonly string[] };
+  /**
+   * Tap the first of these named controls on screen, without highlighting it. `orGeneric`: when
+   * none is on screen, the gesture does what it does in any app (a swipe that only means something
+   * on one screen, like closing Claude's artifact view).
+   */
+  | { press: readonly string[]; orGeneric?: true };
 
 /** How a profile finds one of its named controls in the phone's list; a control's matchers are tried in order. */
 export type ControlMatcher =
   /** The entry name of the view's resource id ("url_bar"). */
   | { id: string }
-  /** Its label: content description, else text, else those inside it; a field's hint. */
-  | { label: RegExp }
+  /**
+   * Its label: content description, else text, else those inside it; a field's hint. `besides`:
+   * only when that other named control is on screen too (which screen it is: "Close" beside
+   * "Comments" is Claude's artifact view).
+   */
+  | { label: RegExp; besides?: string }
   /** By kind and place: the lowest or highest one of that kind on screen. */
   | { kind: PhoneItemKind; pick: 'lowest' | 'highest' }
   /** The control between two other named ones, on their row (a button with no label of its own). */

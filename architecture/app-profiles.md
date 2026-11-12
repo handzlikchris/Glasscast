@@ -348,6 +348,7 @@ the box saying "Type / for commands"). What the dump showed:
 | up twice | *open question:* highlight the **menu** (☰, top left), pinch opens the chat list. It would make every scroll up in Claude wait 0.3 s |
 | right twice, left twice | *open question:* generic (Type, app overview) unless the user wants them for something in Claude |
 | **a pinch held still 1 s** | the **microphone** ("Start speech input"): talk; held again while Claude listens: **Send dictation**, what was said goes at once (never Stop dictation or Cancel) |
+| **swipe left** (once) | in the **artifact view** (its top bar: Close · Comments · Share · More options), **Close**: back to the chat. Anywhere else in Claude a page sideways, as in any app (2026-11-12) |
 
 UI dumps on the S25 (2026-11-12): while Claude listens the row is **Cancel · Stop dictation ·
 Send dictation**; otherwise the microphone says **Start speech input**. At first one long hold

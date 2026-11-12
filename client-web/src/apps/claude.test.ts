@@ -64,5 +64,16 @@ describe('the Claude profile', () => {
     expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'pinch held 1 s')?.action).toContain('send what you said');
     expect(findControl(CLAUDE, 'send', items.map((i) => (i.label === 'Send' ? { ...i, label: 'Stop' } : i)))).toBeNull();
   });
-});
 
+  it("a single swipe left closes the artifact view, and only there", () => {
+    expect(phoneSwipeAction('left', CLAUDE)).toEqual({ kind: 'profile', action: { press: ['closeArtifact'], orGeneric: true } });
+    // The artifact view's top bar on the S25 (2026-11-12).
+    const bar = (x: number, label: string): PhoneItem => ({ x, y: 0.11, w: 0.09, h: 0.09, kind: 'button', label, id: '' });
+    const artifact = [bar(0.02, 'Close'), bar(0.71, 'Comments'), bar(0.8, 'Share'), bar(0.89, 'More options')];
+    expect(findControl(CLAUDE, 'closeArtifact', artifact)?.label).toBe('Close');
+    // A "Close" anywhere else in Claude isn't the artifact's; nor is the chat screen's row.
+    expect(findControl(CLAUDE, 'closeArtifact', [bar(0.02, 'Close')])).toBeNull();
+    expect(findControl(CLAUDE, 'closeArtifact', items)).toBeNull();
+    expect(shortcutRows('phone', { profile: CLAUDE }).find((r) => r.gesture === 'swipe left')?.action).toBe('close an open artifact (else as anywhere)');
+  });
+});

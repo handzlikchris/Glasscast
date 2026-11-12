@@ -31,7 +31,10 @@ export function firstOnScreen(
 
 function byMatcher(profile: AppProfile, matcher: ControlMatcher, items: readonly PhoneItem[], depth: number): PhoneItem | null {
   if ('id' in matcher) return items.find((i) => i.id === matcher.id) ?? null;
-  if ('label' in matcher) return items.find((i) => matcher.label.test(i.label)) ?? null;
+  if ('label' in matcher) {
+    if (matcher.besides && !findControl(profile, matcher.besides, items, depth + 1)) return null;
+    return items.find((i) => matcher.label.test(i.label)) ?? null;
+  }
   if ('pick' in matcher) {
     const ofKind = items.filter((i) => i.kind === matcher.kind);
     if (ofKind.length === 0) return null;

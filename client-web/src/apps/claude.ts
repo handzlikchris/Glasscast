@@ -11,6 +11,8 @@ export const CLAUDE: AppProfile = {
   packages: ['com.anthropic.claude'],
   gestures: {
     doubleDown: { highlight: 'box' },
+    // In the artifact view: Close. Anywhere else in Claude: a page sideways, as in any app.
+    left: { press: ['closeArtifact'], orGeneric: true },
   },
   // The screen says which: listening, the row is Cancel · Stop dictation · Send dictation; not
   // listening, the microphone says "Start speech input" (UI dumps on the S25, 2026-11-12).
@@ -23,10 +25,21 @@ export const CLAUDE: AppProfile = {
     mic: [{ label: /^Start speech input$/i }],
     // While listening: sends what was said (never Stop dictation, never Cancel).
     sendDictation: [{ label: /^Send dictation$/i }],
+    // The artifact view's top bar: Close · Comments · Share · More options (S25, 2026-11-12).
+    closeArtifact: [{ label: /^Close$/i, besides: 'artifactComments' }],
+    artifactComments: [{ label: /^Comments$/i }],
     // Send, there even with the box empty. Never Stop: the hold sends what was dictated.
     send: [{ label: /^Send\b/i }],
   },
-  names: { box: 'message box', attach: '+', model: 'model picker', mic: 'microphone', send: 'send' },
+  names: {
+    box: 'message box',
+    attach: '+',
+    model: 'model picker',
+    mic: 'microphone',
+    send: 'send',
+    sendDictation: 'send dictation',
+    closeArtifact: 'close an open artifact',
+  },
   moves: {
     // + is under the box in a chat, left of it while Claude works (both seen on the S25).
     box: { down: 'attach', left: 'attach', right: ['mic', 'send'] },

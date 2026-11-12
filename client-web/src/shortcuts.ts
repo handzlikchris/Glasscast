@@ -29,6 +29,14 @@ const DOUBLES: { gesture: SwipeGesture; label: string }[] = [
   { gesture: 'doubleUp', label: 'swipe up ×2' },
 ];
 
+/** Single swipes, for a profile that takes one. */
+const SINGLES: { gesture: SwipeGesture; label: string }[] = [
+  { gesture: 'right', label: 'swipe right' },
+  { gesture: 'left', label: 'swipe left' },
+  { gesture: 'down', label: 'swipe down' },
+  { gesture: 'up', label: 'swipe up' },
+];
+
 function pcDouble(gesture: SwipeGesture): string | null {
   switch (pcSwipeAction(gesture, 'pointer', false).kind) {
     case 'type':
@@ -83,9 +91,11 @@ export function shortcutRows(target: 'pc' | 'phone', app: PhoneApp = { profile: 
   ];
   if (target !== 'phone') return generic;
   if (profile) {
-    const own = DOUBLES.flatMap(({ gesture, label }) => {
+    const own = [...DOUBLES, ...SINGLES].flatMap(({ gesture, label }) => {
       const action = profile.gestures[gesture];
-      return action ? [{ gesture: label, action: describeAction(profile, action) }] : [];
+      if (!action) return [];
+      const otherwise = 'press' in action && action.orGeneric ? ' (else as anywhere)' : '';
+      return [{ gesture: label, action: describeAction(profile, action) + otherwise }];
     });
     return [
       { gesture: `In ${profile.name}`, action: '', heading: true },
