@@ -421,3 +421,35 @@ textarea:focus-visible {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* ---------- Sensors (a diagnostic: SensorProbe.tsx) ---------- */
+
+.probe {
+  height: 100%;
+  overflow: hidden;
+  padding: 16px 18px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.probe h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.probe-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.probe-last {
+  color: var(--accent);
+  font-size: 17px;
+}
+
+.probe-row {
+  overflow-wrap: anywhere;
+}

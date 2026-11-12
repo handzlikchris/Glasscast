@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { isDeviceRemembered } from './connection';
 import { loadFeatures, type Features } from './features';
 import { forgetPairing, loadPairing } from './phoneTrust';
@@ -6,6 +6,7 @@ import { PairingScreen } from './PairingScreen';
 import { PhoneScreen } from './PhoneScreen';
 import { usePinchPressesFocused } from './pinchPress';
 import type { SessionTarget } from './protocol';
+import { SensorProbe } from './SensorProbe';
 import { SessionScreen } from './SessionScreen';
 import { loadTarget, saveTarget } from './target';
 
@@ -14,6 +15,8 @@ const CHOOSE_GUARD_MS = 400;
 
 type Phase =
   | { kind: 'choose' }
+  /** A diagnostic: what the page gets from sensors and pinches (SensorProbe.tsx). */
+  | { kind: 'sensors' }
   | { kind: 'pairing'; target: SessionTarget; attempt: number }
   | { kind: 'session'; target: SessionTarget; attempt: number; pairAgain?: boolean }
   | { kind: 'ended'; target: SessionTarget; reason: string };
@@ -29,7 +32,8 @@ export function App() {
   }, []);
   // The pinch that pressed End also sends a click a moment later; it must not choose for you.
   const leftAt = useRef(-Infinity);
-  usePinchPressesFocused(phase.kind !== 'session');
+  // (Not in the sensor probe: its pinches are what it measures.)
+  usePinchPressesFocused(phase.kind !== 'session' && phase.kind !== 'sensors');
 
   // PC: remembered glasses (approved in the last 24 h) skip pairing, which is approved on the PC.
   // Phone: straight in; the phone pairs the glasses itself (Approve on the phone) when needed.
@@ -42,6 +46,8 @@ export function App() {
         : { kind: 'pairing', target, attempt: Date.now() },
     );
   };
+
+  const leaveProbe = useCallback(() => setPhase({ kind: 'choose' }), []);
 
   switch (phase.kind) {
     case 'choose': {
@@ -69,6 +75,9 @@ export function App() {
                 Phone
               </button>
             )}
+            <button type="button" onClick={() => setPhase({ kind: 'sensors' })}>
+              Sensors
+            </button>
           </div>
           <p>
             {features.pc
@@ -79,6 +88,9 @@ export function App() {
         </main>
       );
     }
+
+    case 'sensors':
+      return <SensorProbe onLeave={leaveProbe} />;
 
     case 'pairing':
       return (
