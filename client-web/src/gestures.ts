@@ -14,6 +14,10 @@
 // HOLD_DRAG_MS (the caller calls hold()) holds the button where it is, and releasing ends the
 // hold; one released quickly without moving is a tap (the second of a double tap). A press that
 // isn't armed never holds: moving it only moves the cursor.
+//
+// A long hold: a press that isn't armed, kept still for LONG_HOLD_MS (the caller calls
+// longHold()). Nothing generic uses it; a phone app's profile may (Claude: the microphone, then
+// send). Releasing it afterwards does nothing.
 
 export interface GestureOptions {
   /** Movement (view px) beyond which a press becomes a drag. */
@@ -33,6 +37,9 @@ export const DEFAULT_GESTURES: GestureOptions = { tapThreshold: 14, tapMaxMs: 50
 /** An armed pinch (the second of a pair) kept still this long holds the button/finger down. */
 export const HOLD_DRAG_MS = 400;
 
+/** A single pinch kept still this long is a long hold (user's choice, 2026-11-12: "like 3 seconds"). */
+export const LONG_HOLD_MS = 3000;
+
 export type GestureEvent =
   /** `held`: an armed press (tap-and-a-half), so the drag keeps the button or finger down. */
   | { kind: 'dragStart'; x: number; y: number; held?: true }
@@ -42,7 +49,9 @@ export type GestureEvent =
   /** An armed press held still for HOLD_DRAG_MS: press the button / put the finger down there. */
   | { kind: 'hold'; x: number; y: number }
   /** A hold released without moving. */
-  | { kind: 'holdEnd' };
+  | { kind: 'holdEnd' }
+  /** A single pinch kept still for LONG_HOLD_MS (still down). */
+  | { kind: 'longHold' };
 
 interface Press {
   id: number;
@@ -58,6 +67,8 @@ interface Press {
   held: boolean;
   /** The second pinch of a tap-and-a-half: its drag holds the button. */
   armed: boolean;
+  /** Became a long hold: done, whatever happens until it's released. */
+  longHeld: boolean;
 }
 
 /** Tracks one pointer at a time; extra pointers are ignored. */
@@ -68,7 +79,7 @@ export class GestureTracker {
 
   down(id: number, x: number, y: number, time: number, armed = false): void {
     if (this.press) return;
-    this.press = { id, startX: x, startY: y, anchorX: x, anchorY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false, armed };
+    this.press = { id, startX: x, startY: y, anchorX: x, anchorY: y, lastX: x, lastY: y, startTime: time, dragging: false, held: false, armed, longHeld: false };
   }
 
   /** `time`: the event's timestamp, for the grace; without it the grace is over. */
@@ -76,6 +87,8 @@ export class GestureTracker {
     const p = this.press;
     if (!p || p.id !== id) return [];
 
+    // A long hold is over as a gesture: the hand drifting afterwards moves nothing.
+    if (p.longHeld) return [];
     const events: GestureEvent[] = [];
     if (!p.dragging) {
       const grace = this.options.tapGraceMs ?? 0;
@@ -134,6 +147,17 @@ export class GestureTracker {
     if (!p || p.id !== id || !p.armed || p.dragging || p.held) return [];
     p.held = true;
     return [{ kind: 'hold', x: p.startX, y: p.startY }];
+  }
+
+  /**
+   * Call LONG_HOLD_MS after a down() that isn't armed: if the press is still down and hasn't
+   * moved, it's a long hold. Does nothing otherwise (armed, moved, released).
+   */
+  longHold(id: number): GestureEvent[] {
+    const p = this.press;
+    if (!p || p.id !== id || p.armed || p.dragging || p.held || p.longHeld) return [];
+    p.longHeld = true;
+    return [{ kind: 'longHold' }];
   }
 
   /** The press in progress is a hold or a held drag. */

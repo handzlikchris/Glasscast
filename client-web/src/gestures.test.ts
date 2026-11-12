@@ -154,3 +154,29 @@ describe('GestureTracker tap-and-a-half (armed presses)', () => {
     expect(g.cancel(2)).toEqual([{ kind: 'dragEnd', held: true }]);
   });
 });
+
+describe('GestureTracker long hold (a single pinch kept still)', () => {
+  it('a still press becomes a long hold once; its release and later drift do nothing', () => {
+    const g = new GestureTracker({ tapThreshold: 10, tapMaxMs: 500 });
+    g.down(1, 100, 100, 0);
+    expect(g.move(1, 104, 103)).toEqual([]);
+    expect(g.longHold(1)).toEqual([{ kind: 'longHold' }]);
+    expect(g.longHold(1)).toEqual([]);
+    expect(g.move(1, 200, 200)).toEqual([]);
+    expect(g.up(1, 200, 200, 3500)).toEqual([]);
+  });
+
+  it('a press that moved, an armed one or a released one never becomes one', () => {
+    const g = new GestureTracker({ tapThreshold: 10, tapMaxMs: 500 });
+    g.down(1, 100, 100, 0);
+    g.move(1, 150, 100);
+    expect(g.longHold(1)).toEqual([]);
+    g.up(1, 150, 100, 3000);
+    g.down(2, 100, 100, 0, true);
+    expect(g.longHold(2)).toEqual([]);
+    g.up(2, 100, 100, 100);
+    g.down(3, 100, 100, 0);
+    g.up(3, 100, 100, 100);
+    expect(g.longHold(3)).toEqual([]);
+  });
+});
